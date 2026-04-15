@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mdwiki
+    username: mdwiki
+    password: mdwiki
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+mdwiki:
+  jwt:
+    secret: ${JWT_SECRET:default-dev-secret-change-in-production-must-be-at-least-256-bits}
+    expiration-ms: 86400000
+  content-dir: ${MDWIKI_CONTENT_DIR:./wiki-content}
