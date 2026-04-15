@@ -34,6 +34,11 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.liquibase:liquibase-core")
 
+    // RAG Pipeline
+    implementation("com.pgvector:pgvector:0.1.6")
+    implementation("com.microsoft.onnxruntime:onnxruntime:1.19.2")
+    implementation("org.springframework.boot:spring-boot-starter-webflux")
+
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")

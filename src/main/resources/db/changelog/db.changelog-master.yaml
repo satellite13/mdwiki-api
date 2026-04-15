@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/003-create-tags.yaml
   - include:
       file: db/changelog/004-create-links.yaml
+  - include:
+      file: db/changelog/005-create-page-chunks.yaml
