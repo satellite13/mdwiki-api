@@ -17,3 +17,17 @@ mdwiki:
     secret: ${JWT_SECRET:default-dev-secret-change-in-production-must-be-at-least-256-bits}
     expiration-ms: 86400000
   content-dir: ${MDWIKI_CONTENT_DIR:./wiki-content}
+  embedding:
+    provider: ${EMBEDDING_PROVIDER:openai}
+    dimension: ${EMBEDDING_DIMENSION:1536}
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+      api-key: ${OPENAI_API_KEY:}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+    lmstudio:
+      base-url: ${LMSTUDIO_BASE_URL:http://localhost:1234/v1}
+      model: ${LMSTUDIO_EMBEDDING_MODEL:text-embedding-nomic-embed-text-v1.5@q8_0}
+      api-key: ${LMSTUDIO_API_KEY:}
