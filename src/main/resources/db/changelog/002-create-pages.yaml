@@ -1,0 +1,64 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-pages
+      author: mdwiki
+      changes:
+        - createTable:
+            tableName: pages
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: slug
+                  type: varchar(500)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: title
+                  type: varchar(500)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content_md
+                  type: text
+              - column:
+                  name: content_html
+                  type: text
+              - column:
+                  name: file_path
+                  type: varchar(1000)
+              - column:
+                  name: created_by
+                  type: uuid
+                  constraints:
+                    foreignKeyName: fk_pages_created_by
+                    references: users(id)
+              - column:
+                  name: updated_by
+                  type: uuid
+                  constraints:
+                    foreignKeyName: fk_pages_updated_by
+                    references: users(id)
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - sql:
+            sql: >
+              ALTER TABLE pages ADD COLUMN content_tsv tsvector
+                GENERATED ALWAYS AS (to_tsvector('russian', coalesce(title, '') || ' ' || coalesce(content_md, ''))) STORED;
+              CREATE INDEX idx_pages_content_tsv ON pages USING GIN (content_tsv);

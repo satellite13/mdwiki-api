@@ -1,3 +1,9 @@
 databaseChangeLog:
   - include:
       file: db/changelog/001-create-users.yaml
+  - include:
+      file: db/changelog/002-create-pages.yaml
+  - include:
+      file: db/changelog/003-create-tags.yaml
+  - include:
+      file: db/changelog/004-create-links.yaml
