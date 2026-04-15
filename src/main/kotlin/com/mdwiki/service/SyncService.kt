@@ -4,6 +4,7 @@ import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Link
 import com.mdwiki.model.Page
 import com.mdwiki.repository.LinkRepository
+import com.mdwiki.rag.RagService
 import com.mdwiki.repository.PageRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -17,7 +18,8 @@ class SyncService(
     private val linkRepository: LinkRepository,
     private val wikilinkService: WikilinkService,
     private val tagService: TagService,
-    private val wikiProperties: WikiProperties
+    private val wikiProperties: WikiProperties,
+    private val ragService: RagService
 ) {
 
     private val log = LoggerFactory.getLogger(SyncService::class.java)
@@ -50,6 +52,7 @@ class SyncService(
                     Page(slug = slug, title = title, contentMd = content, filePath = file.absolutePath)
                 )
                 processLinksAndTags(page, content)
+                ragService.indexPage(page)
                 added++
                 log.info("Sync: added page '$slug'")
             } else if (existing.contentMd != content) {
@@ -58,6 +61,7 @@ class SyncService(
                 existing.updatedAt = Instant.now()
                 val saved = pageRepository.save(existing)
                 processLinksAndTags(saved, content)
+                ragService.indexPage(saved)
                 updated++
                 log.info("Sync: updated page '$slug'")
             }
@@ -66,6 +70,7 @@ class SyncService(
         for ((slug, page) in existingBySlug) {
             if (slug !in filesBySlug) {
                 linkRepository.deleteBySourcePage(page)
+                ragService.deletePageChunks(page.id!!)
                 pageRepository.delete(page)
                 removed++
                 log.info("Sync: removed page '$slug'")
@@ -91,6 +96,7 @@ class SyncService(
                 existing.updatedAt = Instant.now()
                 val saved = pageRepository.save(existing)
                 processLinksAndTags(saved, content)
+                ragService.indexPage(saved)
                 log.info("Watcher: updated page '$slug'")
             }
         } else {
@@ -99,6 +105,7 @@ class SyncService(
                 Page(slug = slug, title = title, contentMd = content, filePath = file.absolutePath)
             )
             processLinksAndTags(page, content)
+            ragService.indexPage(page)
             log.info("Watcher: added page '$slug'")
         }
     }
@@ -106,6 +113,7 @@ class SyncService(
     fun removePage(slug: String) {
         val page = pageRepository.findBySlug(slug) ?: return
         linkRepository.deleteBySourcePage(page)
+        ragService.deletePageChunks(page.id!!)
         pageRepository.delete(page)
         tagService.cleanupOrphanedTags()
         log.info("Watcher: removed page '$slug'")

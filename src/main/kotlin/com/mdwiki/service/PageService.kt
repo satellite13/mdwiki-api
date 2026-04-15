@@ -6,6 +6,7 @@ import com.mdwiki.model.Link
 import com.mdwiki.model.Page
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.rag.RagService
 import com.mdwiki.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -19,7 +20,8 @@ class PageService(
     private val linkRepository: LinkRepository,
     private val wikilinkService: WikilinkService,
     private val tagService: TagService,
-    private val wikiProperties: WikiProperties
+    private val wikiProperties: WikiProperties,
+    private val ragService: RagService
 ) {
 
     private val contentDir: File get() = File(wikiProperties.contentDir).also { it.mkdirs() }
@@ -60,6 +62,7 @@ class PageService(
 
         processLinksAndTags(saved, request.contentMd)
         resolveIncomingLinks(saved)
+        ragService.indexPage(saved)
 
         return saved.toResponse()
     }
@@ -82,6 +85,7 @@ class PageService(
 
         if (request.contentMd != null) {
             processLinksAndTags(saved, request.contentMd)
+            ragService.indexPage(saved)
         }
 
         return saved.toResponse()
@@ -93,6 +97,7 @@ class PageService(
             ?: throw NoSuchElementException("Page not found: $slug")
         page.filePath?.let { File(it).delete() }
         linkRepository.deleteBySourcePage(page)
+        ragService.deletePageChunks(page.id!!)
         pageRepository.delete(page)
         tagService.cleanupOrphanedTags()
     }

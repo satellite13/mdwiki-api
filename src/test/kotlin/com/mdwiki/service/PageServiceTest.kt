@@ -8,6 +8,7 @@ import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.rag.RagService
 import com.mdwiki.repository.UserRepository
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -29,6 +30,7 @@ class PageServiceTest {
     @Mock private lateinit var linkRepository: LinkRepository
     @Mock private lateinit var wikilinkService: WikilinkService
     @Mock private lateinit var tagService: TagService
+    @Mock private lateinit var ragService: RagService
 
     private lateinit var pageService: PageService
 
@@ -38,7 +40,7 @@ class PageServiceTest {
     @BeforeEach
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
-        pageService = PageService(pageRepository, userRepository, linkRepository, wikilinkService, tagService, props)
+        pageService = PageService(pageRepository, userRepository, linkRepository, wikilinkService, tagService, props, ragService)
     }
 
     @Test

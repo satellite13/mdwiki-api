@@ -3,6 +3,7 @@ package com.mdwiki.service
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Page
 import com.mdwiki.repository.LinkRepository
+import com.mdwiki.rag.RagService
 import com.mdwiki.repository.PageRepository
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -24,6 +25,7 @@ class SyncServiceTest {
     @Mock private lateinit var linkRepository: LinkRepository
     @Mock private lateinit var wikilinkService: WikilinkService
     @Mock private lateinit var tagService: TagService
+    @Mock private lateinit var ragService: RagService
 
     private lateinit var syncService: SyncService
 
@@ -33,7 +35,7 @@ class SyncServiceTest {
     @BeforeEach
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
-        syncService = SyncService(pageRepository, linkRepository, wikilinkService, tagService, props)
+        syncService = SyncService(pageRepository, linkRepository, wikilinkService, tagService, props, ragService)
     }
 
     @Test
