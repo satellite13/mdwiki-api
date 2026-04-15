@@ -1,0 +1,118 @@
+package com.mdwiki.rag
+
+import com.mdwiki.model.Page
+import com.mdwiki.model.PageChunk
+import com.mdwiki.repository.PageChunkRepository
+import com.mdwiki.repository.PageRepository
+import org.slf4j.LoggerFactory
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
+
+@Service
+class RagService(
+    private val pageChunkRepository: PageChunkRepository,
+    private val pageRepository: PageRepository,
+    private val embeddingProvider: EmbeddingProvider,
+    private val chunkingService: ChunkingService,
+    private val reranker: Reranker
+) {
+
+    private val log = LoggerFactory.getLogger(RagService::class.java)
+
+    data class ChunkCandidate(
+        val chunkId: UUID, val pageId: UUID, val chunkText: String,
+        val sectionHeading: String?, val pageTitle: String, val pageSlug: String, val score: Double
+    )
+
+    data class SearchResult(
+        val chunkText: String, val sectionHeading: String?,
+        val pageTitle: String, val pageSlug: String, val score: Double
+    )
+
+    @Transactional
+    fun indexPage(page: Page) {
+        val pageId = page.id ?: return
+        val content = page.contentMd ?: ""
+        pageChunkRepository.deleteByPageId(pageId)
+        val chunks = chunkingService.chunk(content)
+        if (chunks.isEmpty()) return
+
+        val savedChunks = chunks.map { chunk ->
+            pageChunkRepository.save(PageChunk(
+                page = page, chunkIndex = chunk.index,
+                chunkText = chunk.text, sectionHeading = chunk.sectionHeading
+            ))
+        }
+
+        try {
+            val texts = savedChunks.map { it.chunkText }
+            val embeddings = embeddingProvider.embed(texts)
+            for (i in savedChunks.indices) {
+                val embeddingStr = "[${embeddings[i].joinToString(",")}]"
+                pageChunkRepository.updateEmbedding(savedChunks[i].id!!, embeddingStr)
+            }
+            log.info("Indexed ${savedChunks.size} chunks for page '${page.slug}'")
+        } catch (e: Exception) {
+            log.error("Failed to generate embeddings for page '${page.slug}': ${e.message}")
+        }
+    }
+
+    @Transactional
+    fun deletePageChunks(pageId: UUID) {
+        pageChunkRepository.deleteByPageId(pageId)
+    }
+
+    fun search(query: String, topK: Int = 10): List<SearchResult> {
+        if (query.isBlank()) return emptyList()
+
+        val vectorCandidates = try {
+            val queryEmbedding = embeddingProvider.embed(query)
+            val embeddingStr = "[${queryEmbedding.joinToString(",")}]"
+            val rawResults = pageChunkRepository.findByVectorSimilarity(embeddingStr, 20)
+            rawResults.mapNotNull { row -> rowToCandidate(row) }
+        } catch (e: Exception) {
+            log.error("Vector search failed: ${e.message}")
+            emptyList()
+        }
+
+        val ftsPages = pageRepository.fullTextSearch(query, 20)
+        val ftsPageIds = ftsPages.map { it.id!! }.toSet()
+        val ftsChunks = ftsPageIds.flatMap { pageId ->
+            pageChunkRepository.findByPageIdOrderByChunkIndex(pageId)
+        }
+        val ftsCandidates = ftsChunks.map { chunk ->
+            val page = ftsPages.first { it.id == chunk.page.id }
+            ChunkCandidate(chunkId = chunk.id!!, pageId = page.id!!, chunkText = chunk.chunkText,
+                sectionHeading = chunk.sectionHeading, pageTitle = page.title, pageSlug = page.slug, score = 0.5)
+        }
+
+        val allCandidates = (vectorCandidates + ftsCandidates).distinctBy { it.chunkId }
+        if (allCandidates.isEmpty()) return emptyList()
+
+        val scores = reranker.score(query, allCandidates.map { it.chunkText })
+        return allCandidates.zip(scores)
+            .sortedByDescending { it.second }
+            .take(topK)
+            .map { (candidate, score) ->
+                SearchResult(chunkText = candidate.chunkText, sectionHeading = candidate.sectionHeading,
+                    pageTitle = candidate.pageTitle, pageSlug = candidate.pageSlug, score = score.toDouble())
+            }
+    }
+
+    private fun rowToCandidate(row: Array<Any>): ChunkCandidate? {
+        return try {
+            val chunkId = row[0] as UUID
+            val pageId = row[1] as UUID
+            val chunkText = row[3] as String
+            val sectionHeading = row[4] as? String
+            val score = (row[5] as Number).toDouble()
+            val page = pageRepository.findById(pageId).orElse(null) ?: return null
+            ChunkCandidate(chunkId = chunkId, pageId = pageId, chunkText = chunkText,
+                sectionHeading = sectionHeading, pageTitle = page.title, pageSlug = page.slug, score = score)
+        } catch (e: Exception) {
+            log.error("Failed to parse vector search row: ${e.message}")
+            null
+        }
+    }
+}
