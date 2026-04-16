@@ -2,6 +2,7 @@ package com.mdwiki.controller
 
 import com.mdwiki.dto.*
 import com.mdwiki.service.PageService
+import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -11,7 +12,15 @@ import org.springframework.web.bind.annotation.*
 class PageController(private val pageService: PageService) {
 
     @GetMapping
-    fun list(): List<PageListItem> = pageService.findAll()
+    fun list(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "50") size: Int,
+        response: HttpServletResponse
+    ): List<PageListItem> {
+        val result = pageService.findAll(page, size)
+        response.setHeader("X-Total-Count", result.totalElements.toString())
+        return result.content
+    }
 
     @GetMapping("/{slug}")
     fun getBySlug(@PathVariable slug: String): PageResponse = pageService.findBySlug(slug)

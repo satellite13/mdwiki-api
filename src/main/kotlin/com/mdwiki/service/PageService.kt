@@ -11,6 +11,8 @@ import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.usecase.CreatePageUseCase
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.service.usecase.UpdatePageUseCase
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -51,8 +53,9 @@ class PageService(
     )
 
     @Transactional(readOnly = true)
-    fun findAll(): List<PageListItem> {
-        return pageRepository.findAll().map { it.toListItem() }
+    fun findAll(page: Int = 0, size: Int = 50): Page<PageListItem> {
+        val pageable = PageRequest.of(page, size)
+        return pageRepository.findAll(pageable).map { it.toListItem() }
     }
 
     @Transactional(readOnly = true)

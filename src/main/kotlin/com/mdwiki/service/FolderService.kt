@@ -7,6 +7,8 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 @Service
@@ -18,7 +20,21 @@ class FolderService(
     private val treeEventsService: TreeEventsService
 ) {
 
+    @Volatile
+    private var cachedTree: List<FolderTreeNode>? = null
+    @Volatile
+    private var cacheTime: Instant = Instant.MIN
+
+    fun invalidateCache() {
+        cachedTree = null
+    }
+
     fun getTree(): List<FolderTreeNode> {
+        val cached = cachedTree
+        if (cached != null && Duration.between(cacheTime, Instant.now()).seconds < 30) {
+            return cached
+        }
+
         val allFolders = folderRepository.findAll()
         val allPages = pageRepository.findAll()
 
@@ -51,7 +67,10 @@ class FolderService(
             return folderNodes + pageNodes
         }
 
-        return buildChildren(null)
+        val result = buildChildren(null)
+        cachedTree = result
+        cacheTime = Instant.now()
+        return result
     }
 
     @Transactional
@@ -72,6 +91,7 @@ class FolderService(
         )
         val saved = folderRepository.save(folder)
         wikiFileService.ensureFolderDirectory(saved)
+        invalidateCache()
         treeEventsService.publishTreeUpdated()
         return saved.toResponse()
     }
@@ -92,6 +112,7 @@ class FolderService(
 
         val saved = folderRepository.save(folder)
         syncSubtreePagePaths(saved.id!!)
+        invalidateCache()
         treeEventsService.publishTreeUpdated()
         return saved.toResponse()
     }
@@ -125,6 +146,7 @@ class FolderService(
 
         val saved = folderRepository.save(folder)
         syncSubtreePagePaths(saved.id!!)
+        invalidateCache()
         treeEventsService.publishTreeUpdated()
         return saved.toResponse()
     }
@@ -147,6 +169,7 @@ class FolderService(
 
         folderRepository.delete(folder)
         wikiFileService.deleteFolderDirectory(folder)
+        invalidateCache()
         treeEventsService.publishTreeUpdated()
     }
 

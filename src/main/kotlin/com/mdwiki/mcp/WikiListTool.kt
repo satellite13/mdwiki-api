@@ -10,7 +10,7 @@ class WikiListTool(private val pageService: PageService) {
 
     @McpTool(name = "wiki_list", description = "List all wiki pages. Optionally filter by tag.")
     fun list(@McpToolParam(description = "Filter by tag name", required = false) tag: String?): List<Map<String, Any?>> {
-        val pages = pageService.findAll()
+        val pages = pageService.findAll(0, 10000).content
         val filtered = if (tag != null) pages.filter { tag in it.tags } else pages
         return filtered.map { mapOf("slug" to it.slug, "title" to it.title, "tags" to it.tags, "updatedAt" to it.updatedAt.toString()) }
     }

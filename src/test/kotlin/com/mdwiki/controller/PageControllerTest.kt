@@ -11,6 +11,7 @@ import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.data.domain.PageImpl
 import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -44,7 +45,7 @@ class PageControllerTest {
     @WithMockUser(roles = ["READER"])
     fun `GET pages returns list`() {
         val item = PageListItem(id = samplePage.id, slug = "test-page", title = "Test Page", tags = listOf("kotlin"), updatedAt = Instant.now())
-        whenever(pageService.findAll()).thenReturn(listOf(item))
+        whenever(pageService.findAll(any(), any())).thenReturn(PageImpl(listOf(item)))
 
         mockMvc.get("/api/pages").andExpect {
             status { isOk() }

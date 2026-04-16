@@ -19,3 +19,5 @@ databaseChangeLog:
       file: db/changelog/009-page-frontmatter-meta.yaml
   - include:
       file: db/changelog/010-pages-frontmatter-meta-gin.yaml
+  - include:
+      file: db/changelog/011-add-vector-index.yaml

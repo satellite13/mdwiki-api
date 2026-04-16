@@ -70,7 +70,10 @@ class RagService(
             val queryEmbedding = embeddingProvider.embed(query)
             val embeddingStr = "[${queryEmbedding.joinToString(",")}]"
             val rawResults = pageChunkRepository.findByVectorSimilarity(embeddingStr, 20)
-            rawResults.mapNotNull { row -> rowToCandidate(row) }
+            // Batch-load pages to avoid N+1 queries
+            val pageIds = rawResults.map { it[1] as UUID }.distinct()
+            val pagesMap = pageRepository.findAllById(pageIds).associateBy { it.id }
+            rawResults.mapNotNull { row -> rowToCandidate(row, pagesMap) }
         } catch (e: Exception) {
             log.error("Vector search failed: ${e.message}")
             emptyList()
@@ -90,8 +93,11 @@ class RagService(
         val allCandidates = (vectorCandidates + ftsCandidates).distinctBy { it.chunkId }
         if (allCandidates.isEmpty()) return emptyList()
 
-        val scores = reranker.score(query, allCandidates.map { it.chunkText })
-        return allCandidates.zip(scores)
+        // Cap candidates before reranking to limit compute cost
+        val cappedCandidates = allCandidates.take(minOf(topK * 3, allCandidates.size))
+
+        val scores = reranker.score(query, cappedCandidates.map { it.chunkText })
+        return cappedCandidates.zip(scores)
             .sortedByDescending { it.second }
             .take(topK)
             .map { (candidate, score) ->
@@ -100,14 +106,14 @@ class RagService(
             }
     }
 
-    private fun rowToCandidate(row: Array<Any>): ChunkCandidate? {
+    private fun rowToCandidate(row: Array<Any>, pagesMap: Map<UUID?, Page>): ChunkCandidate? {
         return try {
             val chunkId = row[0] as UUID
             val pageId = row[1] as UUID
             val chunkText = row[3] as String
             val sectionHeading = row[4] as? String
             val score = (row[5] as Number).toDouble()
-            val page = pageRepository.findById(pageId).orElse(null) ?: return null
+            val page = pagesMap[pageId] ?: return null
             ChunkCandidate(chunkId = chunkId, pageId = pageId, chunkText = chunkText,
                 sectionHeading = sectionHeading, pageTitle = page.title, pageSlug = page.slug, score = score)
         } catch (e: Exception) {
