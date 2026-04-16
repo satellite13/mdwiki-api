@@ -23,7 +23,7 @@ class AuthIntegrationTest {
 
     companion object {
         @Container
-        val postgres = PostgreSQLContainer("postgres:17").apply {
+        val postgres = PostgreSQLContainer("pgvector/pgvector:pg17").apply {
             withDatabaseName("mdwiki_test")
             withUsername("test")
             withPassword("test")
