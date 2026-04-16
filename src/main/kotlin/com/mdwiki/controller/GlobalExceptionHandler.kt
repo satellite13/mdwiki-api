@@ -2,8 +2,11 @@ package com.mdwiki.controller
 
 import com.mdwiki.dto.ApiErrorResponse
 import com.mdwiki.error.AppException
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -11,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
+    private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
 
     @ExceptionHandler(AppException::class)
     fun handleAppException(e: AppException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
@@ -61,13 +65,38 @@ class GlobalExceptionHandler {
             )
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun handleBadJson(e: HttpMessageNotReadableException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(
+                ApiErrorResponse(
+                    error = "BAD_REQUEST",
+                    message = e.mostSpecificCause.message ?: "Invalid request body",
+                    path = request.requestURI
+                )
+            )
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException::class)
+    fun handleDataIntegrity(e: DataIntegrityViolationException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(
+                ApiErrorResponse(
+                    error = "CONFLICT",
+                    message = e.mostSpecificCause.message ?: "Data integrity violation",
+                    path = request.requestURI
+                )
+            )
+    }
+
     @ExceptionHandler(Exception::class)
     fun handleUnexpected(e: Exception, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        log.error("Unhandled exception on ${request.method} ${request.requestURI}", e)
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(
                 ApiErrorResponse(
                     error = "INTERNAL_ERROR",
-                    message = "Unexpected server error",
+                    message = e.message ?: "Unexpected server error",
                     path = request.requestURI
                 )
             )

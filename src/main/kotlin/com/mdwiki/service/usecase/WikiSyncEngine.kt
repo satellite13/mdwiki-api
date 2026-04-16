@@ -25,10 +25,17 @@ class WikiSyncEngine(
             return SyncService.SyncResult(0, 0, 0)
         }
 
-        val mdFiles = contentDir.listFiles { f -> f.extension == "md" }?.toList() ?: emptyList()
+        val mdFiles = contentDir
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "md" }
+            .toList()
         val existingPages = pageRepository.findAll()
         val existingBySlug = existingPages.associateBy { it.slug }
-        val filesBySlug = mdFiles.associate { it.nameWithoutExtension to it }
+        val filesBySlug = linkedMapOf<String, File>()
+        for (file in mdFiles) {
+            val slug = file.nameWithoutExtension
+            filesBySlug.putIfAbsent(slug, file)
+        }
 
         var added = 0
         var updated = 0
@@ -50,12 +57,16 @@ class WikiSyncEngine(
             } else if (existing.contentMd != content) {
                 existing.contentMd = content
                 existing.title = extractTitle(content, slug)
+                existing.filePath = file.absolutePath
                 existing.updatedAt = Instant.now()
                 val saved = pageRepository.save(existing)
                 pageMetadataService.syncLinksAndTags(saved, content)
                 ragService.indexPage(saved)
                 updated++
                 log.info("Sync: updated page '$slug'")
+            } else if (existing.filePath != file.absolutePath) {
+                existing.filePath = file.absolutePath
+                pageRepository.save(existing)
             }
         }
 
@@ -85,11 +96,15 @@ class WikiSyncEngine(
             if (existing.contentMd != content) {
                 existing.contentMd = content
                 existing.title = extractTitle(content, slug)
+                existing.filePath = file.absolutePath
                 existing.updatedAt = Instant.now()
                 val saved = pageRepository.save(existing)
                 pageMetadataService.syncLinksAndTags(saved, content)
                 ragService.indexPage(saved)
                 log.info("Watcher: updated page '$slug'")
+            } else if (existing.filePath != file.absolutePath) {
+                existing.filePath = file.absolutePath
+                pageRepository.save(existing)
             }
         } else {
             val title = extractTitle(content, slug)

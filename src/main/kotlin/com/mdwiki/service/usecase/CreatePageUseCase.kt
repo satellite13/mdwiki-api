@@ -1,6 +1,5 @@
 package com.mdwiki.service.usecase
 
-import com.mdwiki.config.WikiProperties
 import com.mdwiki.dto.CreatePageRequest
 import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
@@ -11,7 +10,7 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.service.PageMetadataService
-import java.io.File
+import com.mdwiki.service.WikiFileService
 
 class CreatePageUseCase(
     private val pageRepository: PageRepository,
@@ -19,7 +18,7 @@ class CreatePageUseCase(
     private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
     private val ragService: RagService,
-    private val wikiProperties: WikiProperties
+    private val wikiFileService: WikiFileService
 ) {
     fun execute(request: CreatePageRequest, username: String) = run {
         if (pageRepository.existsBySlug(request.slug)) {
@@ -28,8 +27,6 @@ class CreatePageUseCase(
 
         val user = userRepository.findByUsername(username)
             ?: throw NotFoundException("User not found: $username")
-        val file = File(contentDir(), "${request.slug}.md")
-        file.writeText(request.contentMd)
         val folder = request.folderId?.let { folderId ->
             folderRepository.findById(folderId).orElseThrow {
                 NotFoundException("Folder not found: $folderId")
@@ -40,11 +37,11 @@ class CreatePageUseCase(
             slug = request.slug,
             title = request.title,
             contentMd = request.contentMd,
-            filePath = file.absolutePath,
             createdBy = user,
             updatedBy = user,
             folder = folder
         )
+        wikiFileService.createOrRewritePageFile(page, request.contentMd)
         val saved = pageRepository.save(page)
 
         pageMetadataService.syncLinksAndTags(saved, request.contentMd, cleanupOrphanedTags = true)
@@ -54,5 +51,4 @@ class CreatePageUseCase(
         saved.toResponse()
     }
 
-    private fun contentDir(): File = File(wikiProperties.contentDir).also { it.mkdirs() }
 }

@@ -8,7 +8,7 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.service.PageMetadataService
-import java.io.File
+import com.mdwiki.service.WikiFileService
 import java.time.Instant
 
 class UpdatePageUseCase(
@@ -16,7 +16,8 @@ class UpdatePageUseCase(
     private val userRepository: UserRepository,
     private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
-    private val ragService: RagService
+    private val ragService: RagService,
+    private val wikiFileService: WikiFileService
 ) {
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
         val page = pageRepository.findBySlug(slug)
@@ -25,13 +26,24 @@ class UpdatePageUseCase(
             ?: throw NotFoundException("User not found: $username")
 
         request.title?.let { page.title = it }
-        request.folderId?.let { folderId ->
-            page.folder = folderRepository.findById(folderId)
-                .orElseThrow { NotFoundException("Folder not found: $folderId") }
+
+        val previousFolderId = page.folder?.id
+        if (request.clearFolder == true) {
+            page.folder = null
+        } else {
+            request.folderId?.let { folderId ->
+                page.folder = folderRepository.findById(folderId)
+                    .orElseThrow { NotFoundException("Folder not found: $folderId") }
+            }
         }
+
+        if (previousFolderId != page.folder?.id) {
+            wikiFileService.relocatePageFile(page, page.folder)
+        }
+
         request.contentMd?.let { newContent ->
             page.contentMd = newContent
-            page.filePath?.let { path -> File(path).writeText(newContent) }
+            wikiFileService.createOrRewritePageFile(page, newContent)
         }
         page.updatedBy = user
         page.updatedAt = Instant.now()

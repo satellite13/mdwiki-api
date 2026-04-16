@@ -1,11 +1,10 @@
 package com.mdwiki.service
 
-import com.mdwiki.config.WikiProperties
 import com.mdwiki.dto.*
-import com.mdwiki.repository.FolderRepository
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.mapper.toListItem
 import com.mdwiki.mapper.toResponse
+import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.repository.UserRepository
@@ -21,7 +20,7 @@ class PageService(
     private val userRepository: UserRepository,
     private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
-    private val wikiProperties: WikiProperties,
+    private val wikiFileService: WikiFileService,
     private val ragService: RagService
 ) {
     private val createPageUseCase = CreatePageUseCase(
@@ -30,19 +29,21 @@ class PageService(
         folderRepository = folderRepository,
         pageMetadataService = pageMetadataService,
         ragService = ragService,
-        wikiProperties = wikiProperties
+        wikiFileService = wikiFileService
     )
     private val updatePageUseCase = UpdatePageUseCase(
         pageRepository = pageRepository,
         userRepository = userRepository,
         folderRepository = folderRepository,
         pageMetadataService = pageMetadataService,
-        ragService = ragService
+        ragService = ragService,
+        wikiFileService = wikiFileService
     )
     private val deletePageUseCase = DeletePageUseCase(
         pageRepository = pageRepository,
         pageMetadataService = pageMetadataService,
-        ragService = ragService
+        ragService = ragService,
+        wikiFileService = wikiFileService
     )
 
     @Transactional(readOnly = true)

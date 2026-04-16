@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.io.File
 import java.nio.file.*
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -20,10 +21,11 @@ class FileWatcherService(
     private val log = LoggerFactory.getLogger(FileWatcherService::class.java)
     private val running = AtomicBoolean(false)
     private var watchThread: Thread? = null
-    private val ignoredPaths = ConcurrentHashMap.newKeySet<String>()
+    private val ignoredPaths = ConcurrentHashMap<String, Long>()
 
     fun ignoreNextChange(filePath: String) {
-        ignoredPaths.add(filePath)
+        // Move/write operations may emit several FS events in a short burst.
+        ignoredPaths[filePath] = Instant.now().toEpochMilli() + 3000
     }
 
     @PostConstruct
@@ -35,37 +37,45 @@ class FileWatcherService(
         watchThread = thread(isDaemon = true, name = "file-watcher") {
             try {
                 val watchService = FileSystems.getDefault().newWatchService()
-                dir.toPath().register(
-                    watchService,
-                    StandardWatchEventKinds.ENTRY_CREATE,
-                    StandardWatchEventKinds.ENTRY_MODIFY,
-                    StandardWatchEventKinds.ENTRY_DELETE
-                )
+                val watchKeys = mutableMapOf<WatchKey, Path>()
+                registerAllDirectories(dir.toPath(), watchService, watchKeys)
                 log.info("File watcher started on: ${dir.absolutePath}")
 
                 while (running.get()) {
                     val key = watchService.poll(1, java.util.concurrent.TimeUnit.SECONDS) ?: continue
+                    val watchedDir = watchKeys[key] ?: continue
                     for (event in key.pollEvents()) {
                         val path = event.context() as? Path ?: continue
-                        val fileName = path.toString()
-                        if (!fileName.endsWith(".md")) continue
-
-                        val fullPath = dir.resolve(fileName).absolutePath
-                        if (ignoredPaths.remove(fullPath)) continue
+                        val fullPath = watchedDir.resolve(path).toFile()
+                        val fullPathString = fullPath.absolutePath
 
                         when (event.kind()) {
-                            StandardWatchEventKinds.ENTRY_CREATE,
+                            StandardWatchEventKinds.ENTRY_CREATE -> {
+                                if (fullPath.isDirectory) {
+                                    registerAllDirectories(fullPath.toPath(), watchService, watchKeys)
+                                    continue
+                                }
+                                if (!fullPath.name.endsWith(".md")) continue
+                                if (shouldIgnore(fullPathString)) continue
+                                if (fullPath.exists()) syncService.syncSingleFile(fullPath)
+                            }
                             StandardWatchEventKinds.ENTRY_MODIFY -> {
-                                val file = File(dir, fileName)
-                                if (file.exists()) syncService.syncSingleFile(file)
+                                if (!fullPath.name.endsWith(".md")) continue
+                                if (shouldIgnore(fullPathString)) continue
+                                if (fullPath.exists()) syncService.syncSingleFile(fullPath)
                             }
                             StandardWatchEventKinds.ENTRY_DELETE -> {
+                                val fileName = fullPath.name
+                                if (!fileName.endsWith(".md")) continue
+                                if (shouldIgnore(fullPathString)) continue
                                 val slug = fileName.removeSuffix(".md")
                                 syncService.removePage(slug)
                             }
                         }
                     }
-                    key.reset()
+                    if (!key.reset()) {
+                        watchKeys.remove(key)
+                    }
                 }
             } catch (e: Exception) {
                 log.error("File watcher error", e)
@@ -77,5 +87,37 @@ class FileWatcherService(
     fun stop() {
         running.set(false)
         watchThread?.join(5000)
+    }
+
+    private fun registerAllDirectories(
+        root: Path,
+        watchService: WatchService,
+        watchKeys: MutableMap<WatchKey, Path>
+    ) {
+        if (!Files.exists(root)) return
+        Files.walk(root).use { paths ->
+            paths
+                .filter { Files.isDirectory(it) }
+                .forEach { dir ->
+                    val key = dir.register(
+                        watchService,
+                        StandardWatchEventKinds.ENTRY_CREATE,
+                        StandardWatchEventKinds.ENTRY_MODIFY,
+                        StandardWatchEventKinds.ENTRY_DELETE
+                    )
+                    watchKeys[key] = dir
+                }
+        }
+    }
+
+    private fun shouldIgnore(path: String): Boolean {
+        val now = Instant.now().toEpochMilli()
+        val expiresAt = ignoredPaths[path] ?: return false
+        return if (now <= expiresAt) {
+            true
+        } else {
+            ignoredPaths.remove(path, expiresAt)
+            false
+        }
     }
 }

@@ -13,7 +13,8 @@ import java.util.UUID
 class FolderService(
     private val folderRepository: FolderRepository,
     private val pageRepository: PageRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val wikiFileService: WikiFileService
 ) {
 
     fun getTree(): List<FolderTreeNode> {
@@ -69,6 +70,7 @@ class FolderService(
             createdBy = user
         )
         val saved = folderRepository.save(folder)
+        wikiFileService.ensureFolderDirectory(saved)
         return saved.toResponse()
     }
 
@@ -81,8 +83,13 @@ class FolderService(
             "Folder with name '${request.name}' already exists in this location"
         }
 
+        val oldDir = wikiFileService.resolveFolderDirectory(folder)
         folder.name = request.name
+        val newDir = wikiFileService.resolveFolderDirectory(folder)
+        wikiFileService.moveFolderDirectory(oldDir, newDir)
+
         val saved = folderRepository.save(folder)
+        syncSubtreePagePaths(saved.id!!)
         return saved.toResponse()
     }
 
@@ -90,6 +97,8 @@ class FolderService(
     fun move(id: UUID, request: MoveFolderRequest): FolderResponse {
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
+
+        val oldDir = wikiFileService.resolveFolderDirectory(folder)
 
         if (request.parentId != null) {
             require(request.parentId != id) { "Cannot move folder into itself" }
@@ -108,7 +117,11 @@ class FolderService(
             folder.parent = null
         }
 
+        val newDir = wikiFileService.resolveFolderDirectory(folder)
+        wikiFileService.moveFolderDirectory(oldDir, newDir)
+
         val saved = folderRepository.save(folder)
+        syncSubtreePagePaths(saved.id!!)
         return saved.toResponse()
     }
 
@@ -117,14 +130,48 @@ class FolderService(
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
 
-        // Set folder_id = null for pages in this folder (and subfolders via cascade)
-        val pages = pageRepository.findByFolderId(id)
+        val allFolders = folderRepository.findAll()
+        val subtreeFolders = collectSubtree(folder, allFolders)
+        val subtreeIds = subtreeFolders.mapNotNull { it.id }.toSet()
+        val pages = pageRepository.findAll().filter { page -> page.folder?.id in subtreeIds }
+
         for (page in pages) {
             page.folder = null
-            pageRepository.save(page)
+            wikiFileService.relocatePageFile(page, null)
         }
+        pageRepository.saveAll(pages)
 
         folderRepository.delete(folder)
+        wikiFileService.deleteFolderDirectory(folder)
+    }
+
+    private fun syncSubtreePagePaths(rootFolderId: UUID) {
+        val allFolders = folderRepository.findAll()
+        val rootFolder = allFolders.firstOrNull { it.id == rootFolderId } ?: return
+        val subtreeIds = collectSubtree(rootFolder, allFolders).mapNotNull { it.id }.toSet()
+        val pages = pageRepository.findAll().filter { page -> page.folder?.id in subtreeIds }
+        for (page in pages) {
+            page.filePath = wikiFileService.resolvePageFile(page.slug, page.folder).absolutePath
+        }
+        if (pages.isNotEmpty()) {
+            pageRepository.saveAll(pages)
+        }
+    }
+
+    private fun collectSubtree(root: Folder, allFolders: List<Folder>): List<Folder> {
+        val byParent = allFolders.groupBy { it.parent?.id }
+        val result = mutableListOf<Folder>()
+
+        fun walk(node: Folder) {
+            result.add(node)
+            val children = byParent[node.id] ?: emptyList()
+            for (child in children) {
+                walk(child)
+            }
+        }
+
+        walk(root)
+        return result
     }
 
     private fun Folder.toResponse() = FolderResponse(
