@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 012-page-soft-delete
+      author: mdwiki
+      changes:
+        - addColumn:
+            tableName: pages
+            columns:
+              - column:
+                  name: deleted_at
+                  type: timestamp with time zone

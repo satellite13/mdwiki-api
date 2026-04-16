@@ -1,6 +1,7 @@
 package com.mdwiki.repository
 
 import com.mdwiki.model.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -8,6 +9,10 @@ import java.util.UUID
 
 interface PageRepository : JpaRepository<Page, UUID> {
     fun findBySlug(slug: String): Page?
+    fun findBySlugAndDeletedAtIsNull(slug: String): Page?
+    fun findByDeletedAtIsNotNull(): List<Page>
+    fun findAllByDeletedAtIsNull(): List<Page>
+    fun findAllByDeletedAtIsNull(pageable: Pageable): org.springframework.data.domain.Page<Page>
     fun existsBySlug(slug: String): Boolean
     fun findByFolderId(folderId: UUID?): List<Page>
     fun findAllBySlugIn(slugs: Collection<String>): List<Page>

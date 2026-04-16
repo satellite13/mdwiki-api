@@ -44,4 +44,10 @@ class PageController(private val pageService: PageService) {
 
     @DeleteMapping("/{slug}")
     fun delete(@PathVariable slug: String) = pageService.delete(slug)
+
+    @PostMapping("/{slug}/restore")
+    fun restore(@PathVariable slug: String): PageResponse = pageService.restore(slug)
+
+    @GetMapping("/deleted")
+    fun listDeleted(): List<PageListItem> = pageService.findDeleted()
 }

@@ -25,13 +25,13 @@ class PageService(
     @Transactional(readOnly = true)
     fun findAll(page: Int = 0, size: Int = 50): Page<PageListItem> {
         val pageable = PageRequest.of(page, size)
-        return pageRepository.findAll(pageable).map { it.toListItem() }
+        return pageRepository.findAllByDeletedAtIsNull(pageable).map { it.toListItem() }
     }
 
     @Transactional(readOnly = true)
     fun findBySlug(slug: String): PageResponse {
-        val page = pageRepository.findBySlug(slug)
-            ?: pageRepository.findByNormalizedTitle(slug)
+        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
+            ?: pageRepository.findByNormalizedTitle(slug)?.takeIf { it.deletedAt == null }
             ?: throw NotFoundException("Page not found: $slug")
         return page.toResponse()
     }
@@ -61,5 +61,23 @@ class PageService(
     fun delete(slug: String) {
         deletePageUseCase.execute(slug)
         treeEventsService.publishTreeUpdated()
+    }
+
+    @Transactional
+    fun restore(slug: String): PageResponse {
+        val page = pageRepository.findBySlug(slug)
+            ?: throw NotFoundException("Page not found: $slug")
+        if (page.deletedAt == null) {
+            throw IllegalStateException("Page is not deleted: $slug")
+        }
+        page.deletedAt = null
+        val saved = pageRepository.save(page)
+        treeEventsService.publishTreeUpdated()
+        return saved.toResponse()
+    }
+
+    @Transactional(readOnly = true)
+    fun findDeleted(): List<PageListItem> {
+        return pageRepository.findByDeletedAtIsNotNull().map { it.toListItem() }
     }
 }

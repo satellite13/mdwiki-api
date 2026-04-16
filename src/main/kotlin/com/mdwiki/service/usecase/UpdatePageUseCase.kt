@@ -24,7 +24,7 @@ class UpdatePageUseCase(
     private val frontmatterMetaService: FrontmatterMetaService
 ) {
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
-        val page = pageRepository.findBySlug(slug)
+        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
             ?: throw NotFoundException("Page not found: $slug")
         val user = userRepository.findByUsername(username)
             ?: throw NotFoundException("User not found: $username")

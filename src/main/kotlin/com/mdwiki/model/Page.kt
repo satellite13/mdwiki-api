@@ -53,6 +53,9 @@ class Page(
     )
     var tags: MutableSet<Tag> = mutableSetOf(),
 
+    @Column(name = "deleted_at")
+    var deletedAt: Instant? = null,
+
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),
 

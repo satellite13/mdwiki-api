@@ -6,6 +6,7 @@ import com.mdwiki.rag.RagService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.WikiFileService
 import org.springframework.stereotype.Component
+import java.time.Instant
 
 @Component
 class DeletePageUseCase(
@@ -15,12 +16,9 @@ class DeletePageUseCase(
     private val wikiFileService: WikiFileService
 ) {
     fun execute(slug: String) {
-        val page = pageRepository.findBySlug(slug)
+        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
             ?: throw NotFoundException("Page not found: $slug")
-        wikiFileService.deletePageFile(page)
-        pageMetadataService.deleteSourceLinks(page)
-        ragService.deletePageChunks(page.id!!)
-        pageRepository.delete(page)
-        pageMetadataService.cleanupOrphanedTags()
+        page.deletedAt = Instant.now()
+        pageRepository.save(page)
     }
 }
