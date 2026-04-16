@@ -13,10 +13,16 @@ class McpToolConfig {
         wikiSearchTool: WikiSearchTool,
         wikiReadTool: WikiReadTool,
         wikiListTool: WikiListTool,
-        wikiBacklinksTool: WikiBacklinksTool
+        wikiBacklinksTool: WikiBacklinksTool,
+        wikiCreateTool: WikiCreateTool,
+        wikiUpdateTool: WikiUpdateTool,
+        wikiDeleteTool: WikiDeleteTool
     ): ToolCallbackProvider {
         return MethodToolCallbackProvider.builder()
-            .toolObjects(wikiSearchTool, wikiReadTool, wikiListTool, wikiBacklinksTool)
+            .toolObjects(
+                wikiSearchTool, wikiReadTool, wikiListTool, wikiBacklinksTool,
+                wikiCreateTool, wikiUpdateTool, wikiDeleteTool
+            )
             .build()
     }
 }
