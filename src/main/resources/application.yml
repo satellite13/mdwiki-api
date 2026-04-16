@@ -1,9 +1,14 @@
+logging:
+  level:
+    org.springframework.context.support.PostProcessorRegistrationDelegate$BeanPostProcessorChecker: ERROR
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:54328/mdwiki
     username: mdwiki
     password: mdwiki
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     properties:
