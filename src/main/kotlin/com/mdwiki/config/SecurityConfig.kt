@@ -34,6 +34,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.DELETE, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers("/api/sync/**").hasRole("ADMIN")
                     .requestMatchers("/api/users/**").hasRole("ADMIN")
+                    .requestMatchers("/api/api-keys/**").authenticated()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
