@@ -73,4 +73,9 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
+tasks.bootRun {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

@@ -12,9 +12,10 @@ import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.post
-import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.postgresql.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
 
 @Testcontainers
 @SpringBootTest
@@ -23,7 +24,7 @@ class AuthIntegrationTest {
 
     companion object {
         @Container
-        val postgres = PostgreSQLContainer("pgvector/pgvector:pg17").apply {
+        val postgres = PostgreSQLContainer(DockerImageName.parse("pgvector/pgvector:pg17")).apply {
             withDatabaseName("mdwiki_test")
             withUsername("test")
             withPassword("test")
