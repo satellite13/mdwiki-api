@@ -25,7 +25,7 @@ class FileWatcherService(
 
     fun ignoreNextChange(filePath: String) {
         // Move/write operations may emit several FS events in a short burst.
-        ignoredPaths[filePath] = Instant.now().toEpochMilli() + 3000
+        ignoredPaths[filePath] = Instant.now().toEpochMilli() + 5000
     }
 
     @PostConstruct
@@ -80,6 +80,7 @@ class FileWatcherService(
                     if (!key.reset()) {
                         watchKeys.remove(key)
                     }
+                    cleanupExpiredIgnores()
                 }
             } catch (e: Exception) {
                 log.error("File watcher error", e)
@@ -112,6 +113,12 @@ class FileWatcherService(
                     watchKeys[key] = dir
                 }
         }
+    }
+
+    /** Removes expired entries from the ignore map to prevent unbounded growth. */
+    private fun cleanupExpiredIgnores() {
+        val now = Instant.now().toEpochMilli()
+        ignoredPaths.entries.removeIf { it.value < now }
     }
 
     private fun shouldIgnore(path: String): Boolean {

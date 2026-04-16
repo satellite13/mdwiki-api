@@ -19,6 +19,10 @@ class EventsController(
     private val userRepository: UserRepository,
     private val treeEventsService: TreeEventsService
 ) {
+    // SECURITY NOTE: The JWT token is passed via query parameter because the SSE EventSource API
+    // does not support custom HTTP headers. This means the token may appear in server access logs,
+    // browser history, and proxy logs. Consider migrating to a short-lived, single-use ticket
+    // exchanged for the real token server-side, or use a polyfill library that supports headers.
     @GetMapping("/tree", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun subscribeTree(@RequestParam token: String?): SseEmitter {
         val rawToken = token?.trim()

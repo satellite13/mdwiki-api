@@ -47,7 +47,7 @@ class SecurityConfig(
                     .requestMatchers("/api/sync/**").hasRole("ADMIN")
                     .requestMatchers("/api/users/**").hasRole("ADMIN")
                     .requestMatchers("/api/api-keys/**").authenticated()
-                    .requestMatchers("/mcp/**").permitAll()
+                    .requestMatchers("/mcp/**").authenticated()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(mcpAcceptHeaderFilter, UsernamePasswordAuthenticationFilter::class.java)

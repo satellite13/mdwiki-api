@@ -2,6 +2,7 @@ package com.mdwiki.controller
 
 import com.mdwiki.dto.ApiErrorResponse
 import com.mdwiki.error.AppException
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
@@ -14,8 +15,10 @@ import jakarta.servlet.http.HttpServletRequest
 
 @RestControllerAdvice(basePackages = ["com.mdwiki.controller"])
 class GlobalExceptionHandler {
+    private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
     @ExceptionHandler(AppException::class)
     fun handleAppException(e: AppException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        log.error("AppException at {}: {}", request.requestURI, e.message, e)
         return ResponseEntity.status(e.status)
             .body(
                 ApiErrorResponse(
@@ -28,6 +31,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(NoSuchElementException::class)
     fun handleNotFound(e: NoSuchElementException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        log.error("Resource not found at {}: {}", request.requestURI, e.message, e)
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
             .body(
                 ApiErrorResponse(
@@ -40,6 +44,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException::class)
     fun handleBadRequest(e: IllegalArgumentException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        log.error("Bad request at {}: {}", request.requestURI, e.message, e)
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(
                 ApiErrorResponse(
@@ -52,6 +57,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleValidation(e: MethodArgumentNotValidException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        log.error("Validation error at {}: {}", request.requestURI, e.message, e)
         val message = e.bindingResult.fieldErrors.joinToString(", ") { "${it.field}: ${it.defaultMessage}" }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(
@@ -65,6 +71,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun handleBadJson(e: HttpMessageNotReadableException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        log.error("Invalid JSON at {}: {}", request.requestURI, e.message, e)
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(
                 ApiErrorResponse(
@@ -77,6 +84,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException::class)
     fun handleDataIntegrity(e: DataIntegrityViolationException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        log.error("Data integrity violation at {}: {}", request.requestURI, e.message, e)
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(
                 ApiErrorResponse(
@@ -89,6 +97,7 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException::class)
     fun handleUploadTooLarge(e: MaxUploadSizeExceededException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        log.error("Upload too large at {}: {}", request.requestURI, e.message, e)
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
             .body(
                 ApiErrorResponse(
