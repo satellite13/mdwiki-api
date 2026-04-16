@@ -2,6 +2,7 @@ package com.mdwiki.controller
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.mdwiki.dto.*
+import com.mdwiki.error.NotFoundException
 import com.mdwiki.service.PageService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -59,6 +60,19 @@ class PageControllerTest {
         mockMvc.get("/api/pages/test-page").andExpect {
             status { isOk() }
             jsonPath("$.title") { value("Test Page") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
+    fun `GET pages by slug returns structured not found error`() {
+        whenever(pageService.findBySlug("missing")).thenThrow(NotFoundException("Page not found: missing"))
+
+        mockMvc.get("/api/pages/missing").andExpect {
+            status { isNotFound() }
+            jsonPath("$.error") { value("NOT_FOUND") }
+            jsonPath("$.message") { value("Page not found: missing") }
+            jsonPath("$.path") { value("/api/pages/missing") }
         }
     }
 

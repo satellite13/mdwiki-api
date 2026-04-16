@@ -1,32 +1,75 @@
 package com.mdwiki.controller
 
+import com.mdwiki.dto.ApiErrorResponse
+import com.mdwiki.error.AppException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
-
-data class ErrorResponse(val error: String, val message: String)
+import jakarta.servlet.http.HttpServletRequest
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
 
+    @ExceptionHandler(AppException::class)
+    fun handleAppException(e: AppException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        return ResponseEntity.status(e.status)
+            .body(
+                ApiErrorResponse(
+                    error = e.errorCode,
+                    message = e.message ?: "Application error",
+                    path = request.requestURI
+                )
+            )
+    }
+
     @ExceptionHandler(NoSuchElementException::class)
-    fun handleNotFound(e: NoSuchElementException): ResponseEntity<ErrorResponse> {
+    fun handleNotFound(e: NoSuchElementException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-            .body(ErrorResponse("NOT_FOUND", e.message ?: "Resource not found"))
+            .body(
+                ApiErrorResponse(
+                    error = "NOT_FOUND",
+                    message = e.message ?: "Resource not found",
+                    path = request.requestURI
+                )
+            )
     }
 
     @ExceptionHandler(IllegalArgumentException::class)
-    fun handleBadRequest(e: IllegalArgumentException): ResponseEntity<ErrorResponse> {
+    fun handleBadRequest(e: IllegalArgumentException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(ErrorResponse("BAD_REQUEST", e.message ?: "Bad request"))
+            .body(
+                ApiErrorResponse(
+                    error = "BAD_REQUEST",
+                    message = e.message ?: "Bad request",
+                    path = request.requestURI
+                )
+            )
     }
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun handleValidation(e: MethodArgumentNotValidException): ResponseEntity<ErrorResponse> {
+    fun handleValidation(e: MethodArgumentNotValidException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
         val message = e.bindingResult.fieldErrors.joinToString(", ") { "${it.field}: ${it.defaultMessage}" }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(ErrorResponse("VALIDATION_ERROR", message))
+            .body(
+                ApiErrorResponse(
+                    error = "VALIDATION_ERROR",
+                    message = message,
+                    path = request.requestURI
+                )
+            )
+    }
+
+    @ExceptionHandler(Exception::class)
+    fun handleUnexpected(e: Exception, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(
+                ApiErrorResponse(
+                    error = "INTERNAL_ERROR",
+                    message = "Unexpected server error",
+                    path = request.requestURI
+                )
+            )
     }
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.mdwiki.dto.AuthResponse
 import com.mdwiki.dto.LoginRequest
 import com.mdwiki.dto.RegisterRequest
+import com.mdwiki.error.ConflictException
 import com.mdwiki.service.AuthService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -60,6 +61,23 @@ class AuthControllerTest {
         }.andExpect {
             status { isOk() }
             jsonPath("$.token") { value("jwt456") }
+        }
+    }
+
+    @Test
+    fun `POST register returns structured conflict error`() {
+        whenever(authService.register(any())).thenThrow(ConflictException("Username already taken"))
+
+        mockMvc.post("/api/auth/register") {
+            contentType = MediaType.APPLICATION_JSON
+            content = objectMapper.writeValueAsString(
+                RegisterRequest("newuser", "new@test.com", "password123")
+            )
+        }.andExpect {
+            status { isConflict() }
+            jsonPath("$.error") { value("CONFLICT") }
+            jsonPath("$.message") { value("Username already taken") }
+            jsonPath("$.path") { value("/api/auth/register") }
         }
     }
 }
