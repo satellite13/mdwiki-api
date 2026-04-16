@@ -26,16 +26,19 @@ class PageService(
 
     private val contentDir: File get() = File(wikiProperties.contentDir).also { it.mkdirs() }
 
+    @Transactional(readOnly = true)
     fun findAll(): List<PageListItem> {
         return pageRepository.findAll().map { it.toListItem() }
     }
 
+    @Transactional(readOnly = true)
     fun findBySlug(slug: String): PageResponse {
         val page = pageRepository.findBySlug(slug)
             ?: throw NoSuchElementException("Page not found: $slug")
         return page.toResponse()
     }
 
+    @Transactional(readOnly = true)
     fun getBacklinks(slug: String): List<BacklinkResponse> {
         return linkRepository.findByTargetSlug(slug).map {
             BacklinkResponse(slug = it.sourcePage.slug, title = it.sourcePage.title)
