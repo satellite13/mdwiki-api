@@ -17,6 +17,13 @@ java {
 
 repositories {
     mavenCentral()
+    maven { url = uri("https://repo.spring.io/milestone") }
+}
+
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.ai:spring-ai-bom:1.0.0")
+    }
 }
 
 dependencies {
@@ -38,6 +45,9 @@ dependencies {
     implementation("com.pgvector:pgvector:0.1.6")
     implementation("com.microsoft.onnxruntime:onnxruntime:1.19.2")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
+
+    // MCP Server
+    implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")
 
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")

@@ -11,6 +11,11 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
+  ai:
+    mcp:
+      server:
+        name: mdwiki-mcp
+        type: SYNC
 
 mdwiki:
   jwt:
