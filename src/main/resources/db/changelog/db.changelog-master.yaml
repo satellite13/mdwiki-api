@@ -23,3 +23,5 @@ databaseChangeLog:
       file: db/changelog/011-add-vector-index.yaml
   - include:
       file: db/changelog/012-page-soft-delete.yaml
+  - include:
+      file: db/changelog/013-create-attachments.yaml
