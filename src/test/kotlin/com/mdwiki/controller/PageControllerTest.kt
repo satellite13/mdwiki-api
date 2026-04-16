@@ -3,10 +3,12 @@ package com.mdwiki.controller
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.mdwiki.dto.*
 import com.mdwiki.error.NotFoundException
+import com.mdwiki.service.GraphService
 import com.mdwiki.service.PageService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -26,6 +28,7 @@ class PageControllerTest {
     @Autowired private lateinit var mockMvc: MockMvc
     @Autowired private lateinit var objectMapper: ObjectMapper
     @MockitoBean private lateinit var pageService: PageService
+    @MockitoBean private lateinit var graphService: GraphService
 
     private val samplePage = PageResponse(
         id = UUID.randomUUID(),
@@ -113,5 +116,36 @@ class PageControllerTest {
             status { isOk() }
             jsonPath("$[0].slug") { value("other-page") }
         }
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
+    fun `GET page graph delegates to graphService with default depth`() {
+        val graph = GraphResponse(
+            nodes = listOf(GraphNode("test-page", "Test Page", listOf("kotlin"), true)),
+            edges = emptyList()
+        )
+        whenever(graphService.getGraph("test-page", 1)).thenReturn(graph)
+
+        mockMvc.get("/api/pages/test-page/graph").andExpect {
+            status { isOk() }
+            jsonPath("$.nodes[0].slug") { value("test-page") }
+            // Jackson + Kotlin: boolean `isCurrent` сериализуется как `current`
+            jsonPath("$.nodes[0].current") { value(true) }
+        }
+        verify(graphService).getGraph("test-page", 1)
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
+    fun `GET page graph passes depth query param`() {
+        whenever(graphService.getGraph("test-page", 3)).thenReturn(GraphResponse(emptyList(), emptyList()))
+
+        mockMvc.get("/api/pages/test-page/graph") {
+            param("depth", "3")
+        }.andExpect {
+            status { isOk() }
+        }
+        verify(graphService).getGraph("test-page", 3)
     }
 }

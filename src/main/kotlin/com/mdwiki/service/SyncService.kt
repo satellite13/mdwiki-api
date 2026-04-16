@@ -6,6 +6,7 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.usecase.WikiSyncEngine
 import jakarta.annotation.PreDestroy
+import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.annotation.Transactional
@@ -22,6 +23,7 @@ class SyncService(
     private val folderRepository: FolderRepository,
     private val wikiProperties: WikiProperties,
     private val treeEventsService: TreeEventsService,
+    @Lazy private val folderService: FolderService,
     private val wikiSyncEngine: WikiSyncEngine,
     transactionManager: PlatformTransactionManager
 ) {
@@ -44,6 +46,7 @@ class SyncService(
     fun fullSync(): SyncResult = synchronized(wikiSyncLock) {
         val result = wikiSyncEngine.fullSync()
         if (result.added > 0 || result.updated > 0 || result.removed > 0) {
+            folderService.invalidateCache()
             treeEventsService.publishTreeUpdated()
         }
         result
@@ -52,12 +55,14 @@ class SyncService(
     @Transactional
     fun syncSingleFile(file: File) = synchronized(wikiSyncLock) {
         wikiSyncEngine.syncSingleFile(file)
+        folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
     }
 
     @Transactional
     fun removePage(slug: String) = synchronized(wikiSyncLock) {
         wikiSyncEngine.removePage(slug)
+        folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
     }
 
@@ -93,6 +98,7 @@ class SyncService(
         val result = wikiSyncEngine.fullSync()
         val prunedFolders = pruneMissingFolders()
         if (result.added > 0 || result.updated > 0 || result.removed > 0 || prunedFolders > 0) {
+            folderService.invalidateCache()
             treeEventsService.publishTreeUpdated()
         }
         return result

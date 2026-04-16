@@ -34,6 +34,7 @@ class SyncServiceTest {
     @Mock private lateinit var ragService: RagService
     private val frontmatterMetaService = FrontmatterMetaService()
     @Mock private lateinit var treeEventsService: TreeEventsService
+    @Mock private lateinit var folderService: FolderService
     @Mock private lateinit var platformTransactionManager: PlatformTransactionManager
 
     private lateinit var syncService: SyncService
@@ -56,6 +57,7 @@ class SyncServiceTest {
             folderRepository,
             props,
             treeEventsService,
+            folderService,
             wikiSyncEngine,
             platformTransactionManager
         )

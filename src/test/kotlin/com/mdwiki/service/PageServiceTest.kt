@@ -37,6 +37,7 @@ class PageServiceTest {
     private val frontmatterMetaService = FrontmatterMetaService()
     @Mock private lateinit var fileWatcherService: FileWatcherService
     @Mock private lateinit var treeEventsService: TreeEventsService
+    @Mock private lateinit var folderService: FolderService
 
     private lateinit var pageService: PageService
     private lateinit var wikiFileService: WikiFileService
@@ -63,6 +64,7 @@ class PageServiceTest {
             pageRepository,
             pageMetadataService,
             treeEventsService,
+            folderService,
             createPageUseCase,
             updatePageUseCase,
             deletePageUseCase

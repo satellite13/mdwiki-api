@@ -18,6 +18,7 @@ class PageService(
     private val pageRepository: PageRepository,
     private val pageMetadataService: PageMetadataService,
     private val treeEventsService: TreeEventsService,
+    private val folderService: FolderService,
     private val createPageUseCase: CreatePageUseCase,
     private val updatePageUseCase: UpdatePageUseCase,
     private val deletePageUseCase: DeletePageUseCase
@@ -46,6 +47,7 @@ class PageService(
     @Transactional
     fun create(request: CreatePageRequest, username: String): PageResponse {
         val created = createPageUseCase.execute(request, username)
+        folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
         return created
     }
@@ -53,6 +55,7 @@ class PageService(
     @Transactional
     fun update(slug: String, request: UpdatePageRequest, username: String): PageResponse {
         val updated = updatePageUseCase.execute(slug, request, username)
+        folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
         return updated
     }
@@ -60,6 +63,7 @@ class PageService(
     @Transactional
     fun delete(slug: String) {
         deletePageUseCase.execute(slug)
+        folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
     }
 
@@ -72,6 +76,7 @@ class PageService(
         }
         page.deletedAt = null
         val saved = pageRepository.save(page)
+        folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
         return saved.toResponse()
     }

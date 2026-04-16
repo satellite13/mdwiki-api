@@ -7,9 +7,13 @@ import com.mdwiki.model.Attachment
 import com.mdwiki.repository.AttachmentRepository
 import com.mdwiki.repository.UserRepository
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
-import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 
 @Service
@@ -19,25 +23,32 @@ class AttachmentService(
     private val wikiProperties: WikiProperties
 ) {
 
-    private val uploadsDir: File get() = File(wikiProperties.contentDir, "uploads").also { it.mkdirs() }
+    private val uploadsDir: Path
+        get() = Path.of(wikiProperties.contentDir).toAbsolutePath().normalize().resolve("uploads")
 
+    @Transactional(readOnly = true)
     fun list(page: Int, size: Int, pageId: UUID?): List<AttachmentResponse> {
-        val pageable = PageRequest.of(page, size)
+        val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         val results = if (pageId != null) {
             attachmentRepository.findByPageId(pageId, pageable)
         } else {
-            attachmentRepository.findAllBy(pageable)
+            attachmentRepository.findAll(pageable)
         }
         return results.content.map { it.toResponse() }
     }
 
+    @Transactional
     fun upload(file: MultipartFile, username: String, pageId: UUID?): AttachmentResponse {
         val user = userRepository.findByUsername(username)
         val ext = file.originalFilename?.substringAfterLast('.', "") ?: ""
         val storedName = "${UUID.randomUUID()}${if (ext.isNotBlank()) ".$ext" else ""}"
 
-        val dest = File(uploadsDir, storedName)
-        file.transferTo(dest)
+        Files.createDirectories(uploadsDir)
+        val dest = uploadsDir.resolve(storedName).normalize()
+        require(dest.startsWith(uploadsDir)) { "Invalid upload path" }
+        file.inputStream.use { input ->
+            Files.copy(input, dest, StandardCopyOption.REPLACE_EXISTING)
+        }
 
         val attachment = attachmentRepository.save(Attachment(
             originalName = file.originalFilename ?: "unknown",
@@ -51,11 +62,14 @@ class AttachmentService(
         return attachment.toResponse()
     }
 
+    @Transactional
     fun delete(id: UUID) {
         val attachment = attachmentRepository.findById(id)
             .orElseThrow { NotFoundException("Attachment not found") }
-        val file = File(uploadsDir, attachment.storedName)
-        file.delete()
+        val filePath = uploadsDir.resolve(attachment.storedName).normalize()
+        if (filePath.startsWith(uploadsDir)) {
+            Files.deleteIfExists(filePath)
+        }
         attachmentRepository.delete(attachment)
     }
 

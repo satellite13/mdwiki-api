@@ -1,0 +1,133 @@
+package com.mdwiki.service
+
+import com.mdwiki.config.WikiProperties
+import com.mdwiki.error.NotFoundException
+import com.mdwiki.model.Attachment
+import com.mdwiki.model.User
+import com.mdwiki.model.UserRole
+import com.mdwiki.repository.AttachmentRepository
+import com.mdwiki.repository.UserRepository
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.api.io.TempDir
+import org.mockito.Mock
+import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.kotlin.any
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.Pageable
+import org.springframework.mock.web.MockMultipartFile
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.Optional
+import java.util.UUID
+
+@ExtendWith(MockitoExtension::class)
+class AttachmentServiceTest {
+
+    @Mock
+    private lateinit var attachmentRepository: AttachmentRepository
+
+    @Mock
+    private lateinit var userRepository: UserRepository
+
+    @TempDir
+    lateinit var contentRoot: Path
+
+    private lateinit var service: AttachmentService
+
+    private val uploader = User(username = "alice", email = "a@x", passwordHash = "x", role = UserRole.EDITOR)
+
+    @BeforeEach
+    fun setUp() {
+        service = AttachmentService(
+            attachmentRepository,
+            userRepository,
+            WikiProperties(contentDir = contentRoot.toString())
+        )
+    }
+
+    @Test
+    fun `list without pageId uses findAll`() {
+        whenever(attachmentRepository.findAll(any<Pageable>())).thenReturn(PageImpl(emptyList()))
+
+        service.list(0, 50, null)
+
+        verify(attachmentRepository).findAll(any<Pageable>())
+    }
+
+    @Test
+    fun `list with pageId uses findByPageId`() {
+        val pid = UUID.randomUUID()
+        whenever(attachmentRepository.findByPageId(any<UUID>(), any<Pageable>())).thenReturn(PageImpl(emptyList()))
+
+        service.list(0, 50, pid)
+
+        verify(attachmentRepository).findByPageId(any<UUID>(), any<Pageable>())
+    }
+
+    @Test
+    fun `upload stores file under uploads and saves attachment`() {
+        whenever(userRepository.findByUsername("alice")).thenReturn(uploader)
+        whenever(attachmentRepository.save(any<Attachment>())).thenAnswer { inv ->
+            val a = inv.getArgument<Attachment>(0)
+            Attachment(
+                id = UUID.randomUUID(),
+                originalName = a.originalName,
+                storedName = a.storedName,
+                contentType = a.contentType,
+                sizeBytes = a.sizeBytes,
+                uploadedBy = a.uploadedBy,
+                page = a.page
+            )
+        }
+
+        val file = MockMultipartFile("file", "note.txt", "text/plain", "hi".toByteArray())
+        val response = service.upload(file, "alice", null)
+
+        val uploads = contentRoot.resolve("uploads")
+        assertTrue(Files.exists(uploads.resolve(response.storedName)))
+        verify(attachmentRepository).save(any<Attachment>())
+        assertEquals("/api/uploads/${response.storedName}", response.url)
+    }
+
+    @Test
+    fun `delete removes file and repository row`() {
+        val id = UUID.randomUUID()
+        val stored = "f1.bin"
+        Files.createDirectories(contentRoot.resolve("uploads"))
+        val path = contentRoot.resolve("uploads").resolve(stored)
+        Files.writeString(path, "x")
+
+        val att = Attachment(
+            id = id,
+            originalName = "f1.bin",
+            storedName = stored,
+            contentType = "application/octet-stream",
+            sizeBytes = 1,
+            uploadedBy = null,
+            page = null
+        )
+        whenever(attachmentRepository.findById(id)).thenReturn(Optional.of(att))
+
+        service.delete(id)
+
+        assertTrue(!Files.exists(path))
+        verify(attachmentRepository).delete(att)
+    }
+
+    @Test
+    fun `delete throws when attachment missing`() {
+        val id = UUID.randomUUID()
+        whenever(attachmentRepository.findById(id)).thenReturn(Optional.empty())
+
+        assertThrows<NotFoundException> {
+            service.delete(id)
+        }
+    }
+}
