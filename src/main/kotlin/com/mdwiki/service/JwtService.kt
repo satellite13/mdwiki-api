@@ -4,13 +4,18 @@ import com.mdwiki.config.JwtProperties
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import org.springframework.stereotype.Service
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.Date
 import javax.crypto.SecretKey
 
 @Service
 class JwtService(private val properties: JwtProperties) {
 
-    private val key: SecretKey = Keys.hmacShaKeyFor(properties.secret.toByteArray())
+    /** SHA-256(secret) yields 32 bytes — satisfies JJWT minimum key length for HS256. */
+    private val key: SecretKey = Keys.hmacShaKeyFor(
+        MessageDigest.getInstance("SHA-256").digest(properties.secret.toByteArray(StandardCharsets.UTF_8))
+    )
 
     fun generateToken(username: String): String {
         val now = Date()
