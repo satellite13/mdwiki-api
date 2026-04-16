@@ -1,12 +1,25 @@
 package com.mdwiki.mapper
 
+import com.mdwiki.dto.FolderPathItem
 import com.mdwiki.dto.PageListItem
 import com.mdwiki.dto.PageResponse
 import com.mdwiki.dto.SearchResult
+import com.mdwiki.model.Folder
 import com.mdwiki.model.Page
 import com.mdwiki.util.MarkdownFrontmatter
 
 private const val SEARCH_SNIPPET_LIMIT = 200
+
+private fun Folder?.buildPath(): List<FolderPathItem> {
+    if (this == null) return emptyList()
+    val path = mutableListOf<FolderPathItem>()
+    var current: Folder? = this
+    while (current != null) {
+        path.add(FolderPathItem(id = current.id!!, name = current.name))
+        current = current.parent
+    }
+    return path.reversed()
+}
 
 fun Page.toResponse(): PageResponse = PageResponse(
     id = id!!,
@@ -19,6 +32,7 @@ fun Page.toResponse(): PageResponse = PageResponse(
     createdBy = createdBy?.username,
     updatedBy = updatedBy?.username,
     folderId = folder?.id,
+    folderPath = folder.buildPath(),
     createdAt = createdAt,
     updatedAt = updatedAt
 )

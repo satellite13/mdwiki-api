@@ -38,6 +38,7 @@ data class PageResponse(
     val createdBy: String?,
     val updatedBy: String?,
     val folderId: UUID? = null,
+    val folderPath: List<FolderPathItem> = emptyList(),
     val createdAt: Instant,
     val updatedAt: Instant
 )
@@ -54,4 +55,9 @@ data class PageListItem(
 data class BacklinkResponse(
     val slug: String,
     val title: String
+)
+
+data class FolderPathItem(
+    val id: UUID,
+    val name: String
 )
