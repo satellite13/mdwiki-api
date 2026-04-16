@@ -1,15 +1,18 @@
 package com.mdwiki.mcp
 
 import com.mdwiki.service.PageService
-import org.springframework.ai.tool.annotation.Tool
-import org.springframework.ai.tool.annotation.ToolParam
+import org.springframework.ai.mcp.annotation.McpTool
+import org.springframework.ai.mcp.annotation.McpToolParam
 import org.springframework.stereotype.Component
 
 @Component
 class WikiReadTool(private val pageService: PageService) {
 
-    @Tool(name = "wiki_read", description = "Read a wiki page by its slug. Returns full markdown content, tags, and metadata.")
-    fun read(@ToolParam(description = "Page slug (URL-friendly name)") slug: String): Map<String, Any?> {
+    @McpTool(
+        name = "wiki_read",
+        description = "Read a wiki page by its slug. Returns full markdown content, tags, and metadata."
+    )
+    fun read(@McpToolParam(description = "Page slug (URL-friendly name)") slug: String): Map<String, Any?> {
         val page = pageService.findBySlug(slug)
         val backlinks = pageService.getBacklinks(slug)
         return mapOf(
