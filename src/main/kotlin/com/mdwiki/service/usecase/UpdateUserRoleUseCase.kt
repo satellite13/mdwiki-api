@@ -5,8 +5,10 @@ import com.mdwiki.dto.UserResponse
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.mapper.toResponse
 import com.mdwiki.repository.UserRepository
+import org.springframework.stereotype.Component
 import java.util.UUID
 
+@Component
 class UpdateUserRoleUseCase(
     private val userRepository: UserRepository
 ) {

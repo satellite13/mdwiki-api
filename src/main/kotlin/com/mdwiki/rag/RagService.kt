@@ -1,5 +1,6 @@
 package com.mdwiki.rag
 
+import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Page
 import com.mdwiki.model.PageChunk
 import com.mdwiki.repository.PageChunkRepository
@@ -15,7 +16,8 @@ class RagService(
     private val pageRepository: PageRepository,
     private val embeddingProvider: EmbeddingProvider,
     private val chunkingService: ChunkingService,
-    private val reranker: Reranker
+    private val reranker: Reranker,
+    private val wikiProperties: WikiProperties
 ) {
 
     private val log = LoggerFactory.getLogger(RagService::class.java)
@@ -69,7 +71,8 @@ class RagService(
         val vectorCandidates = try {
             val queryEmbedding = embeddingProvider.embed(query)
             val embeddingStr = "[${queryEmbedding.joinToString(",")}]"
-            val rawResults = pageChunkRepository.findByVectorSimilarity(embeddingStr, 20)
+            val vectorSearchLimit = wikiProperties.rag.vectorSearchLimit
+            val rawResults = pageChunkRepository.findByVectorSimilarity(embeddingStr, vectorSearchLimit)
             // Batch-load pages to avoid N+1 queries
             val pageIds = rawResults.map { it[1] as UUID }.distinct()
             val pagesMap = pageRepository.findAllById(pageIds).associateBy { it.id }
@@ -79,7 +82,7 @@ class RagService(
             emptyList()
         }
 
-        val ftsPages = pageRepository.fullTextSearch(query, 20)
+        val ftsPages = pageRepository.fullTextSearch(query, wikiProperties.rag.vectorSearchLimit)
         val ftsPageIds = ftsPages.map { it.id!! }.toSet()
         val ftsChunks = ftsPageIds.flatMap { pageId ->
             pageChunkRepository.findByPageIdOrderByChunkIndex(pageId)

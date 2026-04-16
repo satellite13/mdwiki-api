@@ -49,5 +49,7 @@ mdwiki:
       model: ${LMSTUDIO_EMBEDDING_MODEL:nomic-ai/nomic-embed-text-v1.5}
       api-key: ${LMSTUDIO_API_KEY:}
   rag:
+    max-chunk-chars: 2000
+    vector-search-limit: 20
     reranker:
       model-path: ${MDWIKI_RERANKER_MODEL_PATH:}

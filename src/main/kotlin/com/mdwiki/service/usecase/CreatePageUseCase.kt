@@ -12,7 +12,9 @@ import com.mdwiki.rag.RagService
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.WikiFileService
+import org.springframework.stereotype.Component
 
+@Component
 class CreatePageUseCase(
     private val pageRepository: PageRepository,
     private val userRepository: UserRepository,

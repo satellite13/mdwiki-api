@@ -7,6 +7,10 @@ import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.ApiKeyRepository
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.usecase.CreateApiKeyUseCase
+import com.mdwiki.service.usecase.DeleteApiKeyUseCase
+import com.mdwiki.service.usecase.ListApiKeysUseCase
+import com.mdwiki.service.usecase.ValidateApiKeyUseCase
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -26,7 +30,12 @@ class ApiKeyServiceTest {
 
     @BeforeEach
     fun setUp() {
-        apiKeyService = ApiKeyService(apiKeyRepository, userRepository)
+        apiKeyService = ApiKeyService(
+            CreateApiKeyUseCase(apiKeyRepository, userRepository),
+            ValidateApiKeyUseCase(apiKeyRepository),
+            ListApiKeysUseCase(apiKeyRepository, userRepository),
+            DeleteApiKeyUseCase(apiKeyRepository, userRepository)
+        )
     }
 
     @Test

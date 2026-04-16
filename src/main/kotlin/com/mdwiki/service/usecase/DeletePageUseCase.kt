@@ -5,7 +5,9 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.WikiFileService
+import org.springframework.stereotype.Component
 
+@Component
 class DeletePageUseCase(
     private val pageRepository: PageRepository,
     private val pageMetadataService: PageMetadataService,

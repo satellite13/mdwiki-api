@@ -2,11 +2,16 @@ package com.mdwiki.dto
 
 import com.fasterxml.jackson.databind.JsonNode
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
 import java.time.Instant
 import java.util.UUID
 
 data class CreatePageRequest(
     @field:NotBlank
+    @field:Pattern(
+        regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        message = "Slug must be lowercase alphanumeric with hyphens"
+    )
     val slug: String,
     @field:NotBlank
     val title: String,

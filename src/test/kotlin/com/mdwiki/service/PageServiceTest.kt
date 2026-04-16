@@ -11,6 +11,9 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.usecase.CreatePageUseCase
+import com.mdwiki.service.usecase.DeletePageUseCase
+import com.mdwiki.service.usecase.UpdatePageUseCase
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -45,15 +48,24 @@ class PageServiceTest {
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
         wikiFileService = WikiFileService(props, fileWatcherService)
+        val createPageUseCase = CreatePageUseCase(
+            pageRepository, userRepository, folderRepository,
+            pageMetadataService, ragService, wikiFileService, frontmatterMetaService
+        )
+        val updatePageUseCase = UpdatePageUseCase(
+            pageRepository, userRepository, folderRepository,
+            pageMetadataService, ragService, wikiFileService, frontmatterMetaService
+        )
+        val deletePageUseCase = DeletePageUseCase(
+            pageRepository, pageMetadataService, ragService, wikiFileService
+        )
         pageService = PageService(
             pageRepository,
-            userRepository,
-            folderRepository,
             pageMetadataService,
-            wikiFileService,
-            ragService,
-            frontmatterMetaService,
-            treeEventsService
+            treeEventsService,
+            createPageUseCase,
+            updatePageUseCase,
+            deletePageUseCase
         )
     }
 

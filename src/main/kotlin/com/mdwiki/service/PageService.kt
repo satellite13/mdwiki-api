@@ -4,10 +4,7 @@ import com.mdwiki.dto.*
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.mapper.toListItem
 import com.mdwiki.mapper.toResponse
-import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
-import com.mdwiki.rag.RagService
-import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.usecase.CreatePageUseCase
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.service.usecase.UpdatePageUseCase
@@ -19,39 +16,12 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class PageService(
     private val pageRepository: PageRepository,
-    private val userRepository: UserRepository,
-    private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
-    private val wikiFileService: WikiFileService,
-    private val ragService: RagService,
-    private val frontmatterMetaService: FrontmatterMetaService,
-    private val treeEventsService: TreeEventsService
+    private val treeEventsService: TreeEventsService,
+    private val createPageUseCase: CreatePageUseCase,
+    private val updatePageUseCase: UpdatePageUseCase,
+    private val deletePageUseCase: DeletePageUseCase
 ) {
-    private val createPageUseCase = CreatePageUseCase(
-        pageRepository = pageRepository,
-        userRepository = userRepository,
-        folderRepository = folderRepository,
-        pageMetadataService = pageMetadataService,
-        ragService = ragService,
-        wikiFileService = wikiFileService,
-        frontmatterMetaService = frontmatterMetaService
-    )
-    private val updatePageUseCase = UpdatePageUseCase(
-        pageRepository = pageRepository,
-        userRepository = userRepository,
-        folderRepository = folderRepository,
-        pageMetadataService = pageMetadataService,
-        ragService = ragService,
-        wikiFileService = wikiFileService,
-        frontmatterMetaService = frontmatterMetaService
-    )
-    private val deletePageUseCase = DeletePageUseCase(
-        pageRepository = pageRepository,
-        pageMetadataService = pageMetadataService,
-        ragService = ragService,
-        wikiFileService = wikiFileService
-    )
-
     @Transactional(readOnly = true)
     fun findAll(page: Int = 0, size: Int = 50): Page<PageListItem> {
         val pageable = PageRequest.of(page, size)

@@ -3,6 +3,9 @@ package com.mdwiki.service
 import com.mdwiki.model.Tag
 import com.mdwiki.repository.TagRepository
 import com.mdwiki.repository.TagWithPageCountView
+import com.mdwiki.service.usecase.CleanupOrphanedTagsUseCase
+import com.mdwiki.service.usecase.GetOrCreateTagsUseCase
+import com.mdwiki.service.usecase.ListTagsUseCase
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -22,7 +25,11 @@ class TagServiceTest {
 
     @BeforeEach
     fun setUp() {
-        tagService = TagService(tagRepository)
+        tagService = TagService(
+            ListTagsUseCase(tagRepository),
+            GetOrCreateTagsUseCase(tagRepository),
+            CleanupOrphanedTagsUseCase(tagRepository)
+        )
     }
 
     @Test

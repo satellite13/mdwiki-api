@@ -6,7 +6,9 @@ import com.mdwiki.error.UnauthorizedException
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.JwtService
 import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.stereotype.Component
 
+@Component
 class LoginUserUseCase(
     private val userRepository: UserRepository,
     private val jwtService: JwtService,

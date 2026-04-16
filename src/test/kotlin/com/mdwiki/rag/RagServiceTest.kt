@@ -26,7 +26,7 @@ class RagServiceTest {
 
     @BeforeEach
     fun setUp() {
-        ragService = RagService(pageChunkRepository, pageRepository, embeddingProvider, chunkingService, reranker)
+        ragService = RagService(pageChunkRepository, pageRepository, embeddingProvider, chunkingService, reranker, com.mdwiki.config.WikiProperties())
     }
 
     @Test

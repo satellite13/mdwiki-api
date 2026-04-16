@@ -7,6 +7,8 @@ import com.mdwiki.error.UnauthorizedException
 import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.usecase.LoginUserUseCase
+import com.mdwiki.service.usecase.RegisterUserUseCase
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -31,7 +33,9 @@ class AuthServiceTest {
 
     @BeforeEach
     fun setUp() {
-        authService = AuthService(userRepository, jwtService, passwordEncoder)
+        val registerUserUseCase = RegisterUserUseCase(userRepository, jwtService, passwordEncoder)
+        val loginUserUseCase = LoginUserUseCase(userRepository, jwtService, passwordEncoder)
+        authService = AuthService(registerUserUseCase, loginUserUseCase)
     }
 
     @Test

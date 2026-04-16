@@ -9,8 +9,10 @@ import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
 import org.slf4j.LoggerFactory
 import java.io.File
+import org.springframework.stereotype.Component
 import java.time.Instant
 
+@Component
 class WikiSyncEngine(
     private val pageRepository: PageRepository,
     private val pageMetadataService: PageMetadataService,

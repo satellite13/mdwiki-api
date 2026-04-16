@@ -10,8 +10,10 @@ import com.mdwiki.rag.RagService
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.WikiFileService
+import org.springframework.stereotype.Component
 import java.time.Instant
 
+@Component
 class UpdatePageUseCase(
     private val pageRepository: PageRepository,
     private val userRepository: UserRepository,

@@ -2,7 +2,9 @@ package com.mdwiki.service.usecase
 
 import com.mdwiki.dto.TagResponse
 import com.mdwiki.repository.TagRepository
+import org.springframework.stereotype.Component
 
+@Component
 class ListTagsUseCase(
     private val tagRepository: TagRepository
 ) {

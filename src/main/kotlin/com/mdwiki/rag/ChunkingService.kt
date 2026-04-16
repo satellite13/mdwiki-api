@@ -1,17 +1,21 @@
 package com.mdwiki.rag
 
+import com.mdwiki.config.WikiProperties
 import com.mdwiki.util.MarkdownFrontmatter
 import org.springframework.stereotype.Service
 
 @Service
-class ChunkingService {
+class ChunkingService(
+    private val wikiProperties: WikiProperties
+) {
 
     data class Chunk(val index: Int, val text: String, val sectionHeading: String?)
 
     companion object {
-        private const val MAX_CHUNK_CHARS = 2000
         private val HEADING_PATTERN = Regex("""^#{1,3}\s+(.+)$""", RegexOption.MULTILINE)
     }
+
+    private val maxChunkChars: Int get() = wikiProperties.rag.maxChunkChars
 
     fun chunk(markdown: String): List<Chunk> {
         val md = MarkdownFrontmatter.strip(markdown)
@@ -48,13 +52,13 @@ class ChunkingService {
     }
 
     private fun splitLargeSection(text: String, heading: String?, startIndex: Int): List<Chunk> {
-        if (text.length <= MAX_CHUNK_CHARS) return listOf(Chunk(index = startIndex, text = text, sectionHeading = heading))
+        if (text.length <= maxChunkChars) return listOf(Chunk(index = startIndex, text = text, sectionHeading = heading))
         val chunks = mutableListOf<Chunk>()
         val paragraphs = text.split(Regex("""\n\s*\n"""))
         var currentChunk = StringBuilder()
         var index = startIndex
         for (paragraph in paragraphs) {
-            if (paragraph.length > MAX_CHUNK_CHARS) {
+            if (paragraph.length > maxChunkChars) {
                 // Flush current chunk first
                 if (currentChunk.isNotEmpty()) {
                     chunks.add(Chunk(index = index, text = currentChunk.toString().trim(), sectionHeading = heading))
@@ -64,7 +68,7 @@ class ChunkingService {
                 // Split oversized paragraph by words
                 val words = paragraph.split(" ")
                 for (word in words) {
-                    if (currentChunk.length + word.length + 1 > MAX_CHUNK_CHARS && currentChunk.isNotEmpty()) {
+                    if (currentChunk.length + word.length + 1 > maxChunkChars && currentChunk.isNotEmpty()) {
                         chunks.add(Chunk(index = index, text = currentChunk.toString().trim(), sectionHeading = heading))
                         index++
                         currentChunk = StringBuilder()
@@ -73,7 +77,7 @@ class ChunkingService {
                     currentChunk.append(word)
                 }
             } else {
-                if (currentChunk.length + paragraph.length > MAX_CHUNK_CHARS && currentChunk.isNotEmpty()) {
+                if (currentChunk.length + paragraph.length > maxChunkChars && currentChunk.isNotEmpty()) {
                     chunks.add(Chunk(index = index, text = currentChunk.toString().trim(), sectionHeading = heading))
                     index++
                     currentChunk = StringBuilder()

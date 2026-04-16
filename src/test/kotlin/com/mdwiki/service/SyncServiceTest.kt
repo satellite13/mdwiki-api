@@ -5,6 +5,7 @@ import com.mdwiki.model.Page
 import com.mdwiki.rag.RagService
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.service.usecase.WikiSyncEngine
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -47,14 +48,15 @@ class SyncServiceTest {
         whenever(platformTransactionManager.getTransaction(any())).thenReturn(mock<TransactionStatus>())
         doNothing().whenever(platformTransactionManager).commit(any())
         doNothing().whenever(platformTransactionManager).rollback(any())
+        val wikiSyncEngine = WikiSyncEngine(
+            pageRepository, pageMetadataService, props, ragService, frontmatterMetaService
+        )
         syncService = SyncService(
             pageRepository,
             folderRepository,
-            pageMetadataService,
             props,
-            ragService,
-            frontmatterMetaService,
             treeEventsService,
+            wikiSyncEngine,
             platformTransactionManager
         )
     }

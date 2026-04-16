@@ -5,7 +5,9 @@ import com.mdwiki.error.NotFoundException
 import com.mdwiki.model.ApiKey
 import com.mdwiki.repository.ApiKeyRepository
 import com.mdwiki.repository.UserRepository
+import org.springframework.stereotype.Component
 
+@Component
 class ListApiKeysUseCase(
     private val apiKeyRepository: ApiKeyRepository,
     private val userRepository: UserRepository

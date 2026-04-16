@@ -4,8 +4,10 @@ import com.mdwiki.error.ForbiddenException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.UserRepository
+import org.springframework.stereotype.Component
 import java.util.UUID
 
+@Component
 class DeleteUserUseCase(
     private val userRepository: UserRepository
 ) {

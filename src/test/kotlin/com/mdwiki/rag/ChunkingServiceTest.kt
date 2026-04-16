@@ -1,11 +1,12 @@
 package com.mdwiki.rag
 
+import com.mdwiki.config.WikiProperties
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
 class ChunkingServiceTest {
 
-    private val service = ChunkingService()
+    private val service = ChunkingService(WikiProperties())
 
     @Test
     fun `splits markdown by headings`() {

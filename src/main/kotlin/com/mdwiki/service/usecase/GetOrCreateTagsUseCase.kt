@@ -2,7 +2,9 @@ package com.mdwiki.service.usecase
 
 import com.mdwiki.model.Tag
 import com.mdwiki.repository.TagRepository
+import org.springframework.stereotype.Component
 
+@Component
 class GetOrCreateTagsUseCase(
     private val tagRepository: TagRepository
 ) {

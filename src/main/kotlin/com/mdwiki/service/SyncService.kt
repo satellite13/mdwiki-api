@@ -2,7 +2,6 @@ package com.mdwiki.service
 
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Folder
-import com.mdwiki.rag.RagService
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.usecase.WikiSyncEngine
@@ -21,21 +20,12 @@ import java.util.concurrent.TimeUnit
 class SyncService(
     private val pageRepository: PageRepository,
     private val folderRepository: FolderRepository,
-    private val pageMetadataService: PageMetadataService,
     private val wikiProperties: WikiProperties,
-    private val ragService: RagService,
-    private val frontmatterMetaService: FrontmatterMetaService,
     private val treeEventsService: TreeEventsService,
+    private val wikiSyncEngine: WikiSyncEngine,
     transactionManager: PlatformTransactionManager
 ) {
     private val transactionTemplate = TransactionTemplate(transactionManager)
-    private val wikiSyncEngine = WikiSyncEngine(
-        pageRepository = pageRepository,
-        pageMetadataService = pageMetadataService,
-        wikiProperties = wikiProperties,
-        ragService = ragService,
-        frontmatterMetaService = frontmatterMetaService
-    )
 
     /** Serializes disk↔DB sync so the watcher and fullSync (or concurrent API calls) cannot interleave inserts. */
     private val wikiSyncLock = Any()
