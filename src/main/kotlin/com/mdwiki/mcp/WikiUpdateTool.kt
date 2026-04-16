@@ -16,7 +16,8 @@ class WikiUpdateTool(private val pageService: PageService) {
         @ToolParam(description = "New page title", required = false) title: String?,
         @ToolParam(description = "New page content in markdown", required = false) contentMd: String?
     ): Map<String, Any?> {
-        val username = SecurityContextHolder.getContext().authentication.name
+        val username = SecurityContextHolder.getContext().authentication?.name
+            ?: throw IllegalStateException("Not authenticated")
         val page = pageService.update(slug, UpdatePageRequest(title = title, contentMd = contentMd), username)
         return mapOf("slug" to page.slug, "title" to page.title, "updatedAt" to page.updatedAt.toString())
     }

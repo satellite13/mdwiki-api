@@ -16,7 +16,8 @@ class WikiCreateTool(private val pageService: PageService) {
         @ToolParam(description = "Page title") title: String,
         @ToolParam(description = "Page content in markdown format") contentMd: String
     ): Map<String, Any?> {
-        val username = SecurityContextHolder.getContext().authentication.name
+        val username = SecurityContextHolder.getContext().authentication?.name
+            ?: throw IllegalStateException("Not authenticated")
         val page = pageService.create(CreatePageRequest(slug = slug, title = title, contentMd = contentMd), username)
         return mapOf("slug" to page.slug, "title" to page.title, "createdAt" to page.createdAt.toString())
     }

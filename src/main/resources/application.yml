@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/mdwiki
+    url: jdbc:postgresql://localhost:54328/mdwiki
     username: mdwiki
     password: mdwiki
   jpa:
@@ -34,5 +34,5 @@ mdwiki:
       model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
     lmstudio:
       base-url: ${LMSTUDIO_BASE_URL:http://localhost:1234/v1}
-      model: ${LMSTUDIO_EMBEDDING_MODEL:text-embedding-nomic-embed-text-v1.5@q8_0}
+      model: ${LMSTUDIO_EMBEDDING_MODEL:nomic-ai/nomic-embed-text-v1.5}
       api-key: ${LMSTUDIO_API_KEY:}

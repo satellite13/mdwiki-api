@@ -74,7 +74,7 @@ class AuthServiceTest {
 
     @Test
     fun `login returns token for valid credentials`() {
-        val hash = passwordEncoder.encode("password123")
+        val hash = passwordEncoder.encode("password123")!!
         val user = User(username = "testuser", email = "test@test.com", passwordHash = hash, role = UserRole.EDITOR)
         whenever(userRepository.findByUsername("testuser")).thenReturn(user)
         whenever(jwtService.generateToken("testuser")).thenReturn("token789")

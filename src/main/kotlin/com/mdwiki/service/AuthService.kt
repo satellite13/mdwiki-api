@@ -23,10 +23,12 @@ class AuthService(
         val isFirstUser = userRepository.count() == 0L
         val role = if (isFirstUser) UserRole.ADMIN else UserRole.READER
 
+        val passwordHash = passwordEncoder.encode(request.password)
+            ?: error("PasswordEncoder returned null")
         val user = User(
             username = request.username,
             email = request.email,
-            passwordHash = passwordEncoder.encode(request.password),
+            passwordHash = passwordHash,
             role = role
         )
         userRepository.save(user)

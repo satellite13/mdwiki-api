@@ -24,10 +24,13 @@ class SyncService(
 
     private val log = LoggerFactory.getLogger(SyncService::class.java)
 
+    /** Serializes disk↔DB sync so the watcher and fullSync (or concurrent API calls) cannot interleave inserts. */
+    private val wikiSyncLock = Any()
+
     data class SyncResult(val added: Int, val updated: Int, val removed: Int)
 
     @Transactional
-    fun fullSync(): SyncResult {
+    fun fullSync(): SyncResult = synchronized(wikiSyncLock) {
         val contentDir = File(wikiProperties.contentDir)
         if (!contentDir.exists()) {
             contentDir.mkdirs()
@@ -81,10 +84,11 @@ class SyncService(
             tagService.cleanupOrphanedTags()
         }
 
-        return SyncResult(added, updated, removed)
+        SyncResult(added, updated, removed)
     }
 
-    fun syncSingleFile(file: File) {
+    @Transactional
+    fun syncSingleFile(file: File) = synchronized(wikiSyncLock) {
         val slug = file.nameWithoutExtension
         val content = file.readText()
         val existing = pageRepository.findBySlug(slug)
@@ -110,8 +114,9 @@ class SyncService(
         }
     }
 
-    fun removePage(slug: String) {
-        val page = pageRepository.findBySlug(slug) ?: return
+    @Transactional
+    fun removePage(slug: String) = synchronized(wikiSyncLock) {
+        val page = pageRepository.findBySlug(slug) ?: return@synchronized
         linkRepository.deleteBySourcePage(page)
         ragService.deletePageChunks(page.id!!)
         pageRepository.delete(page)
