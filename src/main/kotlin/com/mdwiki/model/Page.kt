@@ -34,6 +34,10 @@ class Page(
     @JoinColumn(name = "updated_by")
     var updatedBy: User? = null,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "folder_id")
+    var folder: Folder? = null,
+
     @ManyToMany
     @JoinTable(
         name = "page_tags",

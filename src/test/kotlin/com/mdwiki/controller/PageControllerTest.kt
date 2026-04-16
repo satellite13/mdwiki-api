@@ -34,6 +34,7 @@ class PageControllerTest {
         tags = listOf("kotlin"),
         createdBy = "testuser",
         updatedBy = "testuser",
+        folderId = null,
         createdAt = Instant.now(),
         updatedAt = Instant.now()
     )
@@ -41,7 +42,7 @@ class PageControllerTest {
     @Test
     @WithMockUser(roles = ["READER"])
     fun `GET pages returns list`() {
-        val item = PageListItem(samplePage.id, "test-page", "Test Page", listOf("kotlin"), Instant.now())
+        val item = PageListItem(id = samplePage.id, slug = "test-page", title = "Test Page", tags = listOf("kotlin"), updatedAt = Instant.now())
         whenever(pageService.findAll()).thenReturn(listOf(item))
 
         mockMvc.get("/api/pages").andExpect {

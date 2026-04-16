@@ -9,12 +9,14 @@ data class CreatePageRequest(
     val slug: String,
     @field:NotBlank
     val title: String,
-    val contentMd: String = ""
+    val contentMd: String = "",
+    val folderId: UUID? = null
 )
 
 data class UpdatePageRequest(
     val title: String? = null,
-    val contentMd: String? = null
+    val contentMd: String? = null,
+    val folderId: UUID? = null
 )
 
 data class PageResponse(
@@ -26,6 +28,7 @@ data class PageResponse(
     val tags: List<String>,
     val createdBy: String?,
     val updatedBy: String?,
+    val folderId: UUID? = null,
     val createdAt: Instant,
     val updatedAt: Instant
 )
@@ -35,6 +38,7 @@ data class PageListItem(
     val slug: String,
     val title: String,
     val tags: List<String>,
+    val folderId: UUID? = null,
     val updatedAt: Instant
 )
 

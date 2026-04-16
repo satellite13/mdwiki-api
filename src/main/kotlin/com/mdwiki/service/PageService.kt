@@ -4,6 +4,7 @@ import com.mdwiki.config.WikiProperties
 import com.mdwiki.dto.*
 import com.mdwiki.model.Link
 import com.mdwiki.model.Page
+import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
@@ -18,6 +19,7 @@ class PageService(
     private val pageRepository: PageRepository,
     private val userRepository: UserRepository,
     private val linkRepository: LinkRepository,
+    private val folderRepository: FolderRepository,
     private val wikilinkService: WikilinkService,
     private val tagService: TagService,
     private val wikiProperties: WikiProperties,
@@ -53,13 +55,18 @@ class PageService(
         val file = File(contentDir, "${request.slug}.md")
         file.writeText(request.contentMd)
 
+        val folder = request.folderId?.let {
+            folderRepository.findById(it).orElseThrow { NoSuchElementException("Folder not found: $it") }
+        }
+
         val page = Page(
             slug = request.slug,
             title = request.title,
             contentMd = request.contentMd,
             filePath = file.absolutePath,
             createdBy = user,
-            updatedBy = user
+            updatedBy = user,
+            folder = folder
         )
         val saved = pageRepository.save(page)
 
@@ -77,6 +84,10 @@ class PageService(
         val user = userRepository.findByUsername(username)
 
         request.title?.let { page.title = it }
+        request.folderId?.let { folderId ->
+            page.folder = folderRepository.findById(folderId)
+                .orElseThrow { NoSuchElementException("Folder not found: $folderId") }
+        }
         request.contentMd?.let { newContent ->
             page.contentMd = newContent
             page.filePath?.let { path -> File(path).writeText(newContent) }
@@ -139,6 +150,7 @@ class PageService(
         tags = tags.map { it.name },
         createdBy = createdBy?.username,
         updatedBy = updatedBy?.username,
+        folderId = folder?.id,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -148,6 +160,7 @@ class PageService(
         slug = slug,
         title = title,
         tags = tags.map { it.name },
+        folderId = folder?.id,
         updatedAt = updatedAt
     )
 }

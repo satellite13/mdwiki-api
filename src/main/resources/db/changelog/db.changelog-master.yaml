@@ -11,3 +11,5 @@ databaseChangeLog:
       file: db/changelog/005-create-page-chunks.yaml
   - include:
       file: db/changelog/006-create-api-keys.yaml
+  - include:
+      file: db/changelog/007-create-folders.yaml

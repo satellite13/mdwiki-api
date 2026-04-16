@@ -6,6 +6,7 @@ import com.mdwiki.dto.UpdatePageRequest
 import com.mdwiki.model.Page
 import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
+import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
@@ -28,6 +29,7 @@ class PageServiceTest {
     @Mock private lateinit var pageRepository: PageRepository
     @Mock private lateinit var userRepository: UserRepository
     @Mock private lateinit var linkRepository: LinkRepository
+    @Mock private lateinit var folderRepository: FolderRepository
     @Mock private lateinit var wikilinkService: WikilinkService
     @Mock private lateinit var tagService: TagService
     @Mock private lateinit var ragService: RagService
@@ -40,7 +42,7 @@ class PageServiceTest {
     @BeforeEach
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
-        pageService = PageService(pageRepository, userRepository, linkRepository, wikilinkService, tagService, props, ragService)
+        pageService = PageService(pageRepository, userRepository, linkRepository, folderRepository, wikilinkService, tagService, props, ragService)
     }
 
     @Test
