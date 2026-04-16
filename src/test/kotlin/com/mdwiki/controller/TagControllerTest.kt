@@ -1,6 +1,6 @@
 package com.mdwiki.controller
 
-import com.mdwiki.model.Tag
+import com.mdwiki.dto.TagResponse
 import com.mdwiki.service.TagService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.whenever
@@ -11,7 +11,6 @@ import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
-import java.util.UUID
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -24,12 +23,16 @@ class TagControllerTest {
     @WithMockUser(roles = ["READER"])
     fun `GET tags returns all tags`() {
         whenever(tagService.findAll()).thenReturn(
-            listOf(Tag(id = UUID.randomUUID(), name = "kotlin"), Tag(id = UUID.randomUUID(), name = "spring"))
+            listOf(
+                TagResponse(id = java.util.UUID.randomUUID(), name = "kotlin", pageCount = 3),
+                TagResponse(id = java.util.UUID.randomUUID(), name = "spring", pageCount = 1)
+            )
         )
 
         mockMvc.get("/api/tags").andExpect {
             status { isOk() }
             jsonPath("$[0].name") { value("kotlin") }
+            jsonPath("$[0].pageCount") { value(3) }
             jsonPath("$[1].name") { value("spring") }
         }
     }

@@ -2,6 +2,7 @@ package com.mdwiki.service
 
 import com.mdwiki.model.Tag
 import com.mdwiki.repository.TagRepository
+import com.mdwiki.repository.TagWithPageCountView
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -44,5 +45,30 @@ class TagServiceTest {
         tagService.cleanupOrphanedTags()
 
         verify(tagRepository).deleteAll(listOf(orphan))
+    }
+
+    @Test
+    fun `findAll returns tags with usage count`() {
+        val id = UUID.randomUUID()
+        whenever(tagRepository.findAllWithPageCount()).thenReturn(
+            listOf(TestTagWithPageCountView(id = id, name = "kotlin", pageCount = 4))
+        )
+
+        val result = tagService.findAll()
+
+        assertEquals(1, result.size)
+        assertEquals(id, result[0].id)
+        assertEquals("kotlin", result[0].name)
+        assertEquals(4, result[0].pageCount)
+    }
+
+    private data class TestTagWithPageCountView(
+        private val id: UUID,
+        private val name: String,
+        private val pageCount: Long
+    ) : TagWithPageCountView {
+        override fun getId(): UUID = id
+        override fun getName(): String = name
+        override fun getPageCount(): Long = pageCount
     }
 }

@@ -1,0 +1,31 @@
+package com.mdwiki.service.usecase
+
+import com.mdwiki.dto.ApiKeyCreatedResponse
+import com.mdwiki.dto.CreateApiKeyRequest
+import com.mdwiki.error.NotFoundException
+import com.mdwiki.model.ApiKey
+import com.mdwiki.repository.ApiKeyRepository
+import com.mdwiki.repository.UserRepository
+
+class CreateApiKeyUseCase(
+    private val apiKeyRepository: ApiKeyRepository,
+    private val userRepository: UserRepository,
+    private val hashKey: (String) -> String,
+    private val generateRawKey: () -> String
+) {
+    fun execute(request: CreateApiKeyRequest, username: String): ApiKeyCreatedResponse {
+        val user = userRepository.findByUsername(username) ?: throw NotFoundException("User not found")
+        val rawKey = generateRawKey()
+        val hash = hashKey(rawKey)
+        val apiKey = apiKeyRepository.save(
+            ApiKey(user = user, name = request.name, keyHash = hash, expiresAt = request.expiresAt)
+        )
+        return ApiKeyCreatedResponse(
+            id = apiKey.id!!,
+            name = apiKey.name,
+            key = rawKey,
+            createdAt = apiKey.createdAt,
+            expiresAt = apiKey.expiresAt
+        )
+    }
+}

@@ -1,29 +1,26 @@
 package com.mdwiki.service
 
+import com.mdwiki.dto.TagResponse
 import com.mdwiki.model.Tag
 import com.mdwiki.repository.TagRepository
+import com.mdwiki.service.usecase.CleanupOrphanedTagsUseCase
+import com.mdwiki.service.usecase.GetOrCreateTagsUseCase
+import com.mdwiki.service.usecase.ListTagsUseCase
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class TagService(private val tagRepository: TagRepository) {
+    private val listTagsUseCase = ListTagsUseCase(tagRepository)
+    private val getOrCreateTagsUseCase = GetOrCreateTagsUseCase(tagRepository)
+    private val cleanupOrphanedTagsUseCase = CleanupOrphanedTagsUseCase(tagRepository)
 
-    fun findAll(): List<Tag> = tagRepository.findAll()
-
-    @Transactional
-    fun getOrCreateTags(names: Set<String>): Set<Tag> {
-        if (names.isEmpty()) return emptySet()
-        val existing = tagRepository.findByNameIn(names)
-        val existingNames = existing.map { it.name }.toSet()
-        val newTags = names.filter { it !in existingNames }.map { tagRepository.save(Tag(name = it)) }
-        return (existing + newTags).toSet()
-    }
+    @Transactional(readOnly = true)
+    fun findAll(): List<TagResponse> = listTagsUseCase.execute()
 
     @Transactional
-    fun cleanupOrphanedTags() {
-        val orphaned = tagRepository.findOrphanedTags()
-        if (orphaned.isNotEmpty()) {
-            tagRepository.deleteAll(orphaned)
-        }
-    }
+    fun getOrCreateTags(names: Set<String>): Set<Tag> = getOrCreateTagsUseCase.execute(names)
+
+    @Transactional
+    fun cleanupOrphanedTags() = cleanupOrphanedTagsUseCase.execute()
 }

@@ -3,14 +3,16 @@ package com.mdwiki.service
 import com.mdwiki.dto.ApiKeyCreatedResponse
 import com.mdwiki.dto.ApiKeyResponse
 import com.mdwiki.dto.CreateApiKeyRequest
-import com.mdwiki.model.ApiKey
 import com.mdwiki.model.User
 import com.mdwiki.repository.ApiKeyRepository
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.usecase.ApiKeyCrypto
+import com.mdwiki.service.usecase.CreateApiKeyUseCase
+import com.mdwiki.service.usecase.DeleteApiKeyUseCase
+import com.mdwiki.service.usecase.ListApiKeysUseCase
+import com.mdwiki.service.usecase.ValidateApiKeyUseCase
 import org.springframework.stereotype.Service
-import java.security.MessageDigest
 import java.security.SecureRandom
-import java.time.Instant
 import java.util.UUID
 
 @Service
@@ -19,46 +21,35 @@ class ApiKeyService(
     private val userRepository: UserRepository
 ) {
     private val secureRandom = SecureRandom()
+    private val createApiKeyUseCase = CreateApiKeyUseCase(
+        apiKeyRepository = apiKeyRepository,
+        userRepository = userRepository,
+        hashKey = ::hashKey,
+        generateRawKey = ::generateRawKey
+    )
+    private val validateApiKeyUseCase = ValidateApiKeyUseCase(
+        apiKeyRepository = apiKeyRepository,
+        hashKey = ::hashKey
+    )
+    private val listApiKeysUseCase = ListApiKeysUseCase(
+        apiKeyRepository = apiKeyRepository,
+        userRepository = userRepository
+    )
+    private val deleteApiKeyUseCase = DeleteApiKeyUseCase(
+        apiKeyRepository = apiKeyRepository,
+        userRepository = userRepository
+    )
 
-    fun create(request: CreateApiKeyRequest, username: String): ApiKeyCreatedResponse {
-        val user = userRepository.findByUsername(username) ?: throw NoSuchElementException("User not found")
-        val rawKey = generateRawKey()
-        val hash = hashKey(rawKey)
-        val apiKey = apiKeyRepository.save(ApiKey(user = user, name = request.name, keyHash = hash, expiresAt = request.expiresAt))
-        return ApiKeyCreatedResponse(id = apiKey.id!!, name = apiKey.name, key = rawKey, createdAt = apiKey.createdAt, expiresAt = apiKey.expiresAt)
-    }
+    fun create(request: CreateApiKeyRequest, username: String): ApiKeyCreatedResponse =
+        createApiKeyUseCase.execute(request, username)
 
-    fun validateKey(rawKey: String): User? {
-        val hash = hashKey(rawKey)
-        val apiKey = apiKeyRepository.findByKeyHash(hash) ?: return null
-        if (apiKey.expiresAt != null && apiKey.expiresAt!!.isBefore(Instant.now())) return null
-        apiKey.lastUsedAt = Instant.now()
-        apiKeyRepository.save(apiKey)
-        return apiKey.user
-    }
+    fun validateKey(rawKey: String): User? = validateApiKeyUseCase.execute(rawKey)
 
-    fun listKeys(username: String): List<ApiKeyResponse> {
-        val user = userRepository.findByUsername(username) ?: throw NoSuchElementException("User not found")
-        return apiKeyRepository.findByUserId(user.id!!).map { it.toResponse() }
-    }
+    fun listKeys(username: String): List<ApiKeyResponse> = listApiKeysUseCase.execute(username)
 
-    fun deleteKey(keyId: UUID, username: String) {
-        val user = userRepository.findByUsername(username) ?: throw NoSuchElementException("User not found")
-        val apiKey = apiKeyRepository.findById(keyId).orElseThrow { NoSuchElementException("API key not found") }
-        require(apiKey.user.id == user.id) { "Cannot delete another user's API key" }
-        apiKeyRepository.delete(apiKey)
-    }
+    fun deleteKey(keyId: UUID, username: String) = deleteApiKeyUseCase.execute(keyId, username)
 
-    fun hashKey(rawKey: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(rawKey.toByteArray()).joinToString("") { "%02x".format(it) }
-    }
+    fun hashKey(rawKey: String): String = ApiKeyCrypto.hashKey(rawKey)
 
-    private fun generateRawKey(): String {
-        val bytes = ByteArray(32)
-        secureRandom.nextBytes(bytes)
-        return "mdw_${bytes.joinToString("") { "%02x".format(it) }}"
-    }
-
-    private fun ApiKey.toResponse() = ApiKeyResponse(id = id!!, name = name, lastUsedAt = lastUsedAt, createdAt = createdAt, expiresAt = expiresAt)
+    private fun generateRawKey(): String = ApiKeyCrypto.generateRawKey(secureRandom)
 }

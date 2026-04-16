@@ -1,6 +1,7 @@
 package com.mdwiki.service
 
 import com.mdwiki.dto.CreateApiKeyRequest
+import com.mdwiki.error.ForbiddenException
 import com.mdwiki.model.ApiKey
 import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
@@ -81,6 +82,6 @@ class ApiKeyServiceTest {
         val apiKey = ApiKey(id = keyId, user = otherUser, name = "key1", keyHash = "hash1")
         whenever(userRepository.findByUsername("testuser")).thenReturn(user)
         whenever(apiKeyRepository.findById(keyId)).thenReturn(java.util.Optional.of(apiKey))
-        assertThrows<IllegalArgumentException> { apiKeyService.deleteKey(keyId, "testuser") }
+        assertThrows<ForbiddenException> { apiKeyService.deleteKey(keyId, "testuser") }
     }
 }

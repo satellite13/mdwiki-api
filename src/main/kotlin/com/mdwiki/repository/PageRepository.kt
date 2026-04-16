@@ -9,6 +9,7 @@ interface PageRepository : JpaRepository<Page, UUID> {
     fun findBySlug(slug: String): Page?
     fun existsBySlug(slug: String): Boolean
     fun findByFolderId(folderId: UUID?): List<Page>
+    fun findAllBySlugIn(slugs: Collection<String>): List<Page>
 
     @Query(
         value = """

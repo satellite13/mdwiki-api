@@ -19,4 +19,16 @@ interface TagRepository : JpaRepository<Tag, UUID> {
         nativeQuery = true
     )
     fun findOrphanedTags(): List<Tag>
+
+    @Query(
+        value = """
+            SELECT t.id AS id, t.name AS name, COUNT(pt.page_id) AS pageCount
+            FROM tags t
+            LEFT JOIN page_tags pt ON pt.tag_id = t.id
+            GROUP BY t.id, t.name
+            ORDER BY t.name ASC
+        """,
+        nativeQuery = true
+    )
+    fun findAllWithPageCount(): List<TagWithPageCountView>
 }

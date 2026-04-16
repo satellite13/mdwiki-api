@@ -3,11 +3,10 @@ package com.mdwiki.service
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.dto.CreatePageRequest
 import com.mdwiki.dto.UpdatePageRequest
+import com.mdwiki.error.ConflictException
 import com.mdwiki.model.Page
 import com.mdwiki.model.User
-import com.mdwiki.model.UserRole
 import com.mdwiki.repository.FolderRepository
-import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.repository.UserRepository
@@ -28,10 +27,8 @@ class PageServiceTest {
 
     @Mock private lateinit var pageRepository: PageRepository
     @Mock private lateinit var userRepository: UserRepository
-    @Mock private lateinit var linkRepository: LinkRepository
     @Mock private lateinit var folderRepository: FolderRepository
-    @Mock private lateinit var wikilinkService: WikilinkService
-    @Mock private lateinit var tagService: TagService
+    @Mock private lateinit var pageMetadataService: PageMetadataService
     @Mock private lateinit var ragService: RagService
 
     private lateinit var pageService: PageService
@@ -42,7 +39,7 @@ class PageServiceTest {
     @BeforeEach
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
-        pageService = PageService(pageRepository, userRepository, linkRepository, folderRepository, wikilinkService, tagService, props, ragService)
+        pageService = PageService(pageRepository, userRepository, folderRepository, pageMetadataService, props, ragService)
     }
 
     @Test
@@ -54,9 +51,6 @@ class PageServiceTest {
             val p = it.arguments[0] as Page
             Page(id = UUID.randomUUID(), slug = p.slug, title = p.title, contentMd = p.contentMd, filePath = p.filePath, createdBy = p.createdBy, updatedBy = p.updatedBy)
         }
-        whenever(wikilinkService.extractWikilinks(any())).thenReturn(emptyList())
-        whenever(wikilinkService.extractTags(any())).thenReturn(emptySet())
-
         val request = CreatePageRequest(slug = "test-page", title = "Test Page", contentMd = "Hello")
         pageService.create(request, "testuser")
 
@@ -73,7 +67,7 @@ class PageServiceTest {
     fun `create throws on duplicate slug`() {
         whenever(pageRepository.existsBySlug("existing")).thenReturn(true)
 
-        assertThrows<IllegalArgumentException> {
+        assertThrows<ConflictException> {
             pageService.create(CreatePageRequest("existing", "Existing"), "testuser")
         }
     }
@@ -88,9 +82,6 @@ class PageServiceTest {
         whenever(pageRepository.findBySlug("my-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
-        whenever(wikilinkService.extractWikilinks(any())).thenReturn(emptyList())
-        whenever(wikilinkService.extractTags(any())).thenReturn(emptySet())
-
         pageService.update("my-page", UpdatePageRequest(title = "New", contentMd = "new content"), "editor")
 
         verify(pageRepository, atLeastOnce()).save(argThat<Page> {

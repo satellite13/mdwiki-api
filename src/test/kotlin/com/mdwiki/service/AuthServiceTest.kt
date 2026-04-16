@@ -2,6 +2,8 @@ package com.mdwiki.service
 
 import com.mdwiki.dto.LoginRequest
 import com.mdwiki.dto.RegisterRequest
+import com.mdwiki.error.ConflictException
+import com.mdwiki.error.UnauthorizedException
 import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.UserRepository
@@ -67,7 +69,7 @@ class AuthServiceTest {
     fun `register throws on duplicate username`() {
         whenever(userRepository.existsByUsername("existing")).thenReturn(true)
 
-        assertThrows<IllegalArgumentException> {
+        assertThrows<ConflictException> {
             authService.register(RegisterRequest("existing", "new@test.com", "password123"))
         }
     }
@@ -90,7 +92,7 @@ class AuthServiceTest {
         val user = User(username = "testuser", email = "test@test.com", passwordHash = "wronghash", role = UserRole.READER)
         whenever(userRepository.findByUsername("testuser")).thenReturn(user)
 
-        assertThrows<IllegalArgumentException> {
+        assertThrows<UnauthorizedException> {
             authService.login(LoginRequest("testuser", "password123"))
         }
     }
