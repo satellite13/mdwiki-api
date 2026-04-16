@@ -145,6 +145,29 @@ class PageServiceTest {
     }
 
     @Test
+    fun `findBySlug throws for nonexistent page`() {
+        whenever(pageRepository.findBySlug("nonexistent")).thenReturn(null)
+        whenever(pageRepository.findByNormalizedTitle("nonexistent")).thenReturn(null)
+        assertThrows<NotFoundException> { pageService.findBySlug("nonexistent") }
+    }
+
+    @Test
+    fun `update throws for nonexistent page`() {
+        whenever(pageRepository.findBySlug("nonexistent")).thenReturn(null)
+        assertThrows<NotFoundException> {
+            pageService.update("nonexistent", UpdatePageRequest(title = "New"), "testuser")
+        }
+    }
+
+    @Test
+    fun `delete throws for nonexistent page`() {
+        whenever(pageRepository.findBySlug("nonexistent")).thenReturn(null)
+        assertThrows<NotFoundException> {
+            pageService.delete("nonexistent")
+        }
+    }
+
+    @Test
     fun `delete removes page and file`() {
         val page = Page(id = UUID.randomUUID(), slug = "doomed", title = "Doomed")
         page.filePath = tempDir.resolve("doomed.md").toString()

@@ -173,6 +173,24 @@ class FolderServiceTest {
     }
 
     @Test
+    fun `delete folder cascades to children`() {
+        val parentId = UUID.randomUUID()
+        val childId = UUID.randomUUID()
+        val grandchildId = UUID.randomUUID()
+        val parent = Folder(id = parentId, name = "parent")
+        val child = Folder(id = childId, name = "child", parent = parent)
+        val grandchild = Folder(id = grandchildId, name = "grandchild", parent = child)
+
+        whenever(folderRepository.findById(parentId)).thenReturn(Optional.of(parent))
+        whenever(folderRepository.findAll()).thenReturn(listOf(parent, child, grandchild))
+        whenever(pageRepository.findAll()).thenReturn(emptyList())
+
+        folderService.delete(parentId)
+
+        verify(folderRepository).delete(parent)
+    }
+
+    @Test
     fun `delete folder nullifies page folder references`() {
         val folderId = UUID.randomUUID()
         val folder = Folder(id = folderId, name = "doomed")
