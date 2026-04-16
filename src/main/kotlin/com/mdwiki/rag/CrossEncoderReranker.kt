@@ -43,8 +43,8 @@ class CrossEncoderReranker : Reranker {
         val inputs = mapOf("input_ids" to inputIdsTensor, "attention_mask" to attentionMaskTensor)
         return try {
             val result = sess.run(inputs)
-            val output = result[0].value as Array<FloatArray>
-            output[0][0]
+            val outputTensor = result[0] as OnnxTensor
+            outputTensor.floatBuffer.get(0)
         } catch (e: Exception) {
             log.error("Cross-encoder scoring failed", e)
             0.0f
