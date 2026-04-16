@@ -13,7 +13,8 @@ class SyncService(
     private val pageRepository: PageRepository,
     private val pageMetadataService: PageMetadataService,
     private val wikiProperties: WikiProperties,
-    private val ragService: RagService
+    private val ragService: RagService,
+    private val treeEventsService: TreeEventsService
 ) {
     private val wikiSyncEngine = WikiSyncEngine(
         pageRepository = pageRepository,
@@ -28,13 +29,23 @@ class SyncService(
     data class SyncResult(val added: Int, val updated: Int, val removed: Int)
 
     @Transactional
-    fun fullSync(): SyncResult = synchronized(wikiSyncLock) { wikiSyncEngine.fullSync() }
+    fun fullSync(): SyncResult = synchronized(wikiSyncLock) {
+        val result = wikiSyncEngine.fullSync()
+        if (result.added > 0 || result.updated > 0 || result.removed > 0) {
+            treeEventsService.publishTreeUpdated()
+        }
+        result
+    }
 
     @Transactional
-    fun syncSingleFile(file: File) = synchronized(wikiSyncLock) { wikiSyncEngine.syncSingleFile(file) }
+    fun syncSingleFile(file: File) = synchronized(wikiSyncLock) {
+        wikiSyncEngine.syncSingleFile(file)
+        treeEventsService.publishTreeUpdated()
+    }
 
     @Transactional
     fun removePage(slug: String) = synchronized(wikiSyncLock) {
         wikiSyncEngine.removePage(slug)
+        treeEventsService.publishTreeUpdated()
     }
 }

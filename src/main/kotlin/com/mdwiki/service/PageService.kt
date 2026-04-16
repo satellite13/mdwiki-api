@@ -21,7 +21,8 @@ class PageService(
     private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
     private val wikiFileService: WikiFileService,
-    private val ragService: RagService
+    private val ragService: RagService,
+    private val treeEventsService: TreeEventsService
 ) {
     private val createPageUseCase = CreatePageUseCase(
         pageRepository = pageRepository,
@@ -67,16 +68,21 @@ class PageService(
 
     @Transactional
     fun create(request: CreatePageRequest, username: String): PageResponse {
-        return createPageUseCase.execute(request, username)
+        val created = createPageUseCase.execute(request, username)
+        treeEventsService.publishTreeUpdated()
+        return created
     }
 
     @Transactional
     fun update(slug: String, request: UpdatePageRequest, username: String): PageResponse {
-        return updatePageUseCase.execute(slug, request, username)
+        val updated = updatePageUseCase.execute(slug, request, username)
+        treeEventsService.publishTreeUpdated()
+        return updated
     }
 
     @Transactional
     fun delete(slug: String) {
         deletePageUseCase.execute(slug)
+        treeEventsService.publishTreeUpdated()
     }
 }

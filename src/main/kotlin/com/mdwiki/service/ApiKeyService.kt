@@ -12,6 +12,7 @@ import com.mdwiki.service.usecase.DeleteApiKeyUseCase
 import com.mdwiki.service.usecase.ListApiKeysUseCase
 import com.mdwiki.service.usecase.ValidateApiKeyUseCase
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.security.SecureRandom
 import java.util.UUID
 
@@ -43,7 +44,13 @@ class ApiKeyService(
     fun create(request: CreateApiKeyRequest, username: String): ApiKeyCreatedResponse =
         createApiKeyUseCase.execute(request, username)
 
-    fun validateKey(rawKey: String): User? = validateApiKeyUseCase.execute(rawKey)
+    @Transactional
+    fun validateKey(rawKey: String): User? {
+        val user = validateApiKeyUseCase.execute(rawKey) ?: return null
+        // ApiKey.user is LAZY; force initialization within active transaction.
+        user.role
+        return user
+    }
 
     fun listKeys(username: String): List<ApiKeyResponse> = listApiKeysUseCase.execute(username)
 

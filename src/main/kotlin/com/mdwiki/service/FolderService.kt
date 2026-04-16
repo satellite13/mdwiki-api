@@ -14,7 +14,8 @@ class FolderService(
     private val folderRepository: FolderRepository,
     private val pageRepository: PageRepository,
     private val userRepository: UserRepository,
-    private val wikiFileService: WikiFileService
+    private val wikiFileService: WikiFileService,
+    private val treeEventsService: TreeEventsService
 ) {
 
     fun getTree(): List<FolderTreeNode> {
@@ -71,6 +72,7 @@ class FolderService(
         )
         val saved = folderRepository.save(folder)
         wikiFileService.ensureFolderDirectory(saved)
+        treeEventsService.publishTreeUpdated()
         return saved.toResponse()
     }
 
@@ -90,6 +92,7 @@ class FolderService(
 
         val saved = folderRepository.save(folder)
         syncSubtreePagePaths(saved.id!!)
+        treeEventsService.publishTreeUpdated()
         return saved.toResponse()
     }
 
@@ -122,6 +125,7 @@ class FolderService(
 
         val saved = folderRepository.save(folder)
         syncSubtreePagePaths(saved.id!!)
+        treeEventsService.publishTreeUpdated()
         return saved.toResponse()
     }
 
@@ -143,6 +147,7 @@ class FolderService(
 
         folderRepository.delete(folder)
         wikiFileService.deleteFolderDirectory(folder)
+        treeEventsService.publishTreeUpdated()
     }
 
     private fun syncSubtreePagePaths(rootFolderId: UUID) {

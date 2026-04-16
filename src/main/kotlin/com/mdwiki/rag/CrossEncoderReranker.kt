@@ -3,9 +3,14 @@ package com.mdwiki.rag
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.concurrent.atomic.AtomicBoolean
 
 interface Reranker {
     fun score(query: String, documents: List<String>): List<Float>
@@ -17,6 +22,31 @@ class CrossEncoderReranker : Reranker {
     private val log = LoggerFactory.getLogger(CrossEncoderReranker::class.java)
     private var session: OrtSession? = null
     private val env = OrtEnvironment.getEnvironment()
+    private val warnedNotLoaded = AtomicBoolean(false)
+
+    @Value("\${mdwiki.rag.reranker.model-path:}")
+    private lateinit var configuredModelPath: String
+
+    @PostConstruct
+    fun init() {
+        val rawPath = configuredModelPath.trim()
+        if (rawPath.isEmpty()) {
+            log.info("Cross-encoder reranker model path is not configured; fallback scoring will be used")
+            return
+        }
+
+        val modelPath = Paths.get(rawPath)
+        if (!Files.exists(modelPath)) {
+            log.warn("Cross-encoder model file not found at '{}'; fallback scoring will be used", modelPath)
+            return
+        }
+
+        try {
+            loadModel(modelPath)
+        } catch (e: Exception) {
+            log.warn("Failed to load cross-encoder model from '{}': {}", modelPath, e.message)
+        }
+    }
 
     fun loadModel(modelPath: Path) {
         session = env.createSession(modelPath.toString())
@@ -28,7 +58,9 @@ class CrossEncoderReranker : Reranker {
     override fun score(query: String, documents: List<String>): List<Float> {
         val sess = session
         if (sess == null) {
-            log.warn("Cross-encoder model not loaded, returning uniform scores")
+            if (warnedNotLoaded.compareAndSet(false, true)) {
+                log.warn("Cross-encoder model not loaded, returning uniform scores")
+            }
             return documents.map { 0.5f }
         }
         return documents.map { doc -> scoreSingle(sess, query, doc) }

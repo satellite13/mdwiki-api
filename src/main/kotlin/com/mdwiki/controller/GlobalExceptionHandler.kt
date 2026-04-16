@@ -2,20 +2,18 @@ package com.mdwiki.controller
 
 import com.mdwiki.dto.ApiErrorResponse
 import com.mdwiki.error.AppException
-import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import jakarta.servlet.http.HttpServletRequest
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = ["com.mdwiki.controller"])
 class GlobalExceptionHandler {
-    private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
-
     @ExceptionHandler(AppException::class)
     fun handleAppException(e: AppException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
         return ResponseEntity.status(e.status)
@@ -89,16 +87,16 @@ class GlobalExceptionHandler {
             )
     }
 
-    @ExceptionHandler(Exception::class)
-    fun handleUnexpected(e: Exception, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
-        log.error("Unhandled exception on ${request.method} ${request.requestURI}", e)
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+    @ExceptionHandler(MaxUploadSizeExceededException::class)
+    fun handleUploadTooLarge(e: MaxUploadSizeExceededException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
             .body(
                 ApiErrorResponse(
-                    error = "INTERNAL_ERROR",
-                    message = e.message ?: "Unexpected server error",
+                    error = "UPLOAD_TOO_LARGE",
+                    message = "Uploaded file is too large. Please use a smaller file.",
                     path = request.requestURI
                 )
             )
     }
+
 }

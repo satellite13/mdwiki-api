@@ -19,6 +19,8 @@ class ApiKeyAuthenticationFilter(
         return !request.requestURI.startsWith("/mcp")
     }
 
+    override fun shouldNotFilterErrorDispatch(): Boolean = true
+
     override fun doFilterInternal(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -32,13 +34,22 @@ class ApiKeyAuthenticationFilter(
                 val auth = UsernamePasswordAuthenticationToken(user.username, null, authorities)
                 SecurityContextHolder.getContext().authentication = auth
             } else {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid API key")
+                writeUnauthorized(response, "Invalid API key")
                 return
             }
         } else {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "X-API-Key header required")
+            writeUnauthorized(response, "X-API-Key header required")
             return
         }
+
         filterChain.doFilter(request, response)
+    }
+
+    private fun writeUnauthorized(response: HttpServletResponse, message: String) {
+        response.status = HttpServletResponse.SC_UNAUTHORIZED
+        response.contentType = "application/json"
+        response.characterEncoding = "UTF-8"
+        response.writer.write("""{"error":"$message"}""")
+        response.writer.flush()
     }
 }

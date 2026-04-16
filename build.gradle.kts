@@ -45,6 +45,16 @@ dependencies {
     implementation("com.pgvector:pgvector:0.1.6")
     implementation("com.microsoft.onnxruntime:onnxruntime:1.19.2")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
+    runtimeOnly("io.netty:netty-resolver-dns-native-macos") {
+        artifact {
+            classifier = "osx-aarch_64"
+        }
+    }
+    runtimeOnly("io.netty:netty-resolver-dns-native-macos") {
+        artifact {
+            classifier = "osx-x86_64"
+        }
+    }
 
     // MCP Server
     implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")

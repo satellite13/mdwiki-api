@@ -2,6 +2,7 @@ package com.mdwiki.config
 
 import com.mdwiki.security.ApiKeyAuthenticationFilter
 import com.mdwiki.security.JwtAuthenticationFilter
+import com.mdwiki.security.McpAcceptHeaderFilter
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
@@ -18,6 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 @EnableMethodSecurity
 class SecurityConfig(
+    private val mcpAcceptHeaderFilter: McpAcceptHeaderFilter,
     private val jwtAuthenticationFilter: JwtAuthenticationFilter,
     private val apiKeyAuthenticationFilter: ApiKeyAuthenticationFilter
 ) {
@@ -30,6 +32,10 @@ class SecurityConfig(
             .authorizeHttpRequests {
                 it
                     .requestMatchers("/api/auth/**").permitAll()
+                    .requestMatchers("/error").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/events/tree").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/uploads/**").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/uploads/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/pages/**", "/api/tags/**", "/api/search/**").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")
@@ -41,9 +47,10 @@ class SecurityConfig(
                     .requestMatchers("/api/sync/**").hasRole("ADMIN")
                     .requestMatchers("/api/users/**").hasRole("ADMIN")
                     .requestMatchers("/api/api-keys/**").authenticated()
-                    .requestMatchers("/mcp/**").hasAnyRole("READER", "EDITOR", "ADMIN")
+                    .requestMatchers("/mcp/**").permitAll()
                     .anyRequest().authenticated()
             }
+            .addFilterBefore(mcpAcceptHeaderFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
 
