@@ -76,6 +76,30 @@ tasks.withType<Test> {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
+/** Spring не читает `.env` сам; подмешиваем в окружение процесса для локального bootRun. */
+fun parseDotEnv(file: java.io.File): Map<String, String> {
+    if (!file.isFile) return emptyMap()
+    val out = LinkedHashMap<String, String>()
+    file.readLines().forEach { raw ->
+        val line = raw.trim()
+        if (line.isEmpty() || line.startsWith("#")) return@forEach
+        val eq = line.indexOf('=')
+        if (eq <= 0) return@forEach
+        val key = line.substring(0, eq).trim()
+        if (key.isEmpty()) return@forEach
+        var value = line.substring(eq + 1).trim()
+        if (value.length >= 2) {
+            val q = value.first()
+            if ((q == '"' || q == '\'') && value.last() == q) {
+                value = value.substring(1, value.length - 1)
+            }
+        }
+        out[key] = value
+    }
+    return out
+}
+
 tasks.bootRun {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+    environment(parseDotEnv(layout.projectDirectory.file(".env").asFile))
 }
