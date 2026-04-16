@@ -13,3 +13,9 @@ databaseChangeLog:
       file: db/changelog/006-create-api-keys.yaml
   - include:
       file: db/changelog/007-create-folders.yaml
+  - include:
+      file: db/changelog/008-user-fks-on-delete-set-null.yaml
+  - include:
+      file: db/changelog/009-page-frontmatter-meta.yaml
+  - include:
+      file: db/changelog/010-pages-frontmatter-meta-gin.yaml

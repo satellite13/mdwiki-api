@@ -1,0 +1,12 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-page-frontmatter-meta
+      author: mdwiki
+      changes:
+        - addColumn:
+            tableName: pages
+            columns:
+              - name: frontmatter_meta
+                type: JSONB
+                constraints:
+                  nullable: true

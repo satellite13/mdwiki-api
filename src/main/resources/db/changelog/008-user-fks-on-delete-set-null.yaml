@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-user-fks-on-delete-set-null
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              ALTER TABLE pages DROP CONSTRAINT IF EXISTS fk_pages_created_by;
+              ALTER TABLE pages ADD CONSTRAINT fk_pages_created_by
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
+
+              ALTER TABLE pages DROP CONSTRAINT IF EXISTS fk_pages_updated_by;
+              ALTER TABLE pages ADD CONSTRAINT fk_pages_updated_by
+                FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL;
+
+              ALTER TABLE folders DROP CONSTRAINT IF EXISTS fk_folders_created_by;
+              ALTER TABLE folders ADD CONSTRAINT fk_folders_created_by
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;

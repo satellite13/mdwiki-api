@@ -67,12 +67,21 @@ class CrossEncoderReranker : Reranker {
     }
 
     private fun scoreSingle(sess: OrtSession, query: String, document: String): Float {
-        val inputText = "$query [SEP] $document"
-        val inputIds = simpleTokenize(inputText)
+        val queryTokens = simpleTokenize(query)
+        val docTokens = simpleTokenize(document)
+        val inputIds = queryTokens + docTokens
         val inputIdsTensor = OnnxTensor.createTensor(env, arrayOf(inputIds))
         val attentionMask = LongArray(inputIds.size) { 1L }
         val attentionMaskTensor = OnnxTensor.createTensor(env, arrayOf(attentionMask))
-        val inputs = mapOf("input_ids" to inputIdsTensor, "attention_mask" to attentionMaskTensor)
+        val tokenTypeIds = LongArray(inputIds.size) { i ->
+            if (i < queryTokens.size) 0L else 1L
+        }
+        val tokenTypeIdsTensor = OnnxTensor.createTensor(env, arrayOf(tokenTypeIds))
+        val inputs = mapOf(
+            "input_ids" to inputIdsTensor,
+            "attention_mask" to attentionMaskTensor,
+            "token_type_ids" to tokenTypeIdsTensor,
+        )
         return try {
             val result = sess.run(inputs)
             val outputTensor = result[0] as OnnxTensor
@@ -83,6 +92,7 @@ class CrossEncoderReranker : Reranker {
         } finally {
             inputIdsTensor.close()
             attentionMaskTensor.close()
+            tokenTypeIdsTensor.close()
         }
     }
 

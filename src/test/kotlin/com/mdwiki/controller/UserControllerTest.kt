@@ -6,6 +6,7 @@ import com.mdwiki.dto.UserResponse
 import com.mdwiki.model.UserRole
 import com.mdwiki.service.UserService
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.doNothing
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -15,6 +16,7 @@ import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.put
 import java.util.UUID
 
@@ -58,6 +60,25 @@ class UserControllerTest {
     @WithMockUser(roles = ["EDITOR"])
     fun `GET users forbidden for non-ADMIN`() {
         mockMvc.get("/api/users").andExpect {
+            status { isForbidden() }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"], username = "admin")
+    fun `DELETE user returns no content`() {
+        val userId = UUID.randomUUID()
+        doNothing().whenever(userService).delete(userId, "admin")
+
+        mockMvc.delete("/api/users/$userId").andExpect {
+            status { isNoContent() }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["EDITOR"])
+    fun `DELETE user forbidden for non-ADMIN`() {
+        mockMvc.delete("/api/users/${UUID.randomUUID()}").andExpect {
             status { isForbidden() }
         }
     }

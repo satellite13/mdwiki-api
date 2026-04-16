@@ -4,6 +4,7 @@ import com.mdwiki.config.WikiProperties
 import com.mdwiki.dto.CreatePageRequest
 import com.mdwiki.dto.UpdatePageRequest
 import com.mdwiki.error.ConflictException
+import com.mdwiki.error.NotFoundException
 import com.mdwiki.model.Page
 import com.mdwiki.model.User
 import com.mdwiki.repository.FolderRepository
@@ -30,8 +31,12 @@ class PageServiceTest {
     @Mock private lateinit var folderRepository: FolderRepository
     @Mock private lateinit var pageMetadataService: PageMetadataService
     @Mock private lateinit var ragService: RagService
+    private val frontmatterMetaService = FrontmatterMetaService()
+    @Mock private lateinit var fileWatcherService: FileWatcherService
+    @Mock private lateinit var treeEventsService: TreeEventsService
 
     private lateinit var pageService: PageService
+    private lateinit var wikiFileService: WikiFileService
 
     @TempDir
     lateinit var tempDir: Path
@@ -39,7 +44,17 @@ class PageServiceTest {
     @BeforeEach
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
-        pageService = PageService(pageRepository, userRepository, folderRepository, pageMetadataService, props, ragService)
+        wikiFileService = WikiFileService(props, fileWatcherService)
+        pageService = PageService(
+            pageRepository,
+            userRepository,
+            folderRepository,
+            pageMetadataService,
+            wikiFileService,
+            ragService,
+            frontmatterMetaService,
+            treeEventsService
+        )
     }
 
     @Test
@@ -88,6 +103,33 @@ class PageServiceTest {
             title == "New" && contentMd == "new content"
         })
         assertEquals("new content", tempDir.resolve("my-page.md").toFile().readText())
+    }
+
+    @Test
+    fun `findBySlug falls back to normalized title`() {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "mcp",
+            title = "MCP протокол",
+            contentMd = null
+        )
+        whenever(pageRepository.findBySlug("mcp-протокол")).thenReturn(null)
+        whenever(pageRepository.findByNormalizedTitle("mcp-протокол")).thenReturn(page)
+
+        val result = pageService.findBySlug("mcp-протокол")
+
+        assertEquals("mcp", result.slug)
+        assertEquals("MCP протокол", result.title)
+    }
+
+    @Test
+    fun `findBySlug throws when neither slug nor normalized title matches`() {
+        whenever(pageRepository.findBySlug("missing")).thenReturn(null)
+        whenever(pageRepository.findByNormalizedTitle("missing")).thenReturn(null)
+
+        assertThrows<NotFoundException> {
+            pageService.findBySlug("missing")
+        }
     }
 
     @Test

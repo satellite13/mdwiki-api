@@ -39,6 +39,19 @@ class WikilinkServiceTest {
     }
 
     @Test
+    fun `extractWikilinks normalizes slug casing and spaces`() {
+        val md = "[[MCP]] and [[My Page|Shown]]."
+        val links = service.extractWikilinks(md)
+        assertEquals(
+            listOf(
+                WikilinkService.Wikilink("mcp", null),
+                WikilinkService.Wikilink("my-page", "Shown")
+            ),
+            links
+        )
+    }
+
+    @Test
     fun `extractTags finds hashtags`() {
         val md = "This is about #kotlin and #spring-boot."
         val tags = service.extractTags(md)

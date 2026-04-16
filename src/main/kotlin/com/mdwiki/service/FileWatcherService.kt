@@ -65,11 +65,15 @@ class FileWatcherService(
                                 if (fullPath.exists()) syncService.syncSingleFile(fullPath)
                             }
                             StandardWatchEventKinds.ENTRY_DELETE -> {
-                                val fileName = fullPath.name
-                                if (!fileName.endsWith(".md")) continue
                                 if (shouldIgnore(fullPathString)) continue
-                                val slug = fileName.removeSuffix(".md")
-                                syncService.removePage(slug)
+                                val fileName = fullPath.name
+                                if (fileName.endsWith(".md")) {
+                                    val slug = fileName.removeSuffix(".md")
+                                    syncService.removePage(slug)
+                                } else {
+                                    // Directory (or other non-md) removed from disk — reconcile DB + folders.
+                                    syncService.scheduleReconcileFromDisk()
+                                }
                             }
                         }
                     }

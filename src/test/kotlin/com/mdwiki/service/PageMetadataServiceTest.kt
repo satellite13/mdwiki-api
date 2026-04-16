@@ -30,6 +30,50 @@ class PageMetadataServiceTest {
     }
 
     @Test
+    fun `findBacklinks includes links whose target slug matches normalized title`() {
+        val target = Page(id = UUID.randomUUID(), slug = "mcp", title = "MCP протокол")
+        val source = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
+        val linkByTitle = Link(id = UUID.randomUUID(), sourcePage = source, targetPage = target, targetSlug = "mcp-протокол")
+        whenever(pageRepository.findBySlug("mcp")).thenReturn(target)
+        whenever(wikilinkService.normalizePageSlug("MCP протокол")).thenReturn("mcp-протокол")
+        whenever(linkRepository.findByTargetSlug("mcp")).thenReturn(emptyList())
+        whenever(linkRepository.findByTargetSlug("mcp-протокол")).thenReturn(listOf(linkByTitle))
+
+        val backlinks = pageMetadataService.findBacklinks("mcp")
+
+        assertEquals(1, backlinks.size)
+        assertEquals(linkByTitle, backlinks.single())
+    }
+
+    @Test
+    fun `findBacklinks merges slug and normalized title without duplicates`() {
+        val target = Page(id = UUID.randomUUID(), slug = "mcp", title = "MCP протокол")
+        val source = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
+        val sameLink = Link(id = UUID.randomUUID(), sourcePage = source, targetPage = target, targetSlug = "mcp")
+        whenever(pageRepository.findBySlug("mcp")).thenReturn(target)
+        whenever(wikilinkService.normalizePageSlug("MCP протокол")).thenReturn("mcp-протокол")
+        whenever(linkRepository.findByTargetSlug("mcp")).thenReturn(listOf(sameLink))
+        whenever(linkRepository.findByTargetSlug("mcp-протокол")).thenReturn(listOf(sameLink))
+
+        val backlinks = pageMetadataService.findBacklinks("mcp")
+
+        assertEquals(1, backlinks.size)
+    }
+
+    @Test
+    fun `findBacklinks falls back to slug only when page is missing`() {
+        val source = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
+        val link = Link(id = UUID.randomUUID(), sourcePage = source, targetPage = null, targetSlug = "orphan")
+        whenever(pageRepository.findBySlug("orphan")).thenReturn(null)
+        whenever(linkRepository.findByTargetSlug("orphan")).thenReturn(listOf(link))
+
+        val backlinks = pageMetadataService.findBacklinks("orphan")
+
+        assertEquals(listOf(link), backlinks)
+        verify(linkRepository).findByTargetSlug("orphan")
+    }
+
+    @Test
     fun `syncLinksAndTags resolves link targets in batch and updates tags`() {
         val page = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
         val targetPage = Page(id = UUID.randomUUID(), slug = "known", title = "Known")
@@ -43,6 +87,7 @@ class PageMetadataServiceTest {
             )
         )
         whenever(pageRepository.findAllBySlugIn(setOf("known", "unknown"))).thenReturn(listOf(targetPage))
+        whenever(pageRepository.findByNormalizedTitle("unknown")).thenReturn(null)
         whenever(wikilinkService.extractTags(content)).thenReturn(setOf("kotlin"))
         whenever(tagService.getOrCreateTags(setOf("kotlin"))).thenReturn(setOf(tag))
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
@@ -50,6 +95,7 @@ class PageMetadataServiceTest {
         pageMetadataService.syncLinksAndTags(page, content, cleanupOrphanedTags = true)
 
         verify(pageRepository).findAllBySlugIn(setOf("known", "unknown"))
+        verify(pageRepository).findByNormalizedTitle("unknown")
         val linksCaptor = argumentCaptor<Link>()
         verify(linkRepository, times(2)).save(linksCaptor.capture())
         assertEquals(targetPage, linksCaptor.firstValue.targetPage)
@@ -64,6 +110,7 @@ class PageMetadataServiceTest {
         val source = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
         val danglingLink = Link(sourcePage = source, targetPage = null, targetSlug = "target")
         val resolvedLink = Link(sourcePage = source, targetPage = page, targetSlug = "target")
+        whenever(wikilinkService.normalizePageSlug("Target")).thenReturn("target")
         whenever(linkRepository.findByTargetSlug("target")).thenReturn(listOf(danglingLink, resolvedLink))
 
         pageMetadataService.resolveIncomingLinks(page)
@@ -71,5 +118,43 @@ class PageMetadataServiceTest {
         assertEquals(page, danglingLink.targetPage)
         verify(linkRepository).save(danglingLink)
         verify(linkRepository, times(1)).save(any())
+    }
+
+    @Test
+    fun `syncLinksAndTags resolves target by normalized title when slug misses`() {
+        val page = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
+        val targetPage = Page(id = UUID.randomUUID(), slug = "mcp", title = "MCP протокол")
+        val content = "[[mcp-протокол]]"
+        whenever(wikilinkService.extractWikilinks(content)).thenReturn(
+            listOf(WikilinkService.Wikilink(slug = "mcp-протокол", displayText = null))
+        )
+        whenever(pageRepository.findAllBySlugIn(setOf("mcp-протокол"))).thenReturn(emptyList())
+        whenever(pageRepository.findByNormalizedTitle("mcp-протокол")).thenReturn(targetPage)
+        whenever(wikilinkService.extractTags(content)).thenReturn(emptySet())
+        whenever(tagService.getOrCreateTags(emptySet())).thenReturn(emptySet())
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageMetadataService.syncLinksAndTags(page, content, cleanupOrphanedTags = false)
+
+        verify(pageRepository).findByNormalizedTitle("mcp-протокол")
+        val linkCaptor = argumentCaptor<Link>()
+        verify(linkRepository).save(linkCaptor.capture())
+        assertEquals(targetPage, linkCaptor.firstValue.targetPage)
+        assertEquals("mcp-протокол", linkCaptor.firstValue.targetSlug)
+    }
+
+    @Test
+    fun `resolveIncomingLinks resolves dangling links by normalized title`() {
+        val page = Page(id = UUID.randomUUID(), slug = "mcp", title = "MCP протокол")
+        val source = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
+        val danglingLink = Link(sourcePage = source, targetPage = null, targetSlug = "mcp-протокол")
+        whenever(wikilinkService.normalizePageSlug("MCP протокол")).thenReturn("mcp-протокол")
+        whenever(linkRepository.findByTargetSlug("mcp")).thenReturn(emptyList())
+        whenever(linkRepository.findByTargetSlug("mcp-протокол")).thenReturn(listOf(danglingLink))
+
+        pageMetadataService.resolveIncomingLinks(page)
+
+        assertEquals(page, danglingLink.targetPage)
+        verify(linkRepository).save(danglingLink)
     }
 }

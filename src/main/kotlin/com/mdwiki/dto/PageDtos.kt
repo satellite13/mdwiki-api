@@ -1,5 +1,6 @@
 package com.mdwiki.dto
 
+import com.fasterxml.jackson.databind.JsonNode
 import jakarta.validation.constraints.NotBlank
 import java.time.Instant
 import java.util.UUID
@@ -26,6 +27,8 @@ data class PageResponse(
     val title: String,
     val contentMd: String?,
     val contentHtml: String?,
+    /** Распарсенный YAML frontmatter документа (только чтение с API). */
+    val frontmatterMeta: JsonNode? = null,
     val tags: List<String>,
     val createdBy: String?,
     val updatedBy: String?,

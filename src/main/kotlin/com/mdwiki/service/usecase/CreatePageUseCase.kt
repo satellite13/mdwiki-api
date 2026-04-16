@@ -9,6 +9,7 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.rag.RagService
+import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.WikiFileService
 
@@ -18,7 +19,8 @@ class CreatePageUseCase(
     private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
     private val ragService: RagService,
-    private val wikiFileService: WikiFileService
+    private val wikiFileService: WikiFileService,
+    private val frontmatterMetaService: FrontmatterMetaService
 ) {
     fun execute(request: CreatePageRequest, username: String) = run {
         if (pageRepository.existsBySlug(request.slug)) {
@@ -41,6 +43,7 @@ class CreatePageUseCase(
             updatedBy = user,
             folder = folder
         )
+        frontmatterMetaService.refreshFromContent(page, request.contentMd)
         wikiFileService.createOrRewritePageFile(page, request.contentMd)
         val saved = pageRepository.save(page)
 

@@ -10,11 +10,24 @@ class WikilinkService {
     private val wikilinkPattern = Regex("""\[\[([^|\]]+?)(?:\|([^\]]+?))?\]\]""")
     private val tagPattern = Regex("""(?<=\s|^)#([\w\p{L}-]+)""")
     private val codeBlockPattern = Regex("""(`[^`]+`|```[\s\S]*?```)""")
+    private val slugNonAlnum = Regex("[^a-z0-9а-яё]+", RegexOption.IGNORE_CASE)
+    private val slugTrimDashes = Regex("^-+|-+$")
+
+    /** Канонический slug страницы (как при создании из UI). */
+    fun normalizePageSlug(raw: String): String =
+        raw.lowercase().trim()
+            .replace(slugNonAlnum, "-")
+            .replace(slugTrimDashes, "")
 
     fun extractWikilinks(markdown: String): List<Wikilink> {
-        return wikilinkPattern.findAll(markdown).map { match ->
+        return wikilinkPattern.findAll(markdown).mapNotNull { match ->
+            val rawSlug = match.groupValues[1].trim()
+            val normalized = normalizePageSlug(rawSlug)
+            if (normalized.isEmpty()) {
+                return@mapNotNull null
+            }
             Wikilink(
-                slug = match.groupValues[1].trim(),
+                slug = normalized,
                 displayText = match.groupValues[2].trim().ifEmpty { null }
             )
         }.toList()

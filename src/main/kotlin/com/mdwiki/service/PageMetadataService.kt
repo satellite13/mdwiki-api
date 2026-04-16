@@ -1,5 +1,6 @@
 package com.mdwiki.service
 
+import com.mdwiki.util.MarkdownFrontmatter
 import com.mdwiki.model.Link
 import com.mdwiki.model.Page
 import com.mdwiki.repository.LinkRepository
@@ -13,7 +14,15 @@ class PageMetadataService(
     private val wikilinkService: WikilinkService,
     private val tagService: TagService
 ) {
-    fun findBacklinks(slug: String): List<Link> = linkRepository.findByTargetSlug(slug)
+    fun findBacklinks(slug: String): List<Link> {
+        val page = pageRepository.findBySlug(slug)
+        val normalizedTitle = page?.let { wikilinkService.normalizePageSlug(it.title) }?.takeIf { it.isNotEmpty() }
+        val slugsToMatch = buildSet {
+            add(slug)
+            if (normalizedTitle != null && normalizedTitle != slug) add(normalizedTitle)
+        }
+        return slugsToMatch.flatMap { linkRepository.findByTargetSlug(it) }.distinctBy { it.id }
+    }
 
     fun deleteSourceLinks(page: Page) {
         linkRepository.deleteBySourcePage(page)
@@ -26,7 +35,8 @@ class PageMetadataService(
     fun syncLinksAndTags(page: Page, content: String, cleanupOrphanedTags: Boolean = false) {
         linkRepository.deleteBySourcePage(page)
 
-        val wikilinks = wikilinkService.extractWikilinks(content)
+        val body = MarkdownFrontmatter.strip(content)
+        val wikilinks = wikilinkService.extractWikilinks(body)
         val targetPagesBySlug = findTargetPagesBySlug(wikilinks.map { it.slug }.toSet())
         wikilinks.forEach { wikilink ->
             linkRepository.save(
@@ -38,7 +48,7 @@ class PageMetadataService(
             )
         }
 
-        val tagNames = wikilinkService.extractTags(content)
+        val tagNames = wikilinkService.extractTags(body)
         val tags = tagService.getOrCreateTags(tagNames)
         page.tags.clear()
         page.tags.addAll(tags)
@@ -50,8 +60,14 @@ class PageMetadataService(
     }
 
     fun resolveIncomingLinks(page: Page) {
-        val danglingLinks = linkRepository.findByTargetSlug(page.slug)
+        val normalizedTitle = wikilinkService.normalizePageSlug(page.title)
+        val targetSlugs = buildSet {
+            add(page.slug)
+            if (normalizedTitle.isNotEmpty()) add(normalizedTitle)
+        }
+        val danglingLinks = targetSlugs.flatMap { linkRepository.findByTargetSlug(it) }
             .filter { it.targetPage == null }
+            .distinctBy { it.id }
         danglingLinks.forEach { link ->
             link.targetPage = page
             linkRepository.save(link)
@@ -62,6 +78,11 @@ class PageMetadataService(
         if (slugs.isEmpty()) {
             return emptyMap()
         }
-        return pageRepository.findAllBySlugIn(slugs).associateBy { it.slug }
+        val bySlug = pageRepository.findAllBySlugIn(slugs).associateBy { it.slug }
+        val missing = slugs - bySlug.keys
+        val byTitle = missing.mapNotNull { requestedSlug ->
+            pageRepository.findByNormalizedTitle(requestedSlug)?.let { requestedSlug to it }
+        }.toMap()
+        return bySlug + byTitle
     }
 }

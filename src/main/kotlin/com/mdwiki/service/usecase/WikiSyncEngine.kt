@@ -4,6 +4,7 @@ import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Page
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
+import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
 import org.slf4j.LoggerFactory
@@ -14,7 +15,8 @@ class WikiSyncEngine(
     private val pageRepository: PageRepository,
     private val pageMetadataService: PageMetadataService,
     private val wikiProperties: WikiProperties,
-    private val ragService: RagService
+    private val ragService: RagService,
+    private val frontmatterMetaService: FrontmatterMetaService
 ) {
     private val log = LoggerFactory.getLogger(WikiSyncEngine::class.java)
 
@@ -46,12 +48,12 @@ class WikiSyncEngine(
             val existing = existingBySlug[slug]
             if (existing == null) {
                 val title = extractTitle(content, slug)
-                val page = pageRepository.save(
-                    Page(slug = slug, title = title, contentMd = content, filePath = file.absolutePath)
-                )
-                pageMetadataService.syncLinksAndTags(page, content)
-                pageMetadataService.resolveIncomingLinks(page)
-                ragService.indexPage(page)
+                val page = Page(slug = slug, title = title, contentMd = content, filePath = file.absolutePath)
+                frontmatterMetaService.refreshFromContent(page, content)
+                val saved = pageRepository.save(page)
+                pageMetadataService.syncLinksAndTags(saved, content)
+                pageMetadataService.resolveIncomingLinks(saved)
+                ragService.indexPage(saved)
                 added++
                 log.info("Sync: added page '$slug'")
             } else if (existing.contentMd != content) {
@@ -59,6 +61,7 @@ class WikiSyncEngine(
                 existing.title = extractTitle(content, slug)
                 existing.filePath = file.absolutePath
                 existing.updatedAt = Instant.now()
+                frontmatterMetaService.refreshFromContent(existing, content)
                 val saved = pageRepository.save(existing)
                 pageMetadataService.syncLinksAndTags(saved, content)
                 ragService.indexPage(saved)
@@ -98,6 +101,7 @@ class WikiSyncEngine(
                 existing.title = extractTitle(content, slug)
                 existing.filePath = file.absolutePath
                 existing.updatedAt = Instant.now()
+                frontmatterMetaService.refreshFromContent(existing, content)
                 val saved = pageRepository.save(existing)
                 pageMetadataService.syncLinksAndTags(saved, content)
                 ragService.indexPage(saved)
@@ -108,12 +112,12 @@ class WikiSyncEngine(
             }
         } else {
             val title = extractTitle(content, slug)
-            val page = pageRepository.save(
-                Page(slug = slug, title = title, contentMd = content, filePath = file.absolutePath)
-            )
-            pageMetadataService.syncLinksAndTags(page, content)
-            pageMetadataService.resolveIncomingLinks(page)
-            ragService.indexPage(page)
+            val page = Page(slug = slug, title = title, contentMd = content, filePath = file.absolutePath)
+            frontmatterMetaService.refreshFromContent(page, content)
+            val saved = pageRepository.save(page)
+            pageMetadataService.syncLinksAndTags(saved, content)
+            pageMetadataService.resolveIncomingLinks(saved)
+            ragService.indexPage(saved)
             log.info("Watcher: added page '$slug'")
         }
     }

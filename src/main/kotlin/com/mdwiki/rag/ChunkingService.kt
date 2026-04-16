@@ -1,5 +1,6 @@
 package com.mdwiki.rag
 
+import com.mdwiki.util.MarkdownFrontmatter
 import org.springframework.stereotype.Service
 
 @Service
@@ -13,8 +14,9 @@ class ChunkingService {
     }
 
     fun chunk(markdown: String): List<Chunk> {
-        if (markdown.isBlank()) return emptyList()
-        val sections = splitBySections(markdown)
+        val md = MarkdownFrontmatter.strip(markdown)
+        if (md.isBlank()) return emptyList()
+        val sections = splitBySections(md)
         val chunks = mutableListOf<Chunk>()
         var index = 0
         for (section in sections) {

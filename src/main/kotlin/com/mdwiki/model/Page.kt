@@ -1,6 +1,9 @@
 package com.mdwiki.model
 
+import com.fasterxml.jackson.databind.JsonNode
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 import java.util.UUID
 
@@ -37,6 +40,10 @@ class Page(
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "folder_id")
     var folder: Folder? = null,
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "frontmatter_meta", columnDefinition = "jsonb")
+    var frontmatterMeta: JsonNode? = null,
 
     @ManyToMany
     @JoinTable(

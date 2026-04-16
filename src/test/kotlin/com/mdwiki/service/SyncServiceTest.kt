@@ -3,6 +3,7 @@ package com.mdwiki.service
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Page
 import com.mdwiki.rag.RagService
+import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -11,18 +12,28 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.junit.jupiter.MockitoSettings
+import org.mockito.quality.Strictness
 import org.mockito.Mockito.atLeast
+import org.mockito.kotlin.doNothing
 import org.mockito.kotlin.*
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionStatus
 import java.io.File
 import java.nio.file.Path
 import java.util.UUID
 
 @ExtendWith(MockitoExtension::class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class SyncServiceTest {
 
     @Mock private lateinit var pageRepository: PageRepository
+    @Mock private lateinit var folderRepository: FolderRepository
     @Mock private lateinit var pageMetadataService: PageMetadataService
     @Mock private lateinit var ragService: RagService
+    private val frontmatterMetaService = FrontmatterMetaService()
+    @Mock private lateinit var treeEventsService: TreeEventsService
+    @Mock private lateinit var platformTransactionManager: PlatformTransactionManager
 
     private lateinit var syncService: SyncService
 
@@ -32,7 +43,20 @@ class SyncServiceTest {
     @BeforeEach
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
-        syncService = SyncService(pageRepository, pageMetadataService, props, ragService)
+        whenever(folderRepository.findAll()).thenReturn(emptyList())
+        whenever(platformTransactionManager.getTransaction(any())).thenReturn(mock<TransactionStatus>())
+        doNothing().whenever(platformTransactionManager).commit(any())
+        doNothing().whenever(platformTransactionManager).rollback(any())
+        syncService = SyncService(
+            pageRepository,
+            folderRepository,
+            pageMetadataService,
+            props,
+            ragService,
+            frontmatterMetaService,
+            treeEventsService,
+            platformTransactionManager
+        )
     }
 
     @Test

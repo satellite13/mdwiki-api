@@ -8,7 +8,9 @@ data class EmbeddingProperties(
     val dimension: Int = 1536,
     val openai: OpenAiEmbeddingConfig = OpenAiEmbeddingConfig(),
     val ollama: OllamaEmbeddingConfig = OllamaEmbeddingConfig(),
-    val lmstudio: LmStudioEmbeddingConfig = LmStudioEmbeddingConfig()
+    val lmstudio: LmStudioEmbeddingConfig = LmStudioEmbeddingConfig(),
+    /** Max JSON body size when reading embedding API responses (WebClient codec buffer). */
+    val maxResponseBufferBytes: Int = 16 * 1024 * 1024
 ) {
     data class OpenAiEmbeddingConfig(
         val baseUrl: String = "https://api.openai.com/v1",

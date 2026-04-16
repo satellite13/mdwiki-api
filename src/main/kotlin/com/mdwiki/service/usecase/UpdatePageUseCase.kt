@@ -7,6 +7,7 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.rag.RagService
+import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.WikiFileService
 import java.time.Instant
@@ -17,7 +18,8 @@ class UpdatePageUseCase(
     private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
     private val ragService: RagService,
-    private val wikiFileService: WikiFileService
+    private val wikiFileService: WikiFileService,
+    private val frontmatterMetaService: FrontmatterMetaService
 ) {
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
         val page = pageRepository.findBySlug(slug)
@@ -43,6 +45,7 @@ class UpdatePageUseCase(
 
         request.contentMd?.let { newContent ->
             page.contentMd = newContent
+            frontmatterMetaService.refreshFromContent(page, newContent)
             wikiFileService.createOrRewritePageFile(page, newContent)
         }
         page.updatedBy = user

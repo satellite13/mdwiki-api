@@ -22,6 +22,7 @@ class PageService(
     private val pageMetadataService: PageMetadataService,
     private val wikiFileService: WikiFileService,
     private val ragService: RagService,
+    private val frontmatterMetaService: FrontmatterMetaService,
     private val treeEventsService: TreeEventsService
 ) {
     private val createPageUseCase = CreatePageUseCase(
@@ -30,7 +31,8 @@ class PageService(
         folderRepository = folderRepository,
         pageMetadataService = pageMetadataService,
         ragService = ragService,
-        wikiFileService = wikiFileService
+        wikiFileService = wikiFileService,
+        frontmatterMetaService = frontmatterMetaService
     )
     private val updatePageUseCase = UpdatePageUseCase(
         pageRepository = pageRepository,
@@ -38,7 +40,8 @@ class PageService(
         folderRepository = folderRepository,
         pageMetadataService = pageMetadataService,
         ragService = ragService,
-        wikiFileService = wikiFileService
+        wikiFileService = wikiFileService,
+        frontmatterMetaService = frontmatterMetaService
     )
     private val deletePageUseCase = DeletePageUseCase(
         pageRepository = pageRepository,
@@ -55,6 +58,7 @@ class PageService(
     @Transactional(readOnly = true)
     fun findBySlug(slug: String): PageResponse {
         val page = pageRepository.findBySlug(slug)
+            ?: pageRepository.findByNormalizedTitle(slug)
             ?: throw NotFoundException("Page not found: $slug")
         return page.toResponse()
     }

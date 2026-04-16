@@ -57,4 +57,19 @@ class ChunkingServiceTest {
         assertEquals(1, chunks[1].index)
         assertEquals(2, chunks[2].index)
     }
+
+    @Test
+    fun `ignores yaml frontmatter before headings`() {
+        val md = """
+            |---
+            |title: X
+            |---
+            |# H1
+            |Intro
+        """.trimMargin()
+        val chunks = service.chunk(md)
+        assertEquals(1, chunks.size)
+        assertEquals("H1", chunks[0].sectionHeading)
+        assertTrue(chunks[0].text.contains("Intro"))
+    }
 }

@@ -17,6 +17,7 @@ class WikiReadTool(private val pageService: PageService) {
         val backlinks = pageService.getBacklinks(slug)
         return mapOf(
             "slug" to page.slug, "title" to page.title, "contentMd" to page.contentMd,
+            "frontmatterMeta" to page.frontmatterMeta,
             "tags" to page.tags,
             "backlinks" to backlinks.map { mapOf("slug" to it.slug, "title" to it.title) },
             "createdBy" to page.createdBy, "updatedBy" to page.updatedBy,

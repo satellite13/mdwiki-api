@@ -17,22 +17,41 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
+import org.mockito.junit.jupiter.MockitoSettings
+import org.mockito.quality.Strictness
+import org.mockito.kotlin.doNothing
 import org.mockito.kotlin.*
+import java.io.File
 import java.util.Optional
 import java.util.UUID
 
 @ExtendWith(MockitoExtension::class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class FolderServiceTest {
 
     @Mock private lateinit var folderRepository: FolderRepository
     @Mock private lateinit var pageRepository: PageRepository
     @Mock private lateinit var userRepository: UserRepository
+    @Mock private lateinit var wikiFileService: WikiFileService
+    @Mock private lateinit var treeEventsService: TreeEventsService
 
     private lateinit var folderService: FolderService
 
     @BeforeEach
     fun setUp() {
-        folderService = FolderService(folderRepository, pageRepository, userRepository)
+        val stubDir = File(System.getProperty("java.io.tmpdir"))
+        whenever(wikiFileService.ensureFolderDirectory(any())).thenReturn(stubDir)
+        whenever(wikiFileService.resolveFolderDirectory(any())).thenReturn(stubDir)
+        doNothing().whenever(wikiFileService).moveFolderDirectory(any(), any())
+        doNothing().whenever(wikiFileService).deleteFolderDirectory(any())
+        doNothing().whenever(wikiFileService).relocatePageFile(any(), any())
+        folderService = FolderService(
+            folderRepository,
+            pageRepository,
+            userRepository,
+            wikiFileService,
+            treeEventsService
+        )
     }
 
     @Test
@@ -160,12 +179,13 @@ class FolderServiceTest {
         val page = Page(id = UUID.randomUUID(), slug = "orphan", title = "Orphan", folder = folder)
 
         whenever(folderRepository.findById(folderId)).thenReturn(Optional.of(folder))
-        whenever(pageRepository.findByFolderId(folderId)).thenReturn(listOf(page))
+        whenever(folderRepository.findAll()).thenReturn(listOf(folder))
+        whenever(pageRepository.findAll()).thenReturn(listOf(page))
 
         folderService.delete(folderId)
 
         assertNull(page.folder)
-        verify(pageRepository).save(page)
+        verify(pageRepository).saveAll(listOf(page))
         verify(folderRepository).delete(folder)
     }
 }
