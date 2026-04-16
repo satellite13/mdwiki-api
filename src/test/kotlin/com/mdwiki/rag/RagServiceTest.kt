@@ -4,6 +4,7 @@ import com.mdwiki.model.Page
 import com.mdwiki.model.PageChunk
 import com.mdwiki.repository.PageChunkRepository
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.service.GraphService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -21,12 +22,13 @@ class RagServiceTest {
     @Mock private lateinit var embeddingProvider: EmbeddingProvider
     @Mock private lateinit var chunkingService: ChunkingService
     @Mock private lateinit var reranker: Reranker
+    @Mock private lateinit var graphService: GraphService
 
     private lateinit var ragService: RagService
 
     @BeforeEach
     fun setUp() {
-        ragService = RagService(pageChunkRepository, pageRepository, embeddingProvider, chunkingService, reranker, com.mdwiki.config.WikiProperties())
+        ragService = RagService(pageChunkRepository, pageRepository, embeddingProvider, chunkingService, reranker, com.mdwiki.config.WikiProperties(), graphService)
     }
 
     @Test

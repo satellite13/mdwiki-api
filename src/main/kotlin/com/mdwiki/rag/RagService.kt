@@ -5,6 +5,7 @@ import com.mdwiki.model.Page
 import com.mdwiki.model.PageChunk
 import com.mdwiki.repository.PageChunkRepository
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.service.GraphService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,7 +18,8 @@ class RagService(
     private val embeddingProvider: EmbeddingProvider,
     private val chunkingService: ChunkingService,
     private val reranker: Reranker,
-    private val wikiProperties: WikiProperties
+    private val wikiProperties: WikiProperties,
+    private val graphService: GraphService
 ) {
 
     private val log = LoggerFactory.getLogger(RagService::class.java)
@@ -93,8 +95,37 @@ class RagService(
                 sectionHeading = chunk.sectionHeading, pageTitle = page.title, pageSlug = page.slug, score = 0.5)
         }
 
-        val allCandidates = (vectorCandidates + ftsCandidates).distinctBy { it.chunkId }
+        var allCandidates = (vectorCandidates + ftsCandidates).distinctBy { it.chunkId }
         if (allCandidates.isEmpty()) return emptyList()
+
+        // Graph expansion: add chunks from neighbor pages
+        val hitPageSlugs = allCandidates.map { it.pageSlug }.distinct()
+        val neighborSlugs = mutableSetOf<String>()
+        for (slug in hitPageSlugs.take(5)) { // expand top-5 hit pages
+            neighborSlugs.addAll(graphService.getNeighborSlugs(slug, 1))
+        }
+        neighborSlugs.removeAll(hitPageSlugs.toSet()) // don't re-add pages already in results
+
+        if (neighborSlugs.isNotEmpty()) {
+            val neighborPages = pageRepository.findAllBySlugIn(neighborSlugs.toList())
+            val neighborPageIds = neighborPages.mapNotNull { it.id }
+            if (neighborPageIds.isNotEmpty()) {
+                val neighborChunks = pageChunkRepository.findByPageIdIn(neighborPageIds)
+                val graphCandidates = neighborChunks.mapNotNull { chunk ->
+                    val page = neighborPages.firstOrNull { it.id == chunk.page.id } ?: return@mapNotNull null
+                    ChunkCandidate(
+                        chunkId = chunk.id!!,
+                        pageId = page.id!!,
+                        chunkText = chunk.chunkText,
+                        sectionHeading = chunk.sectionHeading,
+                        pageTitle = page.title,
+                        pageSlug = page.slug,
+                        score = 0.3 // lower base score for graph-expanded results
+                    )
+                }
+                allCandidates = (allCandidates + graphCandidates).distinctBy { it.chunkId }
+            }
+        }
 
         // Cap candidates before reranking to limit compute cost
         val cappedCandidates = allCandidates.take(minOf(topK * 3, allCandidates.size))

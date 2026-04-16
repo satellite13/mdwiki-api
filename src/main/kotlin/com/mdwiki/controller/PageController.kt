@@ -1,6 +1,7 @@
 package com.mdwiki.controller
 
 import com.mdwiki.dto.*
+import com.mdwiki.service.GraphService
 import com.mdwiki.service.PageService
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
@@ -9,7 +10,10 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/pages")
-class PageController(private val pageService: PageService) {
+class PageController(
+    private val pageService: PageService,
+    private val graphService: GraphService
+) {
 
     @GetMapping
     fun list(
@@ -24,6 +28,14 @@ class PageController(private val pageService: PageService) {
 
     @GetMapping("/{slug}")
     fun getBySlug(@PathVariable slug: String): PageResponse = pageService.findBySlug(slug)
+
+    @GetMapping("/{slug}/graph")
+    fun getGraph(
+        @PathVariable slug: String,
+        @RequestParam(defaultValue = "1") depth: Int
+    ): GraphResponse {
+        return graphService.getGraph(slug, depth)
+    }
 
     @GetMapping("/{slug}/backlinks")
     fun getBacklinks(@PathVariable slug: String): List<BacklinkResponse> = pageService.getBacklinks(slug)

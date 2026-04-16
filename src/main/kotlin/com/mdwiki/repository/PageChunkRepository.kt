@@ -9,6 +9,8 @@ import java.util.UUID
 
 interface PageChunkRepository : JpaRepository<PageChunk, UUID> {
 
+    fun findByPageIdIn(pageIds: List<UUID>): List<PageChunk>
+
     fun findByPageIdOrderByChunkIndex(pageId: UUID): List<PageChunk>
 
     @Modifying
