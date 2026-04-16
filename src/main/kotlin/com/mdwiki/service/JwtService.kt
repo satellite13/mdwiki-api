@@ -12,16 +12,6 @@ import javax.crypto.SecretKey
 @Service
 class JwtService(private val properties: JwtProperties) {
 
-    init {
-        val secretBytes = properties.secret.toByteArray(StandardCharsets.UTF_8)
-        if (secretBytes.size < 32) {
-            throw IllegalStateException(
-                "JWT secret must be at least 32 bytes (256 bits) but was ${secretBytes.size} bytes. " +
-                    "Configure a stronger secret via the jwt.secret property."
-            )
-        }
-    }
-
     /** SHA-256(secret) yields 32 bytes — satisfies JJWT minimum key length for HS256. */
     private val key: SecretKey = Keys.hmacShaKeyFor(
         MessageDigest.getInstance("SHA-256").digest(properties.secret.toByteArray(StandardCharsets.UTF_8))

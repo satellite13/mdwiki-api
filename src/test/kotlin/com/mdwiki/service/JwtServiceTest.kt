@@ -43,4 +43,12 @@ class JwtServiceTest {
         val token = jwtService.generateToken("testuser")
         assertFalse(jwtService.validateToken(token + "tampered"))
     }
+
+    @Test
+    fun `short UTF-8 secret works because signing key is SHA-256 of secret`() {
+        val short = JwtService(JwtProperties(secret = "ninechars", expirationMs = 3600000))
+        val token = short.generateToken("u")
+        assertTrue(short.validateToken(token))
+        assertEquals("u", short.extractUsername(token))
+    }
 }
