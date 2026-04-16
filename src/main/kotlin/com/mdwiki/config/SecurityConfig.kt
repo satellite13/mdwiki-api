@@ -1,5 +1,6 @@
 package com.mdwiki.config
 
+import com.mdwiki.security.ApiKeyAuthenticationFilter
 import com.mdwiki.security.JwtAuthenticationFilter
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -17,7 +18,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 @EnableMethodSecurity
 class SecurityConfig(
-    private val jwtAuthenticationFilter: JwtAuthenticationFilter
+    private val jwtAuthenticationFilter: JwtAuthenticationFilter,
+    private val apiKeyAuthenticationFilter: ApiKeyAuthenticationFilter
 ) {
 
     @Bean
@@ -35,8 +37,10 @@ class SecurityConfig(
                     .requestMatchers("/api/sync/**").hasRole("ADMIN")
                     .requestMatchers("/api/users/**").hasRole("ADMIN")
                     .requestMatchers("/api/api-keys/**").authenticated()
+                    .requestMatchers("/mcp/**").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .anyRequest().authenticated()
             }
+            .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
 
         return http.build()
