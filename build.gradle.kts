@@ -46,6 +46,10 @@ dependencies {
     // RAG Pipeline
     implementation("com.pgvector:pgvector:0.1.6")
     implementation("com.microsoft.onnxruntime:onnxruntime:1.19.2")
+    // HuggingFace tokenizers (BERT WordPiece) for cross-encoder reranker.
+    // Поставляется как fat-jar с JNI под linux/mac; на первом запуске native-lib
+    // извлекается в `~/.djl.ai/tokenizers/`. Используется в CrossEncoderReranker.
+    implementation("ai.djl.huggingface:tokenizers:0.33.0")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     runtimeOnly("io.netty:netty-resolver-dns-native-macos") {
         artifact {
@@ -80,6 +84,19 @@ dependencies {
 kotlin {
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")
+    }
+}
+
+/**
+ * Кладём содержимое `models/` (ONNX cross-encoder) в classpath jar, чтобы reranker не зависел
+ * от внешнего volume/secret. Файл ~22 MB — приемлемая цена за готовый к работе образ.
+ * Перекрыть путь всё ещё можно через `MDWIKI_RERANKER_MODEL_PATH` — тогда classpath-ресурс
+ * игнорируется (см. CrossEncoderReranker.resolveModelPath).
+ */
+tasks.named<Copy>("processResources") {
+    from(layout.projectDirectory.dir("models")) {
+        into("models")
+        exclude("**/.DS_Store", "**/Thumbs.db")
     }
 }
 
@@ -123,4 +140,22 @@ fun parseDotEnv(file: java.io.File): Map<String, String> {
 tasks.bootRun {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     environment(parseDotEnv(layout.projectDirectory.file(".env").asFile))
+}
+
+/**
+ * Paketo по умолчанию собирает на Tiny-stack (noble-tiny), в котором отсутствуют locale-данные
+ * glibc. Из-за этого JVM внутри контейнера игнорирует `-Dsun.jnu.encoding=UTF-8` для имён
+ * файлов: `nl_langinfo(CODESET)` возвращает `ANSI_X3.4-1968` (ASCII), и кириллица в путях
+ * читается как `?`/`\uFFFD`. Переключаемся на `builder-jammy-base`, где есть полноценный
+ * Ubuntu с UTF-8 локалью.
+ */
+tasks.named<org.springframework.boot.gradle.tasks.bundling.BootBuildImage>("bootBuildImage") {
+    builder.set("paketobuildpacks/builder-jammy-base")
+    runImage.set("paketobuildpacks/run-jammy-base")
+    environment.set(
+        mapOf(
+            "BP_JVM_VERSION" to "25",
+            "BPL_JVM_THREAD_COUNT" to "250"
+        )
+    )
 }

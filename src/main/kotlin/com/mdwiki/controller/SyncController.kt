@@ -11,4 +11,7 @@ class SyncController(private val syncService: SyncService) {
 
     @PostMapping
     fun sync(): SyncService.SyncResult = syncService.fullSync()
+
+    @PostMapping("/reindex")
+    fun reindex(): SyncService.ReindexResult = syncService.reindexAll()
 }

@@ -2,9 +2,11 @@ package com.mdwiki.service
 
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Folder
+import com.mdwiki.rag.RagService
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.usecase.WikiSyncEngine
+import org.slf4j.LoggerFactory
 import jakarta.annotation.PreDestroy
 import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
@@ -25,8 +27,10 @@ class SyncService(
     private val treeEventsService: TreeEventsService,
     @param:Lazy private val folderService: FolderService,
     private val wikiSyncEngine: WikiSyncEngine,
+    private val ragService: RagService,
     transactionManager: PlatformTransactionManager
 ) {
+    private val log = LoggerFactory.getLogger(SyncService::class.java)
     private val transactionTemplate = TransactionTemplate(transactionManager)
 
     /** Serializes disk↔DB sync so the watcher and fullSync (or concurrent API calls) cannot interleave inserts. */
@@ -41,6 +45,34 @@ class SyncService(
     private var reconcileFuture: ScheduledFuture<*>? = null
 
     data class SyncResult(val added: Int, val updated: Int, val removed: Int)
+
+    data class ReindexResult(val total: Int, val reindexed: Int, val failed: Int)
+
+    /**
+     * Перегоняет все не-удалённые страницы через RAG-индексацию заново: удаляет старые чанки,
+     * пересоздаёт их и эмбеддинги. Полезно после смены модели/размерности эмбеддингов или
+     * после миграции, которая очистила `page_chunks`.
+     *
+     * Каждая страница индексируется в своей транзакции (через RagService.indexPage @Transactional),
+     * поэтому падение на одной странице не откатит остальные.
+     */
+    fun reindexAll(): ReindexResult = synchronized(wikiSyncLock) {
+        val pages = pageRepository.findAllByDeletedAtIsNull()
+        var reindexed = 0
+        var failed = 0
+        log.info("Reindex: starting for {} pages", pages.size)
+        for (page in pages) {
+            try {
+                ragService.indexPage(page)
+                reindexed++
+            } catch (e: Exception) {
+                failed++
+                log.error("Reindex: failed for page '{}': {}", page.slug, e.message)
+            }
+        }
+        log.info("Reindex: done. total={}, reindexed={}, failed={}", pages.size, reindexed, failed)
+        ReindexResult(total = pages.size, reindexed = reindexed, failed = failed)
+    }
 
     @Transactional
     fun fullSync(): SyncResult = synchronized(wikiSyncLock) {

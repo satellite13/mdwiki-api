@@ -77,6 +77,7 @@ class SyncServiceTest {
             treeEventsService,
             folderService,
             wikiSyncEngine,
+            ragService,
             platformTransactionManager
         )
     }

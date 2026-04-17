@@ -12,6 +12,8 @@ import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 import java.time.Instant
@@ -40,10 +42,10 @@ class WikiSyncEngine(
             return SyncService.SyncResult(0, 0, 0)
         }
 
-        val mdFiles = contentDir
-            .walkTopDown()
-            .filter { it.isFile && it.extension == "md" }
-            .toList()
+        val mdFiles = collectMarkdownFiles(contentDir)
+        if (log.isDebugEnabled) {
+            log.debug("Sync: walked {} .md files under {}", mdFiles.size, contentDir.absolutePath)
+        }
         val existingBySlug = loadExistingBySlugForFullSync()
         val filesBySlug = linkedMapOf<String, File>()
         for (file in mdFiles) {
@@ -267,5 +269,32 @@ class WikiSyncEngine(
 
     private fun isSuspiciousFilesystemSlug(slug: String): Boolean {
         return slug.contains('?') || slug.contains(REPLACEMENT_CHAR)
+    }
+
+    /**
+     * Обход `.md` файлов через NIO `Files.walk`. В отличие от `File.walkTopDown()`, который
+     * на некоторых JVM/образах давал пустой результат для директорий с не-ASCII именами
+     * (например, кириллическими), NIO корректно использует `sun.jnu.encoding=UTF-8`
+     * и видит такие папки. Падение на какой-либо подпапке не останавливает обход.
+     */
+    private fun collectMarkdownFiles(contentDir: File): List<File> {
+        val root: Path = contentDir.toPath()
+        val result = mutableListOf<File>()
+        try {
+            Files.walk(root).use { stream ->
+                stream.forEach { path ->
+                    try {
+                        if (Files.isRegularFile(path) && path.fileName?.toString()?.endsWith(".md") == true) {
+                            result.add(path.toFile())
+                        }
+                    } catch (e: Exception) {
+                        log.warn("Sync: skip path '{}' due to error: {}", path, e.message)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Sync: Files.walk failed on {}: {}", contentDir.absolutePath, e.message, e)
+        }
+        return result
     }
 }
