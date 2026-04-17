@@ -9,6 +9,7 @@ data class WikiProperties(
 ) {
     data class RagProperties(
         val maxChunkChars: Int = 2000,
-        val vectorSearchLimit: Int = 20
+        val vectorSearchLimit: Int = 20,
+        val embeddingIndexAttempts: Int = 3
     )
 }

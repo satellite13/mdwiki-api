@@ -12,6 +12,7 @@ import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import org.slf4j.LoggerFactory
 import java.io.File
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 import java.time.Instant
 
@@ -26,8 +27,12 @@ class WikiSyncEngine(
     private val wikiFileService: WikiFileService
 ) {
     private val log = LoggerFactory.getLogger(WikiSyncEngine::class.java)
+    private companion object {
+        private const val FULL_SYNC_PAGE_BATCH_SIZE = 500
+    }
 
     fun fullSync(): SyncService.SyncResult {
+        val startedAt = System.nanoTime()
         val contentDir = File(wikiProperties.contentDir)
         if (!contentDir.exists()) {
             contentDir.mkdirs()
@@ -38,12 +43,19 @@ class WikiSyncEngine(
             .walkTopDown()
             .filter { it.isFile && it.extension == "md" }
             .toList()
-        val existingPages = pageRepository.findAll()
-        val existingBySlug = existingPages.associateBy { it.slug }
+        val existingBySlug = loadExistingBySlugForFullSync()
         val filesBySlug = linkedMapOf<String, File>()
         for (file in mdFiles) {
             val slug = file.nameWithoutExtension
-            filesBySlug.putIfAbsent(slug, file)
+            val existing = filesBySlug.putIfAbsent(slug, file)
+            if (existing != null && existing.absolutePath != file.absolutePath) {
+                log.warn(
+                    "Sync: duplicate slug '{}' detected; keeping '{}' and ignoring '{}'",
+                    slug,
+                    existing.absolutePath,
+                    file.absolutePath
+                )
+            }
         }
 
         var added = 0
@@ -111,7 +123,15 @@ class WikiSyncEngine(
             pageMetadataService.cleanupOrphanedTags()
         }
 
-        return SyncService.SyncResult(added, updated, removed)
+        val result = SyncService.SyncResult(added, updated, removed)
+        log.info(
+            "Sync completed in {} ms: added={}, updated={}, removed={}",
+            elapsedMs(startedAt),
+            result.added,
+            result.updated,
+            result.removed
+        )
+        return result
     }
 
     fun syncSingleFile(file: File) {
@@ -208,5 +228,24 @@ class WikiSyncEngine(
             parentFolder = folder
         }
         return parentFolder
+    }
+
+    /**
+     * Avoid one giant `findAll()` query: read pages in batches for large wikis.
+     */
+    private fun loadExistingBySlugForFullSync(): MutableMap<String, Page> {
+        val bySlug = linkedMapOf<String, Page>()
+        var pageIndex = 0
+        while (true) {
+            val batch = pageRepository.findAll(PageRequest.of(pageIndex, FULL_SYNC_PAGE_BATCH_SIZE))
+            batch.content.forEach { page -> bySlug.putIfAbsent(page.slug, page) }
+            if (!batch.hasNext()) break
+            pageIndex++
+        }
+        return bySlug
+    }
+
+    private fun elapsedMs(startedAtNanos: Long): Long {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000
     }
 }

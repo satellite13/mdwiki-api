@@ -21,6 +21,9 @@ import org.mockito.Mockito.atLeast
 import org.mockito.kotlin.doNothing
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.kotlin.*
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.io.File
@@ -50,6 +53,7 @@ class SyncServiceTest {
     @BeforeEach
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
+        mockPagedFindAll(emptyList())
         whenever(folderRepository.findAll()).thenReturn(emptyList())
         whenever(folderRepository.findByParentId(isNull())).thenReturn(emptyList())
         whenever(folderRepository.save(any<Folder>())).thenAnswer { it.getArgument(0) }
@@ -80,7 +84,7 @@ class SyncServiceTest {
     @Test
     fun `fullSync adds new files`() {
         File(tempDir.toFile(), "new-page.md").writeText("# New Page\nContent here")
-        whenever(pageRepository.findAll()).thenReturn(emptyList())
+        mockPagedFindAll(emptyList())
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
         val result = syncService.fullSync()
 
@@ -92,7 +96,7 @@ class SyncServiceTest {
     fun `fullSync creates folder chain for nested markdown`() {
         val docs = File(tempDir.toFile(), "Docs").also { assertTrue(it.mkdirs()) }
         File(docs, "nested.md").writeText("# Nested\nx")
-        whenever(pageRepository.findAll()).thenReturn(emptyList())
+        mockPagedFindAll(emptyList())
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
         val docId = UUID.randomUUID()
         val docFolder = Folder(id = docId, name = "Docs", parent = null)
@@ -109,7 +113,7 @@ class SyncServiceTest {
     fun `fullSync removes deleted files`() {
         val page = Page(id = UUID.randomUUID(), slug = "deleted-page", title = "Deleted")
         page.filePath = tempDir.resolve("deleted-page.md").toString()
-        whenever(pageRepository.findAll()).thenReturn(listOf(page))
+        mockPagedFindAll(listOf(page))
 
         val result = syncService.fullSync()
 
@@ -129,7 +133,7 @@ class SyncServiceTest {
         val page = Page(id = UUID.randomUUID(), slug = "ghost", title = "Ghost", contentMd = body)
         page.filePath = file.absolutePath
         page.deletedAt = Instant.now()
-        whenever(pageRepository.findAll()).thenReturn(listOf(page))
+        mockPagedFindAll(listOf(page))
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
         val result = syncService.fullSync()
@@ -145,11 +149,31 @@ class SyncServiceTest {
 
         val page = Page(id = UUID.randomUUID(), slug = "modified", title = "Modified", contentMd = "Old content")
         page.filePath = file.absolutePath
-        whenever(pageRepository.findAll()).thenReturn(listOf(page))
+        mockPagedFindAll(listOf(page))
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
         val result = syncService.fullSync()
 
         assertEquals(1, result.updated)
         verify(pageRepository, atLeast(1)).save(argThat<Page> { contentMd == "Updated content" })
+    }
+
+    @Test
+    fun `fullSync iterates through paged existing pages`() {
+        val firstPageEntity = Page(id = UUID.randomUUID(), slug = "stale-1", title = "Stale 1")
+        val secondPageEntity = Page(id = UUID.randomUUID(), slug = "stale-2", title = "Stale 2")
+        val page0 = PageImpl(listOf(firstPageEntity), PageRequest.of(0, 1), 2)
+        val page1 = PageImpl(listOf(secondPageEntity), PageRequest.of(1, 1), 2)
+        whenever(pageRepository.findAll(any<Pageable>())).thenReturn(page0, page1)
+
+        val result = syncService.fullSync()
+
+        assertEquals(2, result.removed)
+        verify(pageRepository).delete(firstPageEntity)
+        verify(pageRepository).delete(secondPageEntity)
+        verify(pageRepository, atLeast(2)).findAll(any<Pageable>())
+    }
+
+    private fun mockPagedFindAll(pages: List<Page>) {
+        whenever(pageRepository.findAll(any<Pageable>())).thenReturn(PageImpl(pages))
     }
 }
