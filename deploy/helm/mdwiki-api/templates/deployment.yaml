@@ -32,7 +32,7 @@ spec:
             - name: LC_ALL
               value: "C.UTF-8"
             - name: JAVA_TOOL_OPTIONS
-              value: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"
+              value: {{ .Values.app.javaToolOptions | quote }}
             - name: SPRING_DATASOURCE_URL
               value: {{ printf "jdbc:postgresql://%s-postgres:%d/%s" (include "mdwiki-api.fullname" .) (int .Values.postgres.service.port) .Values.postgres.database | quote }}
             - name: SPRING_DATASOURCE_USERNAME
