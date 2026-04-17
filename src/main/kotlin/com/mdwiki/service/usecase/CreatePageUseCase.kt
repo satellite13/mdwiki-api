@@ -27,8 +27,10 @@ class CreatePageUseCase(
     private val wikilinkService: WikilinkService
 ) {
     fun execute(request: CreatePageRequest, username: String) = run {
-        val slugFromTitle = wikilinkService.normalizePageSlug(request.title)
-        val slug = slugFromTitle.ifBlank { request.slug }
+        // Явно заданный `slug` имеет приоритет (после нормализации); fallback — slug из title.
+        // Раньше порядок был обратным и `request.slug` по факту игнорировался, если title не пустой.
+        val normalizedRequestSlug = wikilinkService.normalizePageSlug(request.slug)
+        val slug = normalizedRequestSlug.ifBlank { wikilinkService.normalizePageSlug(request.title) }
 
         if (pageRepository.existsBySlug(slug)) {
             throw ConflictException("Page with slug '$slug' already exists")

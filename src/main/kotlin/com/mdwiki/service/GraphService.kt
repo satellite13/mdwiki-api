@@ -55,9 +55,11 @@ class GraphService(
                     }
                 }
 
-                // Backlinks (incoming)
+                // Backlinks (incoming). Пропускаем ссылки от soft-deleted страниц —
+                // они не должны появляться в фокусном графе, как и в полном (см. getFullWikiGraph).
                 val incoming = linkRepository.findByTargetSlug(currentSlug)
                 for (link in incoming) {
+                    if (link.sourcePage.deletedAt != null) continue
                     val sourceSlug = link.sourcePage.slug
                     edges.add(GraphEdge(source = sourceSlug, target = currentSlug))
                     if (sourceSlug !in visitedSlugs) {

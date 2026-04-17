@@ -7,12 +7,14 @@ import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.*
+import java.time.Instant
 import java.util.UUID
 
 @ExtendWith(MockitoExtension::class)
@@ -58,6 +60,39 @@ class PageMetadataServiceTest {
         val backlinks = pageMetadataService.findBacklinks("mcp")
 
         assertEquals(1, backlinks.size)
+    }
+
+    @Test
+    fun `findBacklinks hides links from soft-deleted source pages`() {
+        val target = Page(id = UUID.randomUUID(), slug = "target", title = "Target")
+        val alive = Page(id = UUID.randomUUID(), slug = "alive", title = "Alive")
+        val deleted = Page(id = UUID.randomUUID(), slug = "ghost", title = "Ghost")
+            .apply { deletedAt = Instant.now() }
+        val aliveLink = Link(id = UUID.randomUUID(), sourcePage = alive, targetPage = target, targetSlug = "target")
+        val ghostLink = Link(id = UUID.randomUUID(), sourcePage = deleted, targetPage = target, targetSlug = "target")
+        whenever(pageRepository.findBySlug("target")).thenReturn(target)
+        whenever(wikilinkService.normalizePageSlug("Target")).thenReturn("target")
+        whenever(linkRepository.findByTargetSlug("target")).thenReturn(listOf(aliveLink, ghostLink))
+
+        val backlinks = pageMetadataService.findBacklinks("target")
+
+        assertEquals(listOf(aliveLink), backlinks)
+    }
+
+    @Test
+    fun `findBacklinks deduplicates multiple links from same source page`() {
+        val target = Page(id = UUID.randomUUID(), slug = "target", title = "Target")
+        val source = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
+        val firstLink = Link(id = UUID.randomUUID(), sourcePage = source, targetPage = target, targetSlug = "target")
+        val secondLink = Link(id = UUID.randomUUID(), sourcePage = source, targetPage = target, targetSlug = "target")
+        whenever(pageRepository.findBySlug("target")).thenReturn(target)
+        whenever(wikilinkService.normalizePageSlug("Target")).thenReturn("target")
+        whenever(linkRepository.findByTargetSlug("target")).thenReturn(listOf(firstLink, secondLink))
+
+        val backlinks = pageMetadataService.findBacklinks("target")
+
+        assertEquals(1, backlinks.size)
+        assertTrue(backlinks.single() === firstLink || backlinks.single() === secondLink)
     }
 
     @Test
@@ -141,6 +176,30 @@ class PageMetadataServiceTest {
         verify(linkRepository).save(linkCaptor.capture())
         assertEquals(targetPage, linkCaptor.firstValue.targetPage)
         assertEquals("mcp-протокол", linkCaptor.firstValue.targetSlug)
+    }
+
+    @Test
+    fun `detachIncomingLinks nulls targetPage while keeping targetSlug`() {
+        val target = Page(id = UUID.randomUUID(), slug = "target", title = "Target")
+        val source = Page(id = UUID.randomUUID(), slug = "source", title = "Source")
+        val incoming = Link(id = UUID.randomUUID(), sourcePage = source, targetPage = target, targetSlug = "target")
+        whenever(linkRepository.findByTargetPage(target)).thenReturn(listOf(incoming))
+
+        pageMetadataService.detachIncomingLinks(target)
+
+        assertNull(incoming.targetPage)
+        assertEquals("target", incoming.targetSlug)
+        verify(linkRepository).save(incoming)
+    }
+
+    @Test
+    fun `detachIncomingLinks is a no-op when there are no incoming links`() {
+        val page = Page(id = UUID.randomUUID(), slug = "lonely", title = "Lonely")
+        whenever(linkRepository.findByTargetPage(page)).thenReturn(emptyList())
+
+        pageMetadataService.detachIncomingLinks(page)
+
+        verify(linkRepository, never()).save(any<Link>())
     }
 
     @Test

@@ -98,6 +98,8 @@ class WikiSyncEngine(
         for ((slug, page) in existingBySlug) {
             if (slug !in filesBySlug) {
                 pageMetadataService.deleteSourceLinks(page)
+                // Без detach входящих ссылок FK fk_links_target блокирует удаление.
+                pageMetadataService.detachIncomingLinks(page)
                 ragService.deletePageChunks(page.id!!)
                 pageRepository.delete(page)
                 removed++
@@ -161,6 +163,8 @@ class WikiSyncEngine(
     fun removePage(slug: String) {
         val page = pageRepository.findBySlug(slug) ?: return
         pageMetadataService.deleteSourceLinks(page)
+        // Без detach входящих ссылок FK fk_links_target блокирует удаление.
+        pageMetadataService.detachIncomingLinks(page)
         ragService.deletePageChunks(page.id!!)
         pageRepository.delete(page)
         pageMetadataService.cleanupOrphanedTags()

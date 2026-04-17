@@ -21,11 +21,33 @@ class PageMetadataService(
             add(slug)
             if (normalizedTitle != null && normalizedTitle != slug) add(normalizedTitle)
         }
-        return slugsToMatch.flatMap { linkRepository.findByTargetSlug(it) }.distinctBy { it.id }
+        return slugsToMatch
+            .flatMap { linkRepository.findByTargetSlug(it) }
+            // Скрываем ссылки от soft-deleted страниц: их больше нет в списке/дереве.
+            .filter { it.sourcePage.deletedAt == null }
+            // Дедуп по source: несколько ссылок из одной страницы на один target
+            // не должны давать дубли в ответе /backlinks.
+            .distinctBy { it.sourcePage.slug }
     }
 
     fun deleteSourceLinks(page: Page) {
         linkRepository.deleteBySourcePage(page)
+    }
+
+    /**
+     * Отвязывает входящие ссылки от страницы, оставляя `targetSlug` нетронутым.
+     * Нужно вызывать перед hard-delete: иначе FK `fk_links_target` блокирует удаление.
+     * Сами записи остаются dangling — это ожидаемо, т.к. у ссылающихся страниц в markdown
+     * всё ещё есть `[[slug]]`, и если target-страница будет восстановлена/пересоздана,
+     * `resolveIncomingLinks` снова свяжет их.
+     */
+    fun detachIncomingLinks(page: Page) {
+        val incoming = linkRepository.findByTargetPage(page)
+        if (incoming.isEmpty()) return
+        incoming.forEach { link ->
+            link.targetPage = null
+            linkRepository.save(link)
+        }
     }
 
     fun cleanupOrphanedTags() {

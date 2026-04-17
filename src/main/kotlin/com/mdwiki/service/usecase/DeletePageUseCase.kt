@@ -26,6 +26,8 @@ class DeletePageUseCase(
         val tombstone = pageRepository.findBySlug(slug)
         if (tombstone != null) {
             pageMetadataService.deleteSourceLinks(tombstone)
+            // Отвязываем входящие ссылки, иначе FK fk_links_target ломает hard-delete.
+            pageMetadataService.detachIncomingLinks(tombstone)
             tombstone.id?.let { ragService.deletePageChunks(it) }
             wikiFileService.deletePageFile(tombstone)
             wikiFileService.findMarkdownFileForSlug(slug)?.let { orphan ->

@@ -114,6 +114,10 @@ class SyncServiceTest {
         val result = syncService.fullSync()
 
         assertEquals(1, result.removed)
+        // Перед hard-delete должны быть зачищены и исходящие, и входящие ссылки,
+        // иначе FK fk_links_target ломает удаление.
+        verify(pageMetadataService).deleteSourceLinks(page)
+        verify(pageMetadataService).detachIncomingLinks(page)
         verify(pageRepository).delete(page)
     }
 

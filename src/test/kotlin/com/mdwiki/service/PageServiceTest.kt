@@ -103,6 +103,43 @@ class PageServiceTest {
     }
 
     @Test
+    fun `create respects explicitly provided slug over title-derived one`() {
+        val user = User(id = UUID.randomUUID(), username = "u", email = "u@t.com", passwordHash = "h")
+        whenever(userRepository.findByUsername("u")).thenReturn(user)
+        whenever(pageRepository.existsBySlug("my-custom-slug")).thenReturn(false)
+        whenever(pageRepository.save(any<Page>())).thenAnswer {
+            val p = it.arguments[0] as Page
+            Page(id = UUID.randomUUID(), slug = p.slug, title = p.title, contentMd = p.contentMd, filePath = p.filePath)
+        }
+
+        val request = CreatePageRequest(
+            slug = "my-custom-slug",
+            title = "Заголовок На Русском",
+            contentMd = "x"
+        )
+        val result = pageService.create(request, "u")
+
+        assertEquals("my-custom-slug", result.slug)
+        verify(pageRepository, atLeastOnce()).save(argThat<Page> { slug == "my-custom-slug" })
+    }
+
+    @Test
+    fun `create falls back to slug from title when request slug is blank`() {
+        val user = User(id = UUID.randomUUID(), username = "u", email = "u@t.com", passwordHash = "h")
+        whenever(userRepository.findByUsername("u")).thenReturn(user)
+        whenever(pageRepository.existsBySlug("\u0437\u0430\u0433\u043e\u043b\u043e\u0432\u043e\u043a")).thenReturn(false)
+        whenever(pageRepository.save(any<Page>())).thenAnswer {
+            val p = it.arguments[0] as Page
+            Page(id = UUID.randomUUID(), slug = p.slug, title = p.title, contentMd = p.contentMd, filePath = p.filePath)
+        }
+
+        val request = CreatePageRequest(slug = "   ", title = "Заголовок", contentMd = "x")
+        val result = pageService.create(request, "u")
+
+        assertEquals("\u0437\u0430\u0433\u043e\u043b\u043e\u0432\u043e\u043a", result.slug)
+    }
+
+    @Test
     fun `create throws on duplicate slug`() {
         whenever(pageRepository.existsBySlug("existing")).thenReturn(true)
 
@@ -227,11 +264,14 @@ class PageServiceTest {
         whenever(pageRepository.findBySlugAndDeletedAtIsNull(slug)).thenReturn(null)
         whenever(pageRepository.findBySlug(slug)).thenReturn(page)
         doNothing().whenever(pageMetadataService).deleteSourceLinks(any())
+        doNothing().whenever(pageMetadataService).detachIncomingLinks(any())
         doNothing().whenever(ragService).deletePageChunks(any())
         doNothing().whenever(pageMetadataService).cleanupOrphanedTags()
 
         pageService.delete(slug)
 
+        verify(pageMetadataService).deleteSourceLinks(page)
+        verify(pageMetadataService).detachIncomingLinks(page)
         verify(pageRepository).delete(page)
         assertFalse(file.exists())
     }
