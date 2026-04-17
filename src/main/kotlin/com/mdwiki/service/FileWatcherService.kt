@@ -4,6 +4,7 @@ import com.mdwiki.config.WikiProperties
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
+import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
 import java.io.File
 import java.nio.file.*
@@ -14,7 +15,7 @@ import kotlin.concurrent.thread
 
 @Service
 class FileWatcherService(
-    private val syncService: SyncService,
+    @Lazy private val syncService: SyncService,
     private val wikiProperties: WikiProperties
 ) {
 

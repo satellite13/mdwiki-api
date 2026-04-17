@@ -2,7 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: 011-add-vector-index
       author: mdwiki
-      failOnError: false
       changes:
         - sql:
             sql: >

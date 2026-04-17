@@ -19,6 +19,8 @@ class PageService(
     private val pageMetadataService: PageMetadataService,
     private val treeEventsService: TreeEventsService,
     private val folderService: FolderService,
+    private val wikiFileService: WikiFileService,
+    private val syncService: SyncService,
     private val createPageUseCase: CreatePageUseCase,
     private val updatePageUseCase: UpdatePageUseCase,
     private val deletePageUseCase: DeletePageUseCase
@@ -29,12 +31,26 @@ class PageService(
         return pageRepository.findAllByDeletedAtIsNull(pageable).map { it.toListItem() }
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * Подтягивает страницу с диска в БД при первом GET, если есть `$slug.md` под [WikiProperties.contentDir],
+     * а активной строки в БД ещё нет (например файл положили вручную или БД откатили).
+     */
+    @Transactional
     fun findBySlug(slug: String): PageResponse {
-        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
-            ?: pageRepository.findByNormalizedTitle(slug)?.takeIf { it.deletedAt == null }
-            ?: throw NotFoundException("Page not found: $slug")
-        return page.toResponse()
+        pageRepository.findBySlugAndDeletedAtIsNull(slug)?.let {
+            return it.toResponse()
+        }
+        pageRepository.findByNormalizedTitle(slug)?.takeIf { it.deletedAt == null }?.let {
+            return it.toResponse()
+        }
+        val onDisk = wikiFileService.findMarkdownFileForSlug(slug)
+        if (onDisk != null) {
+            syncService.syncSingleFile(onDisk)
+            pageRepository.findBySlugAndDeletedAtIsNull(slug)?.let {
+                return it.toResponse()
+            }
+        }
+        throw NotFoundException("Page not found: $slug")
     }
 
     @Transactional(readOnly = true)

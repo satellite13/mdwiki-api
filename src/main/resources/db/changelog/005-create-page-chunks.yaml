@@ -36,9 +36,10 @@ databaseChangeLog:
               - column:
                   name: section_heading
                   type: varchar(500)
+        # Размерность из spring.liquibase.parameters.embeddingDim (= EMBEDDING_DIMENSION), нужна для HNSW в 011.
         - sql:
             sql: >
-              ALTER TABLE page_chunks ADD COLUMN embedding vector;
+              ALTER TABLE page_chunks ADD COLUMN embedding vector(${embeddingDim});
         - createIndex:
             indexName: idx_page_chunks_page_id
             tableName: page_chunks

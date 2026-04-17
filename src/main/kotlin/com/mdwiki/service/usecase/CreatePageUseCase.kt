@@ -12,6 +12,7 @@ import com.mdwiki.rag.RagService
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.WikiFileService
+import com.mdwiki.service.WikilinkService
 import org.springframework.stereotype.Component
 
 @Component
@@ -22,11 +23,15 @@ class CreatePageUseCase(
     private val pageMetadataService: PageMetadataService,
     private val ragService: RagService,
     private val wikiFileService: WikiFileService,
-    private val frontmatterMetaService: FrontmatterMetaService
+    private val frontmatterMetaService: FrontmatterMetaService,
+    private val wikilinkService: WikilinkService
 ) {
     fun execute(request: CreatePageRequest, username: String) = run {
-        if (pageRepository.existsBySlug(request.slug)) {
-            throw ConflictException("Page with slug '${request.slug}' already exists")
+        val slugFromTitle = wikilinkService.normalizePageSlug(request.title)
+        val slug = slugFromTitle.ifBlank { request.slug }
+
+        if (pageRepository.existsBySlug(slug)) {
+            throw ConflictException("Page with slug '$slug' already exists")
         }
 
         val user = userRepository.findByUsername(username)
@@ -38,7 +43,7 @@ class CreatePageUseCase(
         }
 
         val page = Page(
-            slug = request.slug,
+            slug = slug,
             title = request.title,
             contentMd = request.contentMd,
             createdBy = user,

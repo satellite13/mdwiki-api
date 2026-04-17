@@ -3,6 +3,7 @@ package com.mdwiki.service
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Folder
 import com.mdwiki.model.Page
+import com.mdwiki.repository.FolderRepository
 import org.springframework.stereotype.Service
 import java.io.File
 import java.nio.file.Files
@@ -12,7 +13,8 @@ import java.nio.file.StandardCopyOption
 @Service
 class WikiFileService(
     private val wikiProperties: WikiProperties,
-    private val fileWatcherService: FileWatcherService
+    private val fileWatcherService: FileWatcherService,
+    private val folderRepository: FolderRepository
 ) {
     fun contentRoot(): File = File(wikiProperties.contentDir).also { it.mkdirs() }
 
@@ -38,7 +40,7 @@ class WikiFileService(
     }
 
     fun createOrRewritePageFile(page: Page, content: String) {
-        val targetFile = resolvePageFile(page.slug, page.folder)
+        val targetFile = resolveTargetMarkdownFile(page)
         targetFile.parentFile?.mkdirs()
         fileWatcherService.ignoreNextChange(targetFile.absolutePath)
         targetFile.writeText(content)
@@ -46,7 +48,11 @@ class WikiFileService(
     }
 
     fun relocatePageFile(page: Page, targetFolder: Folder?) {
-        val targetFile = resolvePageFile(page.slug, targetFolder)
+        val resolvedTarget = resolveFolderForFileOps(targetFolder)
+        if (resolvedTarget != null) {
+            touchFolderChain(resolvedTarget)
+        }
+        val targetFile = resolvePageFile(page.slug, resolvedTarget)
         val sourcePath = page.filePath
         if (sourcePath.isNullOrBlank()) {
             targetFile.parentFile?.mkdirs()
@@ -84,6 +90,56 @@ class WikiFileService(
         deleteEmptyAncestors(sourceFile.parentFile, contentRoot())
     }
 
+    /**
+     * Переименовывает markdown-файл страницы под новый slug (тот же каталог папки), обновляет [page.slug] и [page.filePath].
+     * Сначала опирается на [Page.filePath], чтобы не трогать ленивую цепочку [Folder] (иначе возможен LazyInitializationException).
+     */
+    fun renamePageFileToSlug(page: Page, newSlug: String) {
+        if (page.slug == newSlug) return
+
+        val sourceFromPath = page.filePath?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.exists() }
+        val sourceFile = sourceFromPath ?: run {
+            val folderForOps = resolveFolderForFileOps(page.folder)
+            if (folderForOps != null) {
+                touchFolderChain(folderForOps)
+                resolvePageFile(page.slug, folderForOps).takeIf { it.exists() }
+            } else {
+                resolvePageFile(page.slug, null).takeIf { it.exists() }
+            }
+        }
+
+        val targetFile = when {
+            sourceFile != null && sourceFile.exists() ->
+                File(sourceFile.parentFile!!, "$newSlug.md")
+            else -> {
+                val folderForOps = resolveFolderForFileOps(page.folder)
+                if (folderForOps == null) {
+                    File(contentRoot(), "$newSlug.md")
+                } else {
+                    touchFolderChain(folderForOps)
+                    resolvePageFile(newSlug, folderForOps)
+                }
+            }
+        }
+
+        targetFile.parentFile?.mkdirs()
+        if (sourceFile != null && sourceFile.exists()) {
+            if (sourceFile.absolutePath != targetFile.absolutePath) {
+                fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
+                fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+                Files.move(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                deleteEmptyAncestors(sourceFile.parentFile, contentRoot())
+            }
+        } else {
+            fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+            if (!targetFile.exists()) {
+                targetFile.writeText(page.contentMd ?: "")
+            }
+        }
+        page.slug = newSlug
+        page.filePath = targetFile.absolutePath
+    }
+
     fun deletePageFile(page: Page) {
         val sourcePath = page.filePath ?: return
         val sourceFile = File(sourcePath)
@@ -92,6 +148,39 @@ class WikiFileService(
             sourceFile.delete()
             deleteEmptyAncestors(sourceFile.parentFile, contentRoot())
         }
+    }
+
+    /** Первый `$slug.md` под корнем контента (как при синхронизации). */
+    fun findMarkdownFileForSlug(slug: String): File? {
+        val root = contentRoot()
+        if (!root.exists()) return null
+        val name = "$slug.md"
+        return root.walkTopDown()
+            .firstOrNull { it.isFile && it.name == name }
+    }
+
+    private fun isUnderContentRoot(file: File): Boolean =
+        try {
+            val root = contentRoot().canonicalFile.toPath()
+            val target = file.canonicalFile.toPath()
+            target.startsWith(root)
+        } catch (_: Exception) {
+            false
+        }
+
+    /**
+     * Удаляет markdown-файл, если он лежит внутри content dir (орфан без строки в БД).
+     * @return true, если файл был и удалён
+     */
+    fun deleteOrphanMarkdownIfExists(file: File): Boolean {
+        if (!file.isFile || !file.name.endsWith(".md", ignoreCase = true)) return false
+        if (!isUnderContentRoot(file)) return false
+        fileWatcherService.ignoreNextChange(file.absolutePath)
+        val removed = file.delete()
+        if (removed) {
+            deleteEmptyAncestors(file.parentFile, contentRoot())
+        }
+        return removed
     }
 
     fun moveFolderDirectory(oldDir: File, newDir: File) {
@@ -116,6 +205,44 @@ class WikiFileService(
         val dir = resolveFolderDirectory(folder)
         if (dir.exists()) {
             dir.deleteRecursively()
+        }
+    }
+
+    /**
+     * Целевой `.md` для записи: при известном [Page.filePath] не трогаем ленивый [Page.folder];
+     * иначе подгружаем папку по id из [FolderRepository] в текущей сессии.
+     */
+    private fun resolveTargetMarkdownFile(page: Page): File {
+        val fp = page.filePath?.trim().orEmpty()
+        if (fp.isNotEmpty()) {
+            val parent = File(fp).parentFile
+            if (parent != null) {
+                return File(parent, "${page.slug}.md")
+            }
+        }
+        val loaded = resolveFolderForFileOps(page.folder)
+        if (loaded != null) {
+            touchFolderChain(loaded)
+            return resolvePageFile(page.slug, loaded)
+        }
+        return resolvePageFile(page.slug, null)
+    }
+
+    /** Подменяет возможный отсоединённый Hibernate-proxy на сущность из persistence context. */
+    private fun resolveFolderForFileOps(folder: Folder?): Folder? {
+        val id = folder?.id ?: return null
+        return folderRepository.findById(id).orElse(null)
+    }
+
+    /**
+     * Обходит parent-цепочку, чтобы Hibernate подгрузил [Folder] до вызовов [buildFolderSegments]
+     * (иначе после частичных flush в той же транзакции возможен LazyInitializationException).
+     */
+    private fun touchFolderChain(folder: Folder?) {
+        var current = folder ?: return
+        while (true) {
+            current.name
+            current = current.parent ?: break
         }
     }
 

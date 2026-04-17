@@ -63,7 +63,7 @@ class FolderServiceTest {
         val childPage = Page(id = UUID.randomUUID(), slug = "guide-1", title = "Guide 1", folder = childFolder)
 
         whenever(folderRepository.findAll()).thenReturn(listOf(rootFolder, childFolder))
-        whenever(pageRepository.findAll()).thenReturn(listOf(rootPage, childPage))
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(rootPage, childPage))
 
         val tree = folderService.getTree()
 
@@ -88,6 +88,19 @@ class FolderServiceTest {
         val pageNode = tree.first { it.type == "page" }
         assertEquals("Home", pageNode.name)
         assertEquals("home", pageNode.slug)
+    }
+
+    @Test
+    fun `getTree omits soft-deleted pages`() {
+        val active = Page(id = UUID.randomUUID(), slug = "kept", title = "Kept")
+        whenever(folderRepository.findAll()).thenReturn(emptyList())
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(active))
+
+        val tree = folderService.getTree()
+
+        assertEquals(1, tree.size)
+        assertEquals("kept", tree.single().slug)
+        verify(pageRepository, never()).findAll()
     }
 
     @Test

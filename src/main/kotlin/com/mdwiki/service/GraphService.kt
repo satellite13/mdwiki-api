@@ -7,6 +7,7 @@ import com.mdwiki.error.NotFoundException
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class GraphService(
@@ -14,6 +15,7 @@ class GraphService(
     private val linkRepository: LinkRepository
 ) {
 
+    @Transactional(readOnly = true)
     fun getGraph(slug: String, depth: Int): GraphResponse {
         val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
             ?: throw NotFoundException("Page not found: $slug")
@@ -36,11 +38,14 @@ class GraphService(
                 val outgoing = linkRepository.findBySourcePage(currentPage)
                 for (link in outgoing) {
                     val targetSlug = link.targetSlug
-                    edges.add(GraphEdge(source = currentSlug, target = targetSlug))
-                    if (targetSlug !in visitedSlugs) {
-                        visitedSlugs.add(targetSlug)
-                        nextFrontier.add(targetSlug)
-                        val targetPage = link.targetPage ?: pageRepository.findBySlugAndDeletedAtIsNull(targetSlug)
+                    val targetPage = link.targetPage ?: pageRepository.findBySlugAndDeletedAtIsNull(targetSlug)
+                    // В БД target_slug может не совпадать со slug страницы (старые ссылки / rename);
+                    // в API графа рёбра и узлы должны совпадать по каноническому slug страницы.
+                    val canonicalTarget = targetPage?.slug ?: targetSlug
+                    edges.add(GraphEdge(source = currentSlug, target = canonicalTarget))
+                    if (canonicalTarget !in visitedSlugs) {
+                        visitedSlugs.add(canonicalTarget)
+                        nextFrontier.add(canonicalTarget)
                         if (targetPage != null) {
                             nodes.add(GraphNode(slug = targetPage.slug, title = targetPage.title, tags = targetPage.tags.map { it.name }, isCurrent = false))
                         } else {
@@ -68,6 +73,58 @@ class GraphService(
         // Deduplicate edges
         val uniqueEdges = edges.distinctBy { "${it.source}->${it.target}" }
 
+        return GraphResponse(nodes = nodes, edges = uniqueEdges)
+    }
+
+    /**
+     * Граф всей вики: все неудалённые страницы и рёбра из links.
+     * [highlight] — подсветить узел с этим slug (как «текущая» страница в UI).
+     */
+    @Transactional(readOnly = true)
+    fun getFullWikiGraph(highlight: String?): GraphResponse {
+        val pages = pageRepository.findAllByDeletedAtIsNull()
+        val knownSlugs = pages.map { it.slug }.toMutableSet()
+        val nodes = pages.map { p ->
+            GraphNode(
+                slug = p.slug,
+                title = p.title,
+                tags = p.tags.map { it.name },
+                isCurrent = highlight != null && p.slug == highlight
+            )
+        }.toMutableList()
+
+        val edges = mutableListOf<GraphEdge>()
+        for (link in linkRepository.findAll()) {
+            val src = link.sourcePage
+            if (src.deletedAt != null) continue
+            val srcSlug = src.slug
+            if (srcSlug !in knownSlugs) continue
+
+            val targetPage = link.targetPage ?: pageRepository.findBySlugAndDeletedAtIsNull(link.targetSlug)
+            if (targetPage != null && targetPage.deletedAt != null) continue
+            val canonicalTarget = targetPage?.slug ?: link.targetSlug
+
+            edges.add(GraphEdge(source = srcSlug, target = canonicalTarget))
+
+            if (canonicalTarget !in knownSlugs) {
+                if (targetPage != null) {
+                    nodes.add(
+                        GraphNode(
+                            slug = targetPage.slug,
+                            title = targetPage.title,
+                            tags = targetPage.tags.map { it.name },
+                            isCurrent = highlight != null && targetPage.slug == highlight
+                        )
+                    )
+                    knownSlugs.add(targetPage.slug)
+                } else {
+                    nodes.add(GraphNode(slug = canonicalTarget, title = canonicalTarget, tags = emptyList(), isCurrent = false))
+                    knownSlugs.add(canonicalTarget)
+                }
+            }
+        }
+
+        val uniqueEdges = edges.distinctBy { "${it.source}->${it.target}" }
         return GraphResponse(nodes = nodes, edges = uniqueEdges)
     }
 

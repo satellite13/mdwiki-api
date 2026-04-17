@@ -130,7 +130,7 @@ class PageControllerTest {
         mockMvc.get("/api/pages/test-page/graph").andExpect {
             status { isOk() }
             jsonPath("$.nodes[0].slug") { value("test-page") }
-            // Jackson + Kotlin: boolean `isCurrent` сериализуется как `current`
+            // Kotlin boolean `isCurrent` → в JSON ключ `current` (Jackson bean naming)
             jsonPath("$.nodes[0].current") { value(true) }
         }
         verify(graphService).getGraph("test-page", 1)

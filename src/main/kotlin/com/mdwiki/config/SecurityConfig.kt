@@ -14,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository
 
 @Configuration
 @EnableWebSecurity
@@ -21,7 +22,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 class SecurityConfig(
     private val mcpAcceptHeaderFilter: McpAcceptHeaderFilter,
     private val jwtAuthenticationFilter: JwtAuthenticationFilter,
-    private val apiKeyAuthenticationFilter: ApiKeyAuthenticationFilter
+    private val apiKeyAuthenticationFilter: ApiKeyAuthenticationFilter,
+    private val conciseAccessDeniedHandler: ConciseAccessDeniedHandler,
+    private val conciseAuthenticationEntryPoint: ConciseAuthenticationEntryPoint
 ) {
 
     @Bean
@@ -29,6 +32,9 @@ class SecurityConfig(
         http
             .csrf { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
+            // Persist SecurityContext on the request so ASYNC dispatches (SseEmitter, MCP /mcp/sse)
+            // still see authentication after the initial thread finishes; STATELESS has no session.
+            .securityContext { it.securityContextRepository(RequestAttributeSecurityContextRepository()) }
             .authorizeHttpRequests {
                 it
                     .requestMatchers("/api/auth/**").permitAll()
@@ -36,6 +42,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/events/tree").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/uploads/**").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/uploads/**").hasAnyRole("EDITOR", "ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/graph/**").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/pages/**", "/api/tags/**", "/api/search/**").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")
@@ -52,6 +59,10 @@ class SecurityConfig(
                     .requestMatchers("/api/api-keys/**").authenticated()
                     .requestMatchers("/mcp/**").authenticated()
                     .anyRequest().authenticated()
+            }
+            .exceptionHandling { ex ->
+                ex.accessDeniedHandler(conciseAccessDeniedHandler)
+                ex.authenticationEntryPoint(conciseAuthenticationEntryPoint)
             }
             .addFilterBefore(mcpAcceptHeaderFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)

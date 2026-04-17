@@ -23,7 +23,7 @@ class SyncService(
     private val folderRepository: FolderRepository,
     private val wikiProperties: WikiProperties,
     private val treeEventsService: TreeEventsService,
-    @Lazy private val folderService: FolderService,
+    @param:Lazy private val folderService: FolderService,
     private val wikiSyncEngine: WikiSyncEngine,
     transactionManager: PlatformTransactionManager
 ) {

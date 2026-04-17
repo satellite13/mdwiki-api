@@ -19,6 +19,25 @@ class WikilinkService {
             .replace(slugNonAlnum, "-")
             .replace(slugTrimDashes, "")
 
+    /**
+     * Заменяет вики-ссылки, у которых нормализованный slug цели равен [oldNormalizedSlug], на [newSlug] (подпись после `|` сохраняется).
+     */
+    fun rewriteWikilinksReferencingNormalizedSlug(body: String, oldNormalizedSlug: String, newSlug: String): String {
+        if (oldNormalizedSlug == newSlug) return body
+        return wikilinkPattern.replace(body) { m ->
+            val rawInner = m.groupValues[1].trim()
+            val label = m.groupValues[2].trim()
+            if (normalizePageSlug(rawInner) != oldNormalizedSlug) {
+                return@replace m.value
+            }
+            if (label.isEmpty()) {
+                "[[$newSlug]]"
+            } else {
+                "[[$newSlug|$label]]"
+            }
+        }
+    }
+
     fun extractWikilinks(markdown: String): List<Wikilink> {
         return wikilinkPattern.findAll(markdown).mapNotNull { match ->
             val rawSlug = match.groupValues[1].trim()

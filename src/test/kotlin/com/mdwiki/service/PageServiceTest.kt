@@ -8,12 +8,14 @@ import com.mdwiki.error.NotFoundException
 import com.mdwiki.model.Page
 import com.mdwiki.model.User
 import com.mdwiki.repository.FolderRepository
+import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.usecase.CreatePageUseCase
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.service.usecase.UpdatePageUseCase
+import com.mdwiki.service.WikilinkService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -23,13 +25,16 @@ import org.junit.jupiter.api.io.TempDir
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.*
+import java.io.File
 import java.nio.file.Path
+import java.time.Instant
 import java.util.UUID
 
 @ExtendWith(MockitoExtension::class)
 class PageServiceTest {
 
     @Mock private lateinit var pageRepository: PageRepository
+    @Mock private lateinit var linkRepository: LinkRepository
     @Mock private lateinit var userRepository: UserRepository
     @Mock private lateinit var folderRepository: FolderRepository
     @Mock private lateinit var pageMetadataService: PageMetadataService
@@ -38,6 +43,7 @@ class PageServiceTest {
     @Mock private lateinit var fileWatcherService: FileWatcherService
     @Mock private lateinit var treeEventsService: TreeEventsService
     @Mock private lateinit var folderService: FolderService
+    @Mock private lateinit var syncService: SyncService
 
     private lateinit var pageService: PageService
     private lateinit var wikiFileService: WikiFileService
@@ -48,14 +54,16 @@ class PageServiceTest {
     @BeforeEach
     fun setUp() {
         val props = WikiProperties(contentDir = tempDir.toString())
-        wikiFileService = WikiFileService(props, fileWatcherService)
+        wikiFileService = WikiFileService(props, fileWatcherService, folderRepository)
+        val wikilinkService = WikilinkService()
         val createPageUseCase = CreatePageUseCase(
             pageRepository, userRepository, folderRepository,
-            pageMetadataService, ragService, wikiFileService, frontmatterMetaService
+            pageMetadataService, ragService, wikiFileService, frontmatterMetaService, wikilinkService
         )
         val updatePageUseCase = UpdatePageUseCase(
             pageRepository, userRepository, folderRepository,
-            pageMetadataService, ragService, wikiFileService, frontmatterMetaService
+            pageMetadataService, ragService, wikiFileService, frontmatterMetaService,
+            wikilinkService, linkRepository
         )
         val deletePageUseCase = DeletePageUseCase(
             pageRepository, pageMetadataService, ragService, wikiFileService
@@ -65,6 +73,8 @@ class PageServiceTest {
             pageMetadataService,
             treeEventsService,
             folderService,
+            wikiFileService,
+            syncService,
             createPageUseCase,
             updatePageUseCase,
             deletePageUseCase
@@ -103,20 +113,42 @@ class PageServiceTest {
 
     @Test
     fun `update modifies page and rewrites file`() {
-        val page = Page(id = UUID.randomUUID(), slug = "my-page", title = "Old", contentMd = "old content")
+        val pageId = UUID.randomUUID()
+        val page = Page(id = pageId, slug = "my-page", title = "Old", contentMd = "old content")
         page.filePath = tempDir.resolve("my-page.md").toString()
         tempDir.resolve("my-page.md").toFile().writeText("old content")
 
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(emptyList())
+        whenever(pageRepository.findBySlug("new")).thenReturn(null)
+        whenever(linkRepository.updateAllTargetSlugs(any(), any())).thenReturn(0)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+        whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
         pageService.update("my-page", UpdatePageRequest(title = "New", contentMd = "new content"), "editor")
 
         verify(pageRepository, atLeastOnce()).save(argThat<Page> {
-            title == "New" && contentMd == "new content"
+            slug == "new" && title == "New" && contentMd == "new content"
         })
-        assertEquals("new content", tempDir.resolve("my-page.md").toFile().readText())
+        assertFalse(tempDir.resolve("my-page.md").toFile().exists())
+        assertEquals("new content", tempDir.resolve("new.md").toFile().readText())
+    }
+
+    @Test
+    fun `findBySlug pulls from disk when markdown exists but db has no active row`() {
+        val slug = "from-disk"
+        tempDir.resolve("$slug.md").toFile().writeText("# T\nbody")
+        val saved = Page(id = UUID.randomUUID(), slug = slug, title = "T", contentMd = "body")
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull(slug)).thenReturn(null, saved)
+        whenever(pageRepository.findByNormalizedTitle(slug)).thenReturn(null)
+        doNothing().whenever(syncService).syncSingleFile(any())
+
+        val result = pageService.findBySlug(slug)
+
+        assertEquals(slug, result.slug)
+        verify(syncService).syncSingleFile(argThat<File> { name == "$slug.md" })
+        verify(pageRepository, times(2)).findBySlugAndDeletedAtIsNull(slug)
     }
 
     @Test
@@ -162,11 +194,46 @@ class PageServiceTest {
     }
 
     @Test
-    fun `delete throws for nonexistent page`() {
+    fun `delete throws when page and markdown file both missing`() {
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("nonexistent")).thenReturn(null)
+        whenever(pageRepository.findBySlug("nonexistent")).thenReturn(null)
         assertThrows<NotFoundException> {
             pageService.delete("nonexistent")
         }
+    }
+
+    @Test
+    fun `delete removes orphan markdown file when no database row`() {
+        val slug = "only-on-disk"
+        tempDir.resolve("$slug.md").toFile().writeText("# x")
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull(slug)).thenReturn(null)
+        whenever(pageRepository.findBySlug(slug)).thenReturn(null)
+
+        pageService.delete(slug)
+
+        assertFalse(tempDir.resolve("$slug.md").toFile().exists())
+        verify(pageRepository, never()).delete(any())
+    }
+
+    @Test
+    fun `delete hard removes soft-deleted row and file from disk`() {
+        val slug = "tomb"
+        val id = UUID.randomUUID()
+        val file = tempDir.resolve("$slug.md").toFile().apply { writeText("a") }
+        val page = Page(id = id, slug = slug, title = "T", contentMd = "a").apply {
+            filePath = file.absolutePath
+            deletedAt = Instant.now()
+        }
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull(slug)).thenReturn(null)
+        whenever(pageRepository.findBySlug(slug)).thenReturn(page)
+        doNothing().whenever(pageMetadataService).deleteSourceLinks(any())
+        doNothing().whenever(ragService).deletePageChunks(any())
+        doNothing().whenever(pageMetadataService).cleanupOrphanedTags()
+
+        pageService.delete(slug)
+
+        verify(pageRepository).delete(page)
+        assertFalse(file.exists())
     }
 
     @Test

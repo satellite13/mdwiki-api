@@ -9,8 +9,8 @@ import java.util.UUID
 data class CreatePageRequest(
     @field:NotBlank
     @field:Pattern(
-        regexp = "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-        message = "Slug must be lowercase alphanumeric with hyphens"
+        regexp = "^[a-z0-9а-яё]+(?:-[a-z0-9а-яё]+)*$",
+        message = "Slug must be lowercase letters (latin or Cyrillic), digits, and hyphens"
     )
     val slug: String,
     @field:NotBlank

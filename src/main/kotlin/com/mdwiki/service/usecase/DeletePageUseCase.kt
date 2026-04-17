@@ -16,9 +16,31 @@ class DeletePageUseCase(
     private val wikiFileService: WikiFileService
 ) {
     fun execute(slug: String) {
-        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
-            ?: throw NotFoundException("Page not found: $slug")
-        page.deletedAt = Instant.now()
-        pageRepository.save(page)
+        val active = pageRepository.findBySlugAndDeletedAtIsNull(slug)
+        if (active != null) {
+            active.deletedAt = Instant.now()
+            pageRepository.save(active)
+            return
+        }
+
+        val tombstone = pageRepository.findBySlug(slug)
+        if (tombstone != null) {
+            pageMetadataService.deleteSourceLinks(tombstone)
+            tombstone.id?.let { ragService.deletePageChunks(it) }
+            wikiFileService.deletePageFile(tombstone)
+            wikiFileService.findMarkdownFileForSlug(slug)?.let { orphan ->
+                wikiFileService.deleteOrphanMarkdownIfExists(orphan)
+            }
+            pageRepository.delete(tombstone)
+            pageMetadataService.cleanupOrphanedTags()
+            return
+        }
+
+        val orphanOnly = wikiFileService.findMarkdownFileForSlug(slug)
+        if (orphanOnly != null && wikiFileService.deleteOrphanMarkdownIfExists(orphanOnly)) {
+            return
+        }
+
+        throw NotFoundException("Page not found: $slug")
     }
 }

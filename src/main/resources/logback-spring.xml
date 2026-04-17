@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+      Spring Boot подставляет это в CONSOLE_LOG_PATTERN из defaults.xml.
+      Число — максимум строк стека на одно исключение в цепочке (см. logback ThrowableProxyConverter).
+    -->
+    <springProperty name="STACKTRACE_LINES" source="mdwiki.logging.stacktrace-max-lines" defaultValue="16"/>
+    <property name="LOG_EXCEPTION_CONVERSION_WORD" value="%wEx{${STACKTRACE_LINES}}"/>
+
+    <include resource="org/springframework/boot/logging/logback/base.xml"/>
+</configuration>

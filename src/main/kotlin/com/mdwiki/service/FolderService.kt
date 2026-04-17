@@ -36,7 +36,7 @@ class FolderService(
         }
 
         val allFolders = folderRepository.findAll()
-        val allPages = pageRepository.findAll()
+        val allPages = pageRepository.findAllByDeletedAtIsNull()
 
         val foldersByParent = allFolders.groupBy { it.parent?.id }
         val pagesByFolder = allPages.groupBy { it.folder?.id }

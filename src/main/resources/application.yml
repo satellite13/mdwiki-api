@@ -16,6 +16,9 @@ spring:
       ddl-auto: validate
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
+    # Должно совпадать с mdwiki.embedding.dimension (HNSW / vector(n) в 005).
+    parameters:
+      embeddingDim: ${EMBEDDING_DIMENSION:1536}
   servlet:
     multipart:
       max-file-size: ${MDWIKI_UPLOAD_MAX_FILE_SIZE:20MB}
@@ -30,10 +33,15 @@ spring:
           mcp-endpoint: /mcp/sse
 
 mdwiki:
+  # Сколько строк стека писать в лог на одно исключение (logback LOG_EXCEPTION_CONVERSION_WORD)
+  logging:
+    stacktrace-max-lines: ${MDWIKI_LOG_STACKTRACE_LINES:16}
   jwt:
     secret: ${JWT_SECRET:default-dev-secret-change-in-production-must-be-at-least-256-bits}
     expiration-ms: 86400000
   content-dir: ${MDWIKI_CONTENT_DIR:./wiki-content}
+  # Размерность вектора в БД задаётся тем же EMBEDDING_DIMENSION (см. spring.liquibase.parameters).
+  # Ollama nomic-embed-text → обычно 768; OpenAI text-embedding-3-small → 1536.
   embedding:
     provider: ${EMBEDDING_PROVIDER:openai}
     dimension: ${EMBEDDING_DIMENSION:1536}

@@ -74,6 +74,29 @@ class GraphServiceTest {
     }
 
     @Test
+    fun `getGraph edge target uses resolved page slug when link targetSlug differs`() {
+        val root = page("mcp", "MCP протокол")
+        val guide = page("mcp-setup-guide", "Настройка MCP для mdwiki")
+        val link = Link(
+            sourcePage = root,
+            targetPage = guide,
+            targetSlug = "настройка-mcp-для-mdwiki"
+        )
+
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("mcp")).thenReturn(root)
+        whenever(linkRepository.findBySourcePage(root)).thenReturn(listOf(link))
+        whenever(linkRepository.findByTargetSlug("mcp")).thenReturn(emptyList())
+
+        val graph = graphService.getGraph("mcp", depth = 1)
+
+        assertEquals(
+            listOf(com.mdwiki.dto.GraphEdge("mcp", "mcp-setup-guide")),
+            graph.edges
+        )
+        assertTrue(graph.nodes.any { it.slug == "mcp-setup-guide" })
+    }
+
+    @Test
     fun `getGraph deduplicates parallel edges`() {
         val root = page("root", "Root")
         val target = page("b", "B")
@@ -134,6 +157,52 @@ class GraphServiceTest {
         val graph = graphService.getGraph("a", depth = 100)
 
         assertTrue(graph.nodes.any { it.slug == "d" })
+    }
+
+    @Test
+    fun `getFullWikiGraph includes all pages and links`() {
+        val a = page("a", "A")
+        val b = page("b", "B")
+        val link = Link(sourcePage = a, targetPage = b, targetSlug = "b")
+
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(a, b))
+        whenever(linkRepository.findAll()).thenReturn(listOf(link))
+
+        val graph = graphService.getFullWikiGraph(highlight = null)
+
+        assertEquals(setOf("a", "b"), graph.nodes.map { it.slug }.toSet())
+        assertEquals(listOf(com.mdwiki.dto.GraphEdge("a", "b")), graph.edges)
+        assertTrue(graph.nodes.none { it.isCurrent })
+    }
+
+    @Test
+    fun `getFullWikiGraph marks highlight node as current`() {
+        val a = page("a", "A")
+        val b = page("b", "B")
+
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(a, b))
+        whenever(linkRepository.findAll()).thenReturn(emptyList())
+
+        val graph = graphService.getFullWikiGraph(highlight = "b")
+
+        assertTrue(graph.nodes.find { it.slug == "b" }!!.isCurrent)
+        assertTrue(graph.nodes.find { it.slug == "a" }!!.isCurrent.not())
+    }
+
+    @Test
+    fun `getFullWikiGraph skips deleted source links`() {
+        val a = page("a", "A")
+        a.deletedAt = java.time.Instant.now()
+        val b = page("b", "B")
+        val link = Link(sourcePage = a, targetPage = b, targetSlug = "b")
+
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(b))
+        whenever(linkRepository.findAll()).thenReturn(listOf(link))
+
+        val graph = graphService.getFullWikiGraph(null)
+
+        assertEquals(setOf("b"), graph.nodes.map { it.slug }.toSet())
+        assertTrue(graph.edges.isEmpty())
     }
 
     @Test
