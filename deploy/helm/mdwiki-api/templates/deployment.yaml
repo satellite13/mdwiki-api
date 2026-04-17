@@ -18,6 +18,33 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- $chown := (.Values.persistence.chownInit | default dict) }}
+      {{- if and .Values.persistence.enabled (ne (default true $chown.enabled) false) }}
+      # На storage class'ах, игнорирующих podSecurityContext.fsGroup (OrbStack,
+      # kind, hostPath и т.п.), приходится chown'ить содержимое PVC к uid/gid,
+      # под которыми работает приложение. Иначе cnb (uid=1002, gid=1000) не
+      # может писать в подпапки, созданные root.
+      # Отключается через `persistence.chownInit.enabled=false` на managed-CSI,
+      # поддерживающих fsGroup.
+      initContainers:
+        - name: fix-permissions
+          image: {{ default "busybox:1.36" $chown.image | quote }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              chown -R {{ default 1002 $chown.uid }}:{{ default 1000 $chown.gid }} {{ .Values.persistence.mountPath }} && \
+              chmod -R u+rwX,g+rwX {{ .Values.persistence.mountPath }}
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: wiki-content
+              mountPath: {{ .Values.persistence.mountPath }}
+      {{- end }}
       containers:
         - name: mdwiki-api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
