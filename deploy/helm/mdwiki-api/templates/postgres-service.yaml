@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mdwiki-api.fullname" . }}-postgres
+  labels:
+    {{- include "mdwiki-api.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: {{ include "mdwiki-api.name" . }}-postgres
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.service.port }}
+      targetPort: 5432
+      protocol: TCP

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mdwiki-api
+description: Helm chart for MDWiki API deployment
+type: application
+version: 0.1.0
+appVersion: "0.0.0"

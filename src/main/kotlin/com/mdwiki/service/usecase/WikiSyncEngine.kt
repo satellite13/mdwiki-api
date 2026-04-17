@@ -29,6 +29,7 @@ class WikiSyncEngine(
     private val log = LoggerFactory.getLogger(WikiSyncEngine::class.java)
     private companion object {
         private const val FULL_SYNC_PAGE_BATCH_SIZE = 500
+        private const val REPLACEMENT_CHAR = '\uFFFD'
     }
 
     fun fullSync(): SyncService.SyncResult {
@@ -47,6 +48,10 @@ class WikiSyncEngine(
         val filesBySlug = linkedMapOf<String, File>()
         for (file in mdFiles) {
             val slug = file.nameWithoutExtension
+            if (isSuspiciousFilesystemSlug(slug)) {
+                log.warn("Sync: skipping suspicious slug '{}' from file '{}'", slug, file.absolutePath)
+                continue
+            }
             val existing = filesBySlug.putIfAbsent(slug, file)
             if (existing != null && existing.absolutePath != file.absolutePath) {
                 log.warn(
@@ -136,6 +141,10 @@ class WikiSyncEngine(
 
     fun syncSingleFile(file: File) {
         val slug = file.nameWithoutExtension
+        if (isSuspiciousFilesystemSlug(slug)) {
+            log.warn("Watcher: skipping suspicious slug '{}' from file '{}'", slug, file.absolutePath)
+            return
+        }
         val content = file.readText()
         val contentDir = File(wikiProperties.contentDir)
         val folder = resolveOrCreateFolderChain(contentDir, file)
@@ -181,13 +190,20 @@ class WikiSyncEngine(
     }
 
     fun removePage(slug: String) {
+        if (isSuspiciousFilesystemSlug(slug)) {
+            log.warn("Watcher: ignore delete for suspicious slug '{}'", slug)
+            return
+        }
         val page = pageRepository.findBySlug(slug) ?: return
         pageMetadataService.deleteSourceLinks(page)
         // Без detach входящих ссылок FK fk_links_target блокирует удаление.
         pageMetadataService.detachIncomingLinks(page)
         ragService.deletePageChunks(page.id!!)
         pageRepository.delete(page)
-        pageMetadataService.cleanupOrphanedTags()
+        runCatching { pageMetadataService.cleanupOrphanedTags() }
+            .onFailure { e ->
+                log.warn("Watcher: cleanupOrphanedTags failed for slug '{}': {}", slug, e.message)
+            }
         log.info("Watcher: removed page '$slug'")
     }
 
@@ -247,5 +263,9 @@ class WikiSyncEngine(
 
     private fun elapsedMs(startedAtNanos: Long): Long {
         return (System.nanoTime() - startedAtNanos) / 1_000_000
+    }
+
+    private fun isSuspiciousFilesystemSlug(slug: String): Boolean {
+        return slug.contains('?') || slug.contains(REPLACEMENT_CHAR)
     }
 }

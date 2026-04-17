@@ -6,3 +6,4 @@ build/
 out/
 wiki-content/
 .kotlin/
+values*.yaml

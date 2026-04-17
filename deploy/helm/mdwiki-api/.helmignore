@@ -1,0 +1,13 @@
+# VCS
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Docs
+README.md

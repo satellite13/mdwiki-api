@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mdwiki-api.fullname" . }}-postgres
+  labels:
+    {{- include "mdwiki-api.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "mdwiki-api.fullname" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "mdwiki-api.name" . }}-postgres
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "mdwiki-api.name" . }}-postgres
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- if not .Values.postgres.persistence.enabled }}
+      volumes:
+        - name: pgdata
+          emptyDir: {}
+      {{- end }}
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.username | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mdwiki-api.fullname" . }}-postgres
+                  key: POSTGRES_PASSWORD
+          livenessProbe:
+            tcpSocket:
+              port: postgres
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: postgres
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.postgres.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes:
+          {{- toYaml .Values.postgres.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.persistence.size }}
+        {{- if .Values.postgres.persistence.storageClass }}
+        storageClassName: {{ .Values.postgres.persistence.storageClass }}
+        {{- end }}
+  {{- end }}

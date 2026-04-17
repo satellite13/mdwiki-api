@@ -7,7 +7,6 @@ import com.mdwiki.repository.FolderRepository
 import org.springframework.stereotype.Service
 import java.io.File
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 @Service
@@ -81,11 +80,7 @@ class WikiFileService(
         targetFile.parentFile?.mkdirs()
         fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
         fileWatcherService.ignoreNextChange(targetFile.absolutePath)
-        Files.move(
-            sourceFile.toPath(),
-            targetFile.toPath(),
-            StandardCopyOption.REPLACE_EXISTING
-        )
+        moveFile(sourceFile, targetFile)
         page.filePath = targetFile.absolutePath
         deleteEmptyAncestors(sourceFile.parentFile, contentRoot())
     }
@@ -127,7 +122,7 @@ class WikiFileService(
             if (sourceFile.absolutePath != targetFile.absolutePath) {
                 fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
                 fileWatcherService.ignoreNextChange(targetFile.absolutePath)
-                Files.move(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                moveFile(sourceFile, targetFile)
                 deleteEmptyAncestors(sourceFile.parentFile, contentRoot())
             }
         } else {
@@ -264,12 +259,38 @@ class WikiFileService(
         return if (cleaned.isBlank()) "folder" else cleaned
     }
 
+    /**
+     * File-уровневый move без Path/Files.toPath(): на части окружений Path.encode
+     * падает на не-ASCII пути (например, кириллица в имени папки).
+     */
+    private fun moveFile(sourceFile: File, targetFile: File) {
+        if (targetFile.exists() && !targetFile.delete()) {
+            throw IllegalStateException("Cannot replace existing file: ${targetFile.absolutePath}")
+        }
+        targetFile.parentFile?.mkdirs()
+        if (sourceFile.renameTo(targetFile)) {
+            return
+        }
+        sourceFile.copyTo(targetFile, overwrite = true)
+        if (!sourceFile.delete()) {
+            throw IllegalStateException("Cannot delete source file after copy: ${sourceFile.absolutePath}")
+        }
+    }
+
     private fun deleteEmptyAncestors(start: File?, root: File) {
         var current = start
-        val rootPath = root.toPath().normalize()
+        val rootRef = try {
+            root.canonicalFile
+        } catch (_: Exception) {
+            root.absoluteFile
+        }
         while (current != null) {
-            val currentPath: Path = current.toPath().normalize()
-            if (currentPath == rootPath) {
+            val currentRef = try {
+                current.canonicalFile
+            } catch (_: Exception) {
+                current.absoluteFile
+            }
+            if (currentRef == rootRef) {
                 return
             }
             val children = current.listFiles()

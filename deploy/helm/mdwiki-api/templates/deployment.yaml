@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mdwiki-api.fullname" . }}
+  labels:
+    {{- include "mdwiki-api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mdwiki-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mdwiki-api.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mdwiki-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: LANG
+              value: "C.UTF-8"
+            - name: LC_ALL
+              value: "C.UTF-8"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"
+            - name: SPRING_DATASOURCE_URL
+              value: {{ printf "jdbc:postgresql://%s-postgres:%d/%s" (include "mdwiki-api.fullname" .) (int .Values.postgres.service.port) .Values.postgres.database | quote }}
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Values.postgres.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mdwiki-api.fullname" . }}-app
+                  key: SPRING_DATASOURCE_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mdwiki-api.fullname" . }}-app
+                  key: JWT_SECRET
+            - name: MDWIKI_CONTENT_DIR
+              value: {{ .Values.persistence.mountPath | quote }}
+            - name: MDWIKI_UPLOAD_MAX_FILE_SIZE
+              value: {{ .Values.app.uploadMaxFileSize | quote }}
+            - name: MDWIKI_UPLOAD_MAX_REQUEST_SIZE
+              value: {{ .Values.app.uploadMaxRequestSize | quote }}
+            - name: MDWIKI_LOG_STACKTRACE_LINES
+              value: {{ .Values.app.logStacktraceLines | quote }}
+            - name: EMBEDDING_PROVIDER
+              value: {{ .Values.app.embeddingProvider | quote }}
+            - name: EMBEDDING_DIMENSION
+              value: {{ .Values.app.embeddingDimension | quote }}
+            - name: OPENAI_BASE_URL
+              value: {{ .Values.app.openaiBaseUrl | quote }}
+            - name: OPENAI_EMBEDDING_MODEL
+              value: {{ .Values.app.openaiEmbeddingModel | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mdwiki-api.fullname" . }}-app
+                  key: OPENAI_API_KEY
+            - name: OLLAMA_BASE_URL
+              value: {{ .Values.app.ollamaBaseUrl | quote }}
+            - name: OLLAMA_EMBEDDING_MODEL
+              value: {{ .Values.app.ollamaEmbeddingModel | quote }}
+            - name: LMSTUDIO_BASE_URL
+              value: {{ .Values.app.lmstudioBaseUrl | quote }}
+            - name: LMSTUDIO_EMBEDDING_MODEL
+              value: {{ .Values.app.lmstudioEmbeddingModel | quote }}
+            - name: LMSTUDIO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mdwiki-api.fullname" . }}-app
+                  key: LMSTUDIO_API_KEY
+            - name: MDWIKI_RERANKER_MODEL_PATH
+              value: {{ .Values.app.rerankerModelPath | quote }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: wiki-content
+              mountPath: {{ .Values.persistence.mountPath }}
+          {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: wiki-content
+          persistentVolumeClaim:
+            claimName: {{ include "mdwiki-api.fullname" . }}-wiki-content
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
