@@ -56,12 +56,27 @@ class ConciseAuthenticationEntryPoint(
         response: HttpServletResponse,
         authException: org.springframework.security.core.AuthenticationException
     ) {
-        log.warn(
-            "Требуется аутентификация (HTTP 401): {} {} — {}",
-            request.method,
-            request.requestURI,
-            authException.message ?: authException.javaClass.simpleName
-        )
+        // `.well-known/*` — это штатный OAuth/MCP discovery: клиент всегда пробует эти
+        // пути без креденшлов, получает 401 и идёт дальше по Bearer. Не шумим WARN'ом,
+        // иначе лог забивается на каждый пинг MCP-клиента.
+        val uri = request.requestURI ?: ""
+        val isDiscoveryProbe = uri.startsWith("/.well-known/")
+        val reason = authException.message ?: authException.javaClass.simpleName
+        if (isDiscoveryProbe) {
+            log.debug(
+                "Discovery probe без аутентификации (HTTP 401): {} {} — {}",
+                request.method,
+                uri,
+                reason
+            )
+        } else {
+            log.warn(
+                "Требуется аутентификация (HTTP 401): {} {} — {}",
+                request.method,
+                uri,
+                reason
+            )
+        }
         if (response.isCommitted) {
             return
         }
