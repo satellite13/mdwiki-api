@@ -2,6 +2,9 @@ databaseChangeLog:
   - changeSet:
       id: 005-create-page-chunks
       author: mdwiki
+      # Changeset уже выполнялся в кластере; файл менялся — иначе Liquibase ValidationFailed.
+      # Новые правки схемы оформляйте отдельными changeset'ами, не правьте этот блок.
+      validCheckSum: '1:any'
       changes:
         - sql:
             sql: CREATE EXTENSION IF NOT EXISTS vector;
