@@ -22,10 +22,12 @@ interface TagRepository : JpaRepository<Tag, UUID> {
 
     @Query(
         value = """
-            SELECT t.id AS id, t.name AS name, COUNT(pt.page_id) AS pageCount
+            SELECT t.id AS id, t.name AS name, COUNT(p.id) AS pageCount
             FROM tags t
             LEFT JOIN page_tags pt ON pt.tag_id = t.id
+            LEFT JOIN pages p ON p.id = pt.page_id AND p.deleted_at IS NULL
             GROUP BY t.id, t.name
+            HAVING COUNT(p.id) > 0
             ORDER BY t.name ASC
         """,
         nativeQuery = true

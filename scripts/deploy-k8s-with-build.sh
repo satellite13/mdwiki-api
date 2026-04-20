@@ -1,6 +1,52 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/deploy-k8s-with-build.sh [options]
+
+Options:
+  --recreate-db   Delete Postgres StatefulSet + PVC before deploy.
+                  Use when you need a clean DB and fresh Liquibase checksums.
+  --no-wait-for-postgres-ready
+                  Skip waiting for Postgres readiness before API restart.
+  --embedding-provider <provider>
+                  Set app.embeddingProvider (openai | ollama | lmstudio).
+  --openai-api-key <key>
+                  Set app.openaiApiKey in Helm values for this deploy.
+  -h, --help      Show this help.
+EOF
+}
+
+resolve_embedding_provider_from_values_file() {
+  local file_path="$1"
+  if [[ ! -f "${file_path}" ]]; then
+    return 0
+  fi
+
+  awk '
+    BEGIN { in_app = 0 }
+    /^[[:space:]]*#/ { next }
+    /^[^[:space:]]/ {
+      if ($0 ~ /^app:[[:space:]]*$/) {
+        in_app = 1
+        next
+      }
+      in_app = 0
+    }
+    in_app == 1 && $0 ~ /^[[:space:]]+embeddingProvider:[[:space:]]*/ {
+      line = $0
+      sub(/^[[:space:]]+embeddingProvider:[[:space:]]*/, "", line)
+      sub(/[[:space:]]*#.*/, "", line)
+      gsub(/^["'\'']|["'\'']$/, "", line)
+      if (length(line) > 0) {
+        print line
+        exit
+      }
+    }
+  ' "${file_path}"
+}
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHART_DIR="${CHART_DIR:-${ROOT_DIR}/deploy/helm/mdwiki-api}"
 
@@ -8,6 +54,10 @@ RELEASE_NAME="${RELEASE_NAME:-mdwiki-api}"
 NAMESPACE="${NAMESPACE:-mdwiki}"
 VALUES_FILE="${VALUES_FILE:-}"
 TIMEOUT="${TIMEOUT:-5m}"
+RECREATE_DB="${RECREATE_DB:-false}"
+WAIT_FOR_POSTGRES_READY="${WAIT_FOR_POSTGRES_READY:-true}"
+EMBEDDING_PROVIDER_VALUE="${EMBEDDING_PROVIDER_VALUE:-${EMBEDDING_PROVIDER:-}}"
+OPENAI_API_KEY_VALUE="${OPENAI_API_KEY_VALUE:-${OPENAI_API_KEY:-}}"
 
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-mdwiki-api}"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD)}"
@@ -16,6 +66,44 @@ FULL_IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
 # auto | docker | bootbuildimage
 BUILD_METHOD="${BUILD_METHOD:-auto}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --recreate-db)
+      RECREATE_DB="true"
+      shift
+      ;;
+    --no-wait-for-postgres-ready)
+      WAIT_FOR_POSTGRES_READY="false"
+      shift
+      ;;
+    --embedding-provider)
+      if [[ $# -lt 2 ]]; then
+        echo "--embedding-provider requires a value" >&2
+        exit 1
+      fi
+      EMBEDDING_PROVIDER_VALUE="$2"
+      shift 2
+      ;;
+    --openai-api-key)
+      if [[ $# -lt 2 ]]; then
+        echo "--openai-api-key requires a value" >&2
+        exit 1
+      fi
+      OPENAI_API_KEY_VALUE="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [[ ! -d "${CHART_DIR}" ]]; then
   echo "Chart directory not found: ${CHART_DIR}" >&2
@@ -41,6 +129,15 @@ else
   exit 1
 fi
 
+if [[ "${RECREATE_DB}" == "true" ]]; then
+  POSTGRES_STATEFULSET_NAME="${POSTGRES_STATEFULSET_NAME:-${RELEASE_NAME}-mdwiki-api-postgres}"
+  POSTGRES_PVC_NAME="${POSTGRES_PVC_NAME:-pgdata-${POSTGRES_STATEFULSET_NAME}-0}"
+
+  echo "RECREATE_DB=true: deleting statefulset/${POSTGRES_STATEFULSET_NAME} and pvc/${POSTGRES_PVC_NAME}"
+  kubectl -n "${NAMESPACE}" delete statefulset "${POSTGRES_STATEFULSET_NAME}" --ignore-not-found=true --wait=true
+  kubectl -n "${NAMESPACE}" delete pvc "${POSTGRES_PVC_NAME}" --ignore-not-found=true
+fi
+
 HELM_ARGS=(
   upgrade
   --install
@@ -59,10 +156,61 @@ if [[ -n "${VALUES_FILE}" ]]; then
   HELM_ARGS+=(--values "${VALUES_FILE}")
 fi
 
+if [[ -z "${EMBEDDING_PROVIDER_VALUE}" && -n "${VALUES_FILE}" ]]; then
+  EMBEDDING_PROVIDER_VALUE="$(resolve_embedding_provider_from_values_file "${VALUES_FILE}")"
+fi
+
+if [[ -n "${EMBEDDING_PROVIDER_VALUE}" ]]; then
+  HELM_ARGS+=(--set-string "app.embeddingProvider=${EMBEDDING_PROVIDER_VALUE}")
+fi
+
+if [[ -n "${OPENAI_API_KEY_VALUE}" ]]; then
+  HELM_ARGS+=(--set-string "app.openaiApiKey=${OPENAI_API_KEY_VALUE}")
+else
+  EFFECTIVE_EMBEDDING_PROVIDER="${EMBEDDING_PROVIDER_VALUE:-openai}"
+  if [[ "${EFFECTIVE_EMBEDDING_PROVIDER}" == "openai" ]]; then
+    echo "Warning: OPENAI API key is empty. embeddingProvider=openai will fail with 401." >&2
+  fi
+fi
+
 echo "Deploying ${RELEASE_NAME} to namespace ${NAMESPACE}"
 helm "${HELM_ARGS[@]}"
 
 DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-${RELEASE_NAME}-mdwiki-api}"
+if [[ "${RECREATE_DB}" == "true" ]]; then
+  POSTGRES_STATEFULSET_NAME="${POSTGRES_STATEFULSET_NAME:-${RELEASE_NAME}-mdwiki-api-postgres}"
+  POSTGRES_POD_NAME="${POSTGRES_POD_NAME:-${POSTGRES_STATEFULSET_NAME}-0}"
+  POSTGRES_DB_NAME="${POSTGRES_DB_NAME:-mdwiki}"
+  POSTGRES_USER_NAME="${POSTGRES_USER_NAME:-mdwiki}"
+
+  if [[ "${WAIT_FOR_POSTGRES_READY}" == "true" ]]; then
+    echo "RECREATE_DB=true: waiting for statefulset/${POSTGRES_STATEFULSET_NAME} rollout"
+    kubectl -n "${NAMESPACE}" rollout status "statefulset/${POSTGRES_STATEFULSET_NAME}" --timeout="${TIMEOUT}"
+
+    echo "RECREATE_DB=true: waiting for pod/${POSTGRES_POD_NAME} readiness"
+    kubectl -n "${NAMESPACE}" wait --for=condition=Ready "pod/${POSTGRES_POD_NAME}" --timeout="${TIMEOUT}"
+
+    echo "RECREATE_DB=true: waiting for Postgres to accept connections"
+    POSTGRES_READY=false
+    for attempt in {1..30}; do
+      if kubectl -n "${NAMESPACE}" exec "${POSTGRES_POD_NAME}" -- \
+        pg_isready -U "${POSTGRES_USER_NAME}" -d "${POSTGRES_DB_NAME}" >/dev/null 2>&1; then
+        POSTGRES_READY=true
+        break
+      fi
+      sleep 2
+    done
+
+    if [[ "${POSTGRES_READY}" != "true" ]]; then
+      echo "Postgres did not become ready in time." >&2
+      exit 1
+    fi
+  fi
+
+  echo "RECREATE_DB=true: forcing deployment/${DEPLOYMENT_NAME} restart to rerun Liquibase on fresh DB"
+  kubectl -n "${NAMESPACE}" rollout restart "deployment/${DEPLOYMENT_NAME}"
+fi
+
 echo "Waiting for deployment/${DEPLOYMENT_NAME} rollout"
 kubectl rollout status "deployment/${DEPLOYMENT_NAME}" -n "${NAMESPACE}" --timeout="${TIMEOUT}"
 

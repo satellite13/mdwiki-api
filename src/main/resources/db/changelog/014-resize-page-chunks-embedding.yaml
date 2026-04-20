@@ -2,7 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: 014-resize-page-chunks-embedding
       author: mdwiki
-      validCheckSum: '1:any'
       # Пересоздаём колонку embedding под текущий embeddingDim. Размерность
       # задаётся Liquibase-параметром (EMBEDDING_DIMENSION). Если размерность
       # провайдера изменилась (например, переключились с OpenAI 1536 на
