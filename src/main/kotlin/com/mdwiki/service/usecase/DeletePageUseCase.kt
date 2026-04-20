@@ -15,34 +15,46 @@ class DeletePageUseCase(
     private val ragService: RagService,
     private val wikiFileService: WikiFileService
 ) {
-    fun execute(slug: String) {
-        val active = pageRepository.findBySlugAndDeletedAtIsNull(slug)
-        if (active != null) {
-            active.deletedAt = Instant.now()
-            pageRepository.save(active)
-            return
-        }
+    enum class DeleteMode {
+        SOFT,
+        HARD
+    }
 
-        val tombstone = pageRepository.findBySlug(slug)
-        if (tombstone != null) {
-            pageMetadataService.deleteSourceLinks(tombstone)
-            // Отвязываем входящие ссылки, иначе FK fk_links_target ломает hard-delete.
-            pageMetadataService.detachIncomingLinks(tombstone)
-            tombstone.id?.let { ragService.deletePageChunks(it) }
-            wikiFileService.deletePageFile(tombstone)
-            wikiFileService.findMarkdownFileForSlug(slug)?.let { orphan ->
-                wikiFileService.deleteOrphanMarkdownIfExists(orphan)
+    fun execute(slug: String, mode: DeleteMode = DeleteMode.SOFT) {
+        val page = pageRepository.findBySlug(slug)
+        if (page != null) {
+            if (mode == DeleteMode.SOFT) {
+                if (page.deletedAt == null) {
+                    page.deletedAt = Instant.now()
+                    pageRepository.save(page)
+                }
+                return
             }
-            pageRepository.delete(tombstone)
-            pageMetadataService.cleanupOrphanedTags()
+            hardDelete(slug, page)
             return
         }
 
-        val orphanOnly = wikiFileService.findMarkdownFileForSlug(slug)
-        if (orphanOnly != null && wikiFileService.deleteOrphanMarkdownIfExists(orphanOnly)) {
-            return
+        if (mode == DeleteMode.HARD) {
+            val orphanOnly = wikiFileService.findMarkdownFileForSlug(slug)
+            if (orphanOnly != null && wikiFileService.deleteOrphanMarkdownIfExists(orphanOnly)) {
+                return
+            }
         }
 
         throw NotFoundException("Page not found: $slug")
+    }
+
+    private fun hardDelete(slug: String, page: com.mdwiki.model.Page) {
+        pageMetadataService.deleteSourceLinks(page)
+        // Отвязываем входящие ссылки, иначе FK fk_links_target ломает hard-delete.
+        pageMetadataService.detachIncomingLinks(page)
+        page.id?.let { ragService.deletePageChunks(it) }
+        wikiFileService.deletePageFile(page)
+        val orphanOnly = wikiFileService.findMarkdownFileForSlug(slug)
+        if (orphanOnly != null) {
+            wikiFileService.deleteOrphanMarkdownIfExists(orphanOnly)
+        }
+        pageRepository.delete(page)
+        pageMetadataService.cleanupOrphanedTags()
     }
 }

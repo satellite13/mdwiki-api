@@ -3,6 +3,7 @@ package com.mdwiki.controller
 import com.mdwiki.dto.*
 import com.mdwiki.service.GraphService
 import com.mdwiki.service.PageService
+import com.mdwiki.service.usecase.DeletePageUseCase
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.springframework.security.core.Authentication
@@ -55,7 +56,10 @@ class PageController(
     }
 
     @DeleteMapping("/{slug}")
-    fun delete(@PathVariable slug: String) = pageService.delete(slug)
+    fun delete(
+        @PathVariable slug: String,
+        @RequestParam(defaultValue = "SOFT") mode: DeletePageUseCase.DeleteMode
+    ) = pageService.delete(slug, mode)
 
     @PostMapping("/{slug}/restore")
     fun restore(@PathVariable slug: String): PageResponse = pageService.restore(slug)

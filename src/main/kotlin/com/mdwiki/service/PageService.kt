@@ -77,8 +77,8 @@ class PageService(
     }
 
     @Transactional
-    fun delete(slug: String) {
-        deletePageUseCase.execute(slug)
+    fun delete(slug: String, mode: DeletePageUseCase.DeleteMode = DeletePageUseCase.DeleteMode.SOFT) {
+        deletePageUseCase.execute(slug, mode)
         folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
     }
