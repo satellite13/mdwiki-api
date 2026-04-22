@@ -41,7 +41,8 @@ databaseChangeLog:
                   defaultValueComputed: now()
                   constraints:
                     nullable: false
-        - addCheckConstraint:
-            tableName: embedding_runtime_settings
-            constraintName: ck_embedding_runtime_settings_provider
-            checkConstraint: provider in ('openai', 'ollama', 'lmstudio')
+        - sql:
+            sql: |
+              ALTER TABLE embedding_runtime_settings
+              ADD CONSTRAINT ck_embedding_runtime_settings_provider
+              CHECK (provider IN ('openai', 'ollama', 'lmstudio'));
