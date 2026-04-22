@@ -155,6 +155,7 @@ class FolderService(
     fun delete(id: UUID) {
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
+        val folderDir = wikiFileService.resolveFolderDirectory(folder)
 
         val allFolders = folderRepository.findAll()
         val subtreeFolders = collectSubtree(folder, allFolders)
@@ -167,8 +168,12 @@ class FolderService(
         }
         pageRepository.saveAll(pages)
 
+        // Удаляем директорию до удаления сущности папки из persistence context:
+        // для вложенных папок это безопаснее с точки зрения lazy parent-цепочки.
+        if (folderDir.exists()) {
+            folderDir.deleteRecursively()
+        }
         folderRepository.delete(folder)
-        wikiFileService.deleteFolderDirectory(folder)
         invalidateCache()
         treeEventsService.publishTreeUpdated()
     }
