@@ -27,3 +27,5 @@ databaseChangeLog:
       file: db/changelog/013-create-attachments.yaml
   - include:
       file: db/changelog/014-resize-page-chunks-embedding.yaml
+  - include:
+      file: db/changelog/015-create-embedding-runtime-settings.yaml

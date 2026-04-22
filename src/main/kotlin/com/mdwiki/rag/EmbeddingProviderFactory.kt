@@ -20,32 +20,17 @@ class EmbeddingProviderFactory {
     }
 
     @Bean
-    fun embeddingProvider(
+    fun switchableEmbeddingProvider(
         properties: EmbeddingProperties,
-        webClientBuilder: WebClient.Builder
-    ): EmbeddingProvider {
-        return when (properties.provider.lowercase()) {
-            "openai" -> OpenAiCompatibleEmbedding(
-                baseUrl = properties.openai.baseUrl,
-                model = properties.openai.model,
-                apiKey = properties.openai.apiKey,
-                dimension = properties.dimension,
-                webClientBuilder = webClientBuilder
-            )
-            "ollama" -> OllamaEmbedding(
-                baseUrl = properties.ollama.baseUrl,
-                model = properties.ollama.model,
-                dimension = properties.dimension,
-                webClientBuilder = webClientBuilder
-            )
-            "lmstudio" -> OpenAiCompatibleEmbedding(
-                baseUrl = properties.lmstudio.baseUrl,
-                model = properties.lmstudio.model,
-                apiKey = properties.lmstudio.apiKey,
-                dimension = properties.dimension,
-                webClientBuilder = webClientBuilder
-            )
-            else -> throw IllegalArgumentException("Unknown embedding provider: ${properties.provider}")
-        }
+        embeddingProviderBuilder: EmbeddingProviderBuilder
+    ): SwitchableEmbeddingProvider {
+        val initialModel = embeddingProviderBuilder.defaultModelFor(properties.provider)
+        val initialProvider = embeddingProviderBuilder.create(properties.provider, initialModel)
+        return SwitchableEmbeddingProvider(initialProvider)
+    }
+
+    @Bean
+    fun embeddingProvider(switchableEmbeddingProvider: SwitchableEmbeddingProvider): EmbeddingProvider {
+        return switchableEmbeddingProvider
     }
 }

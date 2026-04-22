@@ -54,6 +54,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/folders/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/folders/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.DELETE, "/api/folders/**").hasAnyRole("EDITOR", "ADMIN")
+                    .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .requestMatchers("/api/sync/**").hasRole("ADMIN")
                     .requestMatchers("/api/users/**").hasRole("ADMIN")
                     .requestMatchers("/api/api-keys/**").authenticated()
