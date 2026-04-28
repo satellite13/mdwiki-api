@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.web.reactive.function.client.WebClient
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.Base64
 
 class OpenAiCompatibleEmbeddingTest {
 
@@ -58,6 +61,38 @@ class OpenAiCompatibleEmbeddingTest {
         mockServer.enqueue(MockResponse().setBody(objectMapper.writeValueAsString(responseBody)).setHeader("Content-Type", "application/json"))
         val result = embedding.embed(listOf("text1", "text2"))
         assertEquals(2, result.size)
+    }
+
+    @Test
+    fun `embed parses base64 int8 embeddings`() {
+        val encoded = Base64.getEncoder().encodeToString(byteArrayOf(1, 2, 3))
+        val responseBody = mapOf("data" to listOf(mapOf("embedding" to encoded, "index" to 0)))
+        mockServer.enqueue(MockResponse().setBody(objectMapper.writeValueAsString(responseBody)).setHeader("Content-Type", "application/json"))
+
+        val result = embedding.embed("hello world")
+        assertEquals(3, result.size)
+        assertEquals(1f, result[0], 0.001f)
+        assertEquals(2f, result[1], 0.001f)
+        assertEquals(3f, result[2], 0.001f)
+    }
+
+    @Test
+    fun `embed parses base64 float32 embeddings`() {
+        val bytes = ByteBuffer.allocate(12)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .putFloat(0.25f)
+            .putFloat(0.5f)
+            .putFloat(0.75f)
+            .array()
+        val encoded = Base64.getEncoder().encodeToString(bytes)
+        val responseBody = mapOf("data" to listOf(mapOf("embedding" to encoded, "index" to 0)))
+        mockServer.enqueue(MockResponse().setBody(objectMapper.writeValueAsString(responseBody)).setHeader("Content-Type", "application/json"))
+
+        val result = embedding.embed("hello world")
+        assertEquals(3, result.size)
+        assertEquals(0.25f, result[0], 0.0001f)
+        assertEquals(0.5f, result[1], 0.0001f)
+        assertEquals(0.75f, result[2], 0.0001f)
     }
 
     @Test

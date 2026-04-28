@@ -5,6 +5,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.http.MediaType
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.Base64
 
 class OpenAiCompatibleEmbedding(
     private val baseUrl: String,
@@ -55,7 +58,7 @@ class OpenAiCompatibleEmbedding(
         }
 
         return data.sortedBy { it.index }
-            .map { datum -> datum.embedding.map { it.toFloat() }.toFloatArray() }
+            .map { datum -> decodeEmbedding(datum.embedding, datum.index) }
     }
 
     override fun dimension(): Int = dimension
@@ -85,9 +88,70 @@ class OpenAiCompatibleEmbedding(
         return if (s.length <= limit) s else s.substring(0, limit) + "…(+${s.length - limit})"
     }
 
+    private fun decodeEmbedding(embeddingNode: Any?, index: Int): FloatArray {
+        if (embeddingNode == null) {
+            throw RuntimeException("Malformed embedding response from $baseUrl: `data[$index].embedding` is null")
+        }
+
+        if (embeddingNode is List<*>) {
+            if (embeddingNode.isEmpty()) {
+                throw RuntimeException("Malformed embedding response from $baseUrl: `data[$index].embedding` is empty array")
+            }
+            return embeddingNode.map { item ->
+                when (item) {
+                    is Number -> item.toFloat()
+                    is String -> item.toFloatOrNull()
+                    else -> null
+                } ?: throw RuntimeException(
+                    "Malformed embedding response from $baseUrl: `data[$index].embedding` contains non-numeric item"
+                )
+            }.toFloatArray()
+        }
+
+        if (embeddingNode is String) {
+            return decodeBase64Embedding(embeddingNode, index)
+        }
+
+        throw RuntimeException(
+            "Malformed embedding response from $baseUrl: unsupported `data[$index].embedding` type (${embeddingNode::class.java.simpleName})"
+        )
+    }
+
+    private fun decodeBase64Embedding(encoded: String, index: Int): FloatArray {
+        val bytes = try {
+            Base64.getDecoder().decode(encoded)
+        } catch (e: IllegalArgumentException) {
+            throw RuntimeException("Malformed embedding response from $baseUrl: invalid base64 in `data[$index].embedding`", e)
+        }
+        if (bytes.isEmpty()) {
+            throw RuntimeException("Malformed embedding response from $baseUrl: decoded `data[$index].embedding` is empty")
+        }
+
+        return when {
+            // Perplexity-style quantized payload: one int8 value per dimension.
+            bytes.size == dimension -> bytes.map { it.toFloat() }.toFloatArray()
+            // OpenAI-compatible binary float payload.
+            bytes.size == dimension * 4 -> decodeFloat32LittleEndian(bytes)
+            // Fallback for providers that return float32 with inferred dimension.
+            bytes.size % 4 == 0 -> decodeFloat32LittleEndian(bytes)
+            // Last resort: treat as int8 vector with inferred dimension.
+            else -> bytes.map { it.toFloat() }.toFloatArray()
+        }
+    }
+
+    private fun decodeFloat32LittleEndian(bytes: ByteArray): FloatArray {
+        val count = bytes.size / 4
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val out = FloatArray(count)
+        for (i in 0 until count) {
+            out[i] = buffer.float
+        }
+        return out
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class EmbeddingResponse(val data: List<EmbeddingDatum>? = null)
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    data class EmbeddingDatum(val embedding: List<Double>, val index: Int)
+    data class EmbeddingDatum(val embedding: Any? = null, val index: Int)
 }
