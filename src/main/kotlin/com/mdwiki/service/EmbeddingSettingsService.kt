@@ -26,12 +26,19 @@ class EmbeddingSettingsService(
     @PostConstruct
     fun initRuntimeProviderFromSettings() {
         val settings = getOrCreateSettings()
-        val runtimeProvider = providerBuilder.create(settings.provider, settings.model)
+        val runtimeProvider = providerBuilder.create(
+            provider = settings.provider,
+            model = settings.model,
+            baseUrlOverride = settings.baseUrl,
+            apiKeyOverride = settings.apiKey
+        )
         switchableEmbeddingProvider.switchTo(runtimeProvider)
         log.info(
-            "Initialized runtime embedding settings: provider={}, model={}, dimension={}",
+            "Initialized runtime embedding settings: provider={}, model={}, baseUrl={}, apiKeyConfigured={}, dimension={}",
             settings.provider,
             settings.model,
+            providerBuilder.resolveBaseUrl(settings.provider, settings.baseUrl),
+            providerBuilder.isApiKeyConfigured(settings.provider, settings.apiKey),
             embeddingProperties.dimension
         )
     }
@@ -39,9 +46,12 @@ class EmbeddingSettingsService(
     @Transactional
     fun getSettings(): EmbeddingSettingsResponse {
         val settings = getOrCreateSettings()
+        val baseUrl = providerBuilder.resolveBaseUrl(settings.provider, settings.baseUrl)
         return EmbeddingSettingsResponse(
             provider = settings.provider,
             model = settings.model,
+            baseUrl = baseUrl,
+            apiKeyConfigured = providerBuilder.isApiKeyConfigured(settings.provider, settings.apiKey),
             expectedDimension = embeddingProperties.dimension
         )
     }
@@ -55,12 +65,33 @@ class EmbeddingSettingsService(
             throw IllegalArgumentException("Embedding model must not be blank")
         }
 
-        val runtimeProvider = providerBuilder.create(provider, model)
+        val existingBaseUrl = settings.baseUrl?.trim()?.takeIf { it.isNotEmpty() }
+        val requestedBaseUrlRaw = request.baseUrl?.trim()
+        val nextBaseUrl = when {
+            request.baseUrl == null -> existingBaseUrl
+            requestedBaseUrlRaw.isNullOrEmpty() -> null
+            else -> requestedBaseUrlRaw
+        }
+
+        val existingApiKey = settings.apiKey?.trim()?.takeIf { it.isNotEmpty() }
+        val requestedApiKey = request.apiKey?.trim()?.takeIf { it.isNotEmpty() }
+        val nextApiKey = requestedApiKey ?: existingApiKey
+
+        val runtimeProvider = providerBuilder.create(
+            provider = provider,
+            model = model,
+            baseUrlOverride = nextBaseUrl,
+            apiKeyOverride = nextApiKey
+        )
         val actualDimension = runtimeProvider.embed("__mdwiki_embedding_probe__").size
         val expectedDimension = embeddingProperties.dimension
 
         settings.provider = provider
         settings.model = model
+        settings.baseUrl = nextBaseUrl
+        if (requestedApiKey != null) {
+            settings.apiKey = requestedApiKey
+        }
         settings.updatedAt = Instant.now()
         repository.save(settings)
         switchableEmbeddingProvider.switchTo(runtimeProvider)
@@ -78,9 +109,11 @@ class EmbeddingSettingsService(
         }
 
         log.info(
-            "Updated embedding runtime settings: provider={}, model={}, expectedDimension={}, actualDimension={}",
+            "Updated embedding runtime settings: provider={}, model={}, baseUrl={}, apiKeyConfigured={}, expectedDimension={}, actualDimension={}",
             provider,
             model,
+            providerBuilder.resolveBaseUrl(provider, settings.baseUrl),
+            providerBuilder.isApiKeyConfigured(provider, settings.apiKey),
             expectedDimension,
             actualDimension
         )
@@ -88,6 +121,8 @@ class EmbeddingSettingsService(
         return EmbeddingSettingsResponse(
             provider = provider,
             model = model,
+            baseUrl = providerBuilder.resolveBaseUrl(provider, settings.baseUrl),
+            apiKeyConfigured = providerBuilder.isApiKeyConfigured(provider, settings.apiKey),
             expectedDimension = expectedDimension,
             warning = warning
         )

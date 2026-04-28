@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank
 data class EmbeddingSettingsResponse(
     val provider: String,
     val model: String,
+    val baseUrl: String,
+    val apiKeyConfigured: Boolean,
     val expectedDimension: Int,
     val warning: EmbeddingSettingsWarningResponse? = null
 )
@@ -20,5 +22,7 @@ data class UpdateEmbeddingSettingsRequest(
     @field:NotBlank(message = "provider must not be blank")
     val provider: String,
     @field:NotBlank(message = "model must not be blank")
-    val model: String
+    val model: String,
+    val baseUrl: String? = null,
+    val apiKey: String? = null
 )

@@ -29,3 +29,5 @@ databaseChangeLog:
       file: db/changelog/014-resize-page-chunks-embedding.yaml
   - include:
       file: db/changelog/015-create-embedding-runtime-settings.yaml
+  - include:
+      file: db/changelog/016-add-embedding-runtime-endpoint-and-key.yaml

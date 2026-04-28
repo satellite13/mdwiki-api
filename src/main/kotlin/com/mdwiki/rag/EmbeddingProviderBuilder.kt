@@ -26,31 +26,61 @@ class EmbeddingProviderBuilder(
         }
     }
 
-    fun create(provider: String, model: String): EmbeddingProvider {
+    fun resolveBaseUrl(provider: String, baseUrlOverride: String?): String {
+        val normalizedProvider = normalizeProvider(provider)
+        val override = baseUrlOverride?.trim()?.takeIf { it.isNotEmpty() }
+        if (override != null) return override
+        return when (normalizedProvider) {
+            "openai" -> embeddingProperties.openai.baseUrl
+            "ollama" -> embeddingProperties.ollama.baseUrl
+            "lmstudio" -> embeddingProperties.lmstudio.baseUrl
+            else -> throw IllegalArgumentException("Unsupported embedding provider: $provider")
+        }
+    }
+
+    fun resolveApiKey(provider: String, apiKeyOverride: String?): String? {
+        val normalizedProvider = normalizeProvider(provider)
+        val override = apiKeyOverride?.trim()?.takeIf { it.isNotEmpty() }
+        if (override != null) return override
+        return when (normalizedProvider) {
+            "openai" -> embeddingProperties.openai.apiKey.trim().takeIf { it.isNotEmpty() }
+            "lmstudio" -> embeddingProperties.lmstudio.apiKey.trim().takeIf { it.isNotEmpty() }
+            "ollama" -> null
+            else -> throw IllegalArgumentException("Unsupported embedding provider: $provider")
+        }
+    }
+
+    fun isApiKeyConfigured(provider: String, apiKeyOverride: String?): Boolean {
+        return resolveApiKey(provider, apiKeyOverride) != null
+    }
+
+    fun create(provider: String, model: String, baseUrlOverride: String? = null, apiKeyOverride: String? = null): EmbeddingProvider {
         val normalizedProvider = normalizeProvider(provider)
         val normalizedModel = model.trim()
         if (normalizedModel.isEmpty()) {
             throw IllegalArgumentException("Embedding model must not be blank")
         }
+        val baseUrl = resolveBaseUrl(normalizedProvider, baseUrlOverride)
+        val apiKey = resolveApiKey(normalizedProvider, apiKeyOverride)
 
         return when (normalizedProvider) {
             "openai" -> OpenAiCompatibleEmbedding(
-                baseUrl = embeddingProperties.openai.baseUrl,
+                baseUrl = baseUrl,
                 model = normalizedModel,
-                apiKey = embeddingProperties.openai.apiKey,
+                apiKey = apiKey ?: "",
                 dimension = embeddingProperties.dimension,
                 webClientBuilder = webClientBuilder
             )
             "ollama" -> OllamaEmbedding(
-                baseUrl = embeddingProperties.ollama.baseUrl,
+                baseUrl = baseUrl,
                 model = normalizedModel,
                 dimension = embeddingProperties.dimension,
                 webClientBuilder = webClientBuilder
             )
             "lmstudio" -> OpenAiCompatibleEmbedding(
-                baseUrl = embeddingProperties.lmstudio.baseUrl,
+                baseUrl = baseUrl,
                 model = normalizedModel,
-                apiKey = embeddingProperties.lmstudio.apiKey,
+                apiKey = apiKey ?: "",
                 dimension = embeddingProperties.dimension,
                 webClientBuilder = webClientBuilder
             )

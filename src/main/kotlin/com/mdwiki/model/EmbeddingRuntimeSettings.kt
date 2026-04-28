@@ -25,6 +25,12 @@ class EmbeddingRuntimeSettings(
     @Column(nullable = false, length = 255)
     var model: String,
 
+    @Column(name = "base_url", length = 1024)
+    var baseUrl: String? = null,
+
+    @Column(name = "api_key", length = 2048)
+    var apiKey: String? = null,
+
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),
 

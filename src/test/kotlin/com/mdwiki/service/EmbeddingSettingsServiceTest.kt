@@ -39,16 +39,19 @@ class EmbeddingSettingsServiceTest {
         val candidateProvider: EmbeddingProvider = mock()
         whenever(repository.findBySingletonKey(EmbeddingRuntimeSettings.SINGLETON_KEY)).thenReturn(existing)
         whenever(providerBuilder.normalizeProvider("ollama")).thenReturn("ollama")
-        whenever(providerBuilder.create("ollama", "nomic-embed-text")).thenReturn(candidateProvider)
+        whenever(providerBuilder.create("ollama", "nomic-embed-text", "http://localhost:11434", null)).thenReturn(candidateProvider)
+        whenever(providerBuilder.resolveBaseUrl("ollama", "http://localhost:11434")).thenReturn("http://localhost:11434")
+        whenever(providerBuilder.isApiKeyConfigured("ollama", null)).thenReturn(false)
         whenever(candidateProvider.embed("__mdwiki_embedding_probe__")).thenReturn(FloatArray(768))
         whenever(repository.save(any())).thenAnswer { it.arguments[0] as EmbeddingRuntimeSettings }
 
         val response = service.updateSettings(
-            UpdateEmbeddingSettingsRequest(provider = "ollama", model = "nomic-embed-text")
+            UpdateEmbeddingSettingsRequest(provider = "ollama", model = "nomic-embed-text", baseUrl = "http://localhost:11434")
         )
 
         assertEquals("ollama", response.provider)
         assertEquals("nomic-embed-text", response.model)
+        assertEquals("http://localhost:11434", response.baseUrl)
         assertNotNull(response.warning)
         assertEquals(768, response.warning?.actualDimension)
         assertEquals(1536, response.warning?.expectedDimension)
@@ -61,7 +64,9 @@ class EmbeddingSettingsServiceTest {
         val candidateProvider: EmbeddingProvider = mock()
         whenever(repository.findBySingletonKey(EmbeddingRuntimeSettings.SINGLETON_KEY)).thenReturn(existing)
         whenever(providerBuilder.normalizeProvider("openai")).thenReturn("openai")
-        whenever(providerBuilder.create("openai", "text-embedding-3-small")).thenReturn(candidateProvider)
+        whenever(providerBuilder.create("openai", "text-embedding-3-small", null, null)).thenReturn(candidateProvider)
+        whenever(providerBuilder.resolveBaseUrl("openai", null)).thenReturn("https://api.openai.com/v1")
+        whenever(providerBuilder.isApiKeyConfigured("openai", null)).thenReturn(true)
         whenever(candidateProvider.embed("__mdwiki_embedding_probe__")).thenReturn(FloatArray(1536))
         whenever(repository.save(any())).thenAnswer { it.arguments[0] as EmbeddingRuntimeSettings }
 
@@ -70,7 +75,9 @@ class EmbeddingSettingsServiceTest {
         )
 
         assertNull(response.warning)
-        verify(providerBuilder).create(eq("openai"), eq("text-embedding-3-small"))
+        assertEquals("https://api.openai.com/v1", response.baseUrl)
+        assertEquals(true, response.apiKeyConfigured)
+        verify(providerBuilder).create(eq("openai"), eq("text-embedding-3-small"), eq(null), eq(null))
         verify(switchableProvider).switchTo(candidateProvider)
     }
 }

@@ -24,6 +24,8 @@ class AdminEmbeddingSettingsControllerTest {
             EmbeddingSettingsResponse(
                 provider = "openai",
                 model = "text-embedding-3-small",
+                baseUrl = "https://api.openai.com/v1",
+                apiKeyConfigured = true,
                 expectedDimension = 1536
             )
         )
@@ -32,17 +34,21 @@ class AdminEmbeddingSettingsControllerTest {
 
         assertEquals("openai", response.provider)
         assertEquals("text-embedding-3-small", response.model)
+        assertEquals("https://api.openai.com/v1", response.baseUrl)
+        assertEquals(true, response.apiKeyConfigured)
         assertEquals(1536, response.expectedDimension)
         verify(embeddingSettingsService).getSettings()
     }
 
     @Test
     fun `updateSettings returns warning from service`() {
-        val request = UpdateEmbeddingSettingsRequest(provider = "ollama", model = "nomic-embed-text")
+        val request = UpdateEmbeddingSettingsRequest(provider = "ollama", model = "nomic-embed-text", baseUrl = "http://localhost:11434")
         whenever(embeddingSettingsService.updateSettings(request)).thenReturn(
             EmbeddingSettingsResponse(
                 provider = "ollama",
                 model = "nomic-embed-text",
+                baseUrl = "http://localhost:11434",
+                apiKeyConfigured = false,
                 expectedDimension = 1536,
                 warning = EmbeddingSettingsWarningResponse(
                     code = "EMBEDDING_DIMENSION_MISMATCH",
@@ -56,6 +62,7 @@ class AdminEmbeddingSettingsControllerTest {
         val response = controller.updateSettings(request)
 
         assertEquals("ollama", response.provider)
+        assertEquals("http://localhost:11434", response.baseUrl)
         assertNotNull(response.warning)
         assertEquals(768, response.warning?.actualDimension)
         verify(embeddingSettingsService).updateSettings(request)
