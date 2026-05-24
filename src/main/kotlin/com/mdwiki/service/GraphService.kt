@@ -25,7 +25,7 @@ class GraphService(
         val edges = mutableListOf<GraphEdge>()
 
         // Add current page as node
-        nodes.add(GraphNode(slug = page.slug, title = page.title, tags = page.tags.map { it.name }, isCurrent = true))
+        nodes.add(GraphNode(slug = page.slug, title = page.title, tags = page.tags.map { it.name }, isCurrent = true, exists = true))
 
         // BFS expansion
         var frontier = setOf(slug)
@@ -47,10 +47,26 @@ class GraphService(
                         visitedSlugs.add(canonicalTarget)
                         nextFrontier.add(canonicalTarget)
                         if (targetPage != null) {
-                            nodes.add(GraphNode(slug = targetPage.slug, title = targetPage.title, tags = targetPage.tags.map { it.name }, isCurrent = false))
+                            nodes.add(
+                                GraphNode(
+                                    slug = targetPage.slug,
+                                    title = targetPage.title,
+                                    tags = targetPage.tags.map { it.name },
+                                    isCurrent = false,
+                                    exists = true
+                                )
+                            )
                         } else {
                             // Dangling link — page doesn't exist yet
-                            nodes.add(GraphNode(slug = targetSlug, title = targetSlug, tags = emptyList(), isCurrent = false))
+                            nodes.add(
+                                GraphNode(
+                                    slug = targetSlug,
+                                    title = targetSlug,
+                                    tags = emptyList(),
+                                    isCurrent = false,
+                                    exists = false
+                                )
+                            )
                         }
                     }
                 }
@@ -65,7 +81,15 @@ class GraphService(
                     if (sourceSlug !in visitedSlugs) {
                         visitedSlugs.add(sourceSlug)
                         nextFrontier.add(sourceSlug)
-                        nodes.add(GraphNode(slug = link.sourcePage.slug, title = link.sourcePage.title, tags = link.sourcePage.tags.map { it.name }, isCurrent = false))
+                        nodes.add(
+                            GraphNode(
+                                slug = link.sourcePage.slug,
+                                title = link.sourcePage.title,
+                                tags = link.sourcePage.tags.map { it.name },
+                                isCurrent = false,
+                                exists = true
+                            )
+                        )
                     }
                 }
             }
@@ -91,7 +115,8 @@ class GraphService(
                 slug = p.slug,
                 title = p.title,
                 tags = p.tags.map { it.name },
-                isCurrent = highlight != null && p.slug == highlight
+                isCurrent = highlight != null && p.slug == highlight,
+                exists = true
             )
         }.toMutableList()
 
@@ -115,12 +140,21 @@ class GraphService(
                             slug = targetPage.slug,
                             title = targetPage.title,
                             tags = targetPage.tags.map { it.name },
-                            isCurrent = highlight != null && targetPage.slug == highlight
+                            isCurrent = highlight != null && targetPage.slug == highlight,
+                            exists = true
                         )
                     )
                     knownSlugs.add(targetPage.slug)
                 } else {
-                    nodes.add(GraphNode(slug = canonicalTarget, title = canonicalTarget, tags = emptyList(), isCurrent = false))
+                    nodes.add(
+                        GraphNode(
+                            slug = canonicalTarget,
+                            title = canonicalTarget,
+                            tags = emptyList(),
+                            isCurrent = false,
+                            exists = false
+                        )
+                    )
                     knownSlugs.add(canonicalTarget)
                 }
             }

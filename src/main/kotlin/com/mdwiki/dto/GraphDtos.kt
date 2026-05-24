@@ -4,7 +4,8 @@ data class GraphNode(
     val slug: String,
     val title: String,
     val tags: List<String>,
-    val isCurrent: Boolean
+    val isCurrent: Boolean,
+    val exists: Boolean = true
 )
 
 data class GraphEdge(
