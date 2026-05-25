@@ -18,4 +18,32 @@ class WikilinkServiceTest {
     fun `normalizePageSlug keeps cyrillic letters`() {
         assertEquals("mcp-протокол", svc.normalizePageSlug("MCP протокол"))
     }
+
+    @Test
+    fun `rewriteWikilinksReferencingNormalizedSlug handles cyrillic title pointing to ASCII slug`() {
+        // Scenario: page has slug="schema" and title="Схема Вики"
+        // Another page links to it via [[Схема Вики]] which normalizes to "схема-вики"
+        // When renaming schema → wiki-schema, both [[schema]] and [[Схема Вики]] should update
+
+        val md = "See [[schema]] and [[Схема Вики]] and [[other]]."
+        val out = svc.rewriteWikilinksReferencingNormalizedSlug(
+            md,
+            oldNormalizedSlug = "schema",
+            newSlug = "wiki-schema",
+            oldNormalizedTitle = "схема-вики"
+        )
+        assertEquals("See [[wiki-schema]] and [[wiki-schema]] and [[other]].", out)
+    }
+
+    @Test
+    fun `rewriteWikilinksReferencingNormalizedSlug preserves labels with cyrillic title`() {
+        val md = "See [[Схема Вики|документация]]."
+        val out = svc.rewriteWikilinksReferencingNormalizedSlug(
+            md,
+            oldNormalizedSlug = "schema",
+            newSlug = "wiki-schema",
+            oldNormalizedTitle = "схема-вики"
+        )
+        assertEquals("See [[wiki-schema|документация]].", out)
+    }
 }

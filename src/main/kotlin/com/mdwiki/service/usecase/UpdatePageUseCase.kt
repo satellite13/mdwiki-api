@@ -63,8 +63,13 @@ class UpdatePageUseCase(
         }
         val slugChanged = newSlug != oldSlug
 
+        // Сохраняем нормализованный title ДО изменения title страницы
+        val oldNormalizedTitle = wikilinkService.normalizePageSlug(page.title)
+
         if (slugChanged) {
-            contentForSave = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(contentForSave, oldSlug, newSlug)
+            contentForSave = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(
+                contentForSave, oldSlug, newSlug, oldNormalizedTitle
+            )
             wikiFileService.renamePageFileToSlug(page, newSlug)
             page.contentMd = contentForSave
             frontmatterMetaService.refreshFromContent(page, contentForSave)
@@ -75,7 +80,9 @@ class UpdatePageUseCase(
                 .filter { it.id != page.id }
                 .forEach { other ->
                     val md = other.contentMd ?: ""
-                    val rewritten = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(md, oldSlug, newSlug)
+                    val rewritten = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(
+                        md, oldSlug, newSlug, oldNormalizedTitle
+                    )
                     if (rewritten != md) {
                         other.contentMd = rewritten
                         other.updatedAt = Instant.now()

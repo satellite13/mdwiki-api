@@ -20,14 +20,23 @@ class WikilinkService {
             .replace(slugTrimDashes, "")
 
     /**
-     * Заменяет вики-ссылки, у которых нормализованный slug цели равен [oldNormalizedSlug], на [newSlug] (подпись после `|` сохраняется).
+     * Заменяет вики-ссылки, у которых нормализованный slug/title цели равен [oldNormalizedSlug] или [oldNormalizedTitle], на [newSlug].
+     * Подпись после `|` сохраняется.
      */
-    fun rewriteWikilinksReferencingNormalizedSlug(body: String, oldNormalizedSlug: String, newSlug: String): String {
+    fun rewriteWikilinksReferencingNormalizedSlug(
+        body: String,
+        oldNormalizedSlug: String,
+        newSlug: String,
+        oldNormalizedTitle: String? = null
+    ): String {
         if (oldNormalizedSlug == newSlug) return body
         return wikilinkPattern.replace(body) { m ->
             val rawInner = m.groupValues[1].trim()
             val label = m.groupValues[2].trim()
-            if (normalizePageSlug(rawInner) != oldNormalizedSlug) {
+            val normalizedInner = normalizePageSlug(rawInner)
+            val matches = normalizedInner == oldNormalizedSlug ||
+                (oldNormalizedTitle != null && normalizedInner == oldNormalizedTitle)
+            if (!matches) {
                 return@replace m.value
             }
             if (label.isEmpty()) {
