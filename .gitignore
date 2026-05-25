@@ -7,3 +7,4 @@ out/
 wiki-content/
 .kotlin/
 values*.yaml
+.DS_Store
