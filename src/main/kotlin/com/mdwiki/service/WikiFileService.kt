@@ -82,7 +82,6 @@ class WikiFileService(
         fileWatcherService.ignoreNextChange(targetFile.absolutePath)
         moveFile(sourceFile, targetFile)
         page.filePath = targetFile.absolutePath
-        deleteEmptyAncestors(sourceFile.parentFile, contentRoot())
     }
 
     /**
@@ -123,7 +122,6 @@ class WikiFileService(
                 fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
                 fileWatcherService.ignoreNextChange(targetFile.absolutePath)
                 moveFile(sourceFile, targetFile)
-                deleteEmptyAncestors(sourceFile.parentFile, contentRoot())
             }
         } else {
             fileWatcherService.ignoreNextChange(targetFile.absolutePath)
@@ -141,7 +139,6 @@ class WikiFileService(
         if (sourceFile.exists()) {
             fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
             sourceFile.delete()
-            deleteEmptyAncestors(sourceFile.parentFile, contentRoot())
         }
     }
 
@@ -171,11 +168,7 @@ class WikiFileService(
         if (!file.isFile || !file.name.endsWith(".md", ignoreCase = true)) return false
         if (!isUnderContentRoot(file)) return false
         fileWatcherService.ignoreNextChange(file.absolutePath)
-        val removed = file.delete()
-        if (removed) {
-            deleteEmptyAncestors(file.parentFile, contentRoot())
-        }
-        return removed
+        return file.delete()
     }
 
     fun moveFolderDirectory(oldDir: File, newDir: File) {
@@ -274,33 +267,6 @@ class WikiFileService(
         sourceFile.copyTo(targetFile, overwrite = true)
         if (!sourceFile.delete()) {
             throw IllegalStateException("Cannot delete source file after copy: ${sourceFile.absolutePath}")
-        }
-    }
-
-    private fun deleteEmptyAncestors(start: File?, root: File) {
-        var current = start
-        val rootRef = try {
-            root.canonicalFile
-        } catch (_: Exception) {
-            root.absoluteFile
-        }
-        while (current != null) {
-            val currentRef = try {
-                current.canonicalFile
-            } catch (_: Exception) {
-                current.absoluteFile
-            }
-            if (currentRef == rootRef) {
-                return
-            }
-            val children = current.listFiles()
-            if (children != null && children.isNotEmpty()) {
-                return
-            }
-            if (!current.delete()) {
-                return
-            }
-            current = current.parentFile
         }
     }
 }
