@@ -12,6 +12,14 @@ class WikiListTool(private val pageService: PageService) {
     fun list(@McpToolParam(description = "Filter by tag name", required = false) tag: String?): List<Map<String, Any?>> {
         val pages = pageService.findAll(0, 10000).content
         val filtered = if (tag != null) pages.filter { tag in it.tags } else pages
-        return filtered.map { mapOf("slug" to it.slug, "title" to it.title, "tags" to it.tags, "updatedAt" to it.updatedAt.toString()) }
+        return filtered.map {
+            mapOf(
+                "slug" to it.slug,
+                "title" to it.title,
+                "tags" to it.tags,
+                "folderId" to it.folderId?.toString(),
+                "updatedAt" to it.updatedAt.toString()
+            )
+        }
     }
 }

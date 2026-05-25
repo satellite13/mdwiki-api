@@ -16,12 +16,18 @@ class WikiReadTool(private val pageService: PageService) {
         val page = pageService.findBySlug(slug)
         val backlinks = pageService.getBacklinks(slug)
         return mapOf(
-            "slug" to page.slug, "title" to page.title, "contentMd" to page.contentMd,
+            "slug" to page.slug,
+            "title" to page.title,
+            "contentMd" to page.contentMd,
             "frontmatterMeta" to page.frontmatterMeta,
             "tags" to page.tags,
+            "folderId" to page.folderId?.toString(),
+            "folderPath" to page.folderPath.map { mapOf("id" to it.id, "name" to it.name) },
             "backlinks" to backlinks.map { mapOf("slug" to it.slug, "title" to it.title) },
-            "createdBy" to page.createdBy, "updatedBy" to page.updatedBy,
-            "createdAt" to page.createdAt.toString(), "updatedAt" to page.updatedAt.toString()
+            "createdBy" to page.createdBy,
+            "updatedBy" to page.updatedBy,
+            "createdAt" to page.createdAt.toString(),
+            "updatedAt" to page.updatedAt.toString()
         )
     }
 }
