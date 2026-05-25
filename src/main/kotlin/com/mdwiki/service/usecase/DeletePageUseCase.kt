@@ -4,6 +4,7 @@ import com.mdwiki.error.NotFoundException
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.service.PageMetadataService
+import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import org.springframework.stereotype.Component
 import java.time.Instant
@@ -13,7 +14,8 @@ class DeletePageUseCase(
     private val pageRepository: PageRepository,
     private val pageMetadataService: PageMetadataService,
     private val ragService: RagService,
-    private val wikiFileService: WikiFileService
+    private val wikiFileService: WikiFileService,
+    private val syncService: SyncService
 ) {
     enum class DeleteMode {
         SOFT,
@@ -56,5 +58,7 @@ class DeletePageUseCase(
         }
         pageRepository.delete(page)
         pageMetadataService.cleanupOrphanedTags()
+        // Синхронизируем БД с ФС: удаляем пустые папки и отсутствующие на диске сущности
+        syncService.scheduleReconcileFromDisk()
     }
 }

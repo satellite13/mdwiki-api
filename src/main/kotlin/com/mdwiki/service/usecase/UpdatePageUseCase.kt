@@ -11,6 +11,7 @@ import com.mdwiki.repository.UserRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
+import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import org.springframework.stereotype.Component
@@ -27,7 +28,8 @@ class UpdatePageUseCase(
     private val wikiFileService: WikiFileService,
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikilinkService: WikilinkService,
-    private val linkRepository: LinkRepository
+    private val linkRepository: LinkRepository,
+    private val syncService: SyncService
 ) {
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
         val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
@@ -52,7 +54,8 @@ class UpdatePageUseCase(
         val mergedContent = request.contentMd ?: page.contentMd
         var contentForSave = mergedContent ?: ""
 
-        val desiredSlug = wikilinkService.normalizePageSlug(page.title).ifBlank { oldSlug }
+        // Slug is immutable unless explicitly requested to change
+        val desiredSlug = request.slug?.let { wikilinkService.normalizePageSlug(it) } ?: oldSlug
         val newSlug = if (desiredSlug == oldSlug) {
             oldSlug
         } else {
@@ -103,6 +106,11 @@ class UpdatePageUseCase(
         if (request.contentMd != null || slugChanged) {
             pageMetadataService.syncLinksAndTags(saved, saved.contentMd ?: "", cleanupOrphanedTags = true)
             ragService.indexPage(saved)
+        }
+
+        // Синхронизируем БД с ФС после операций переименования/перемещения
+        if (slugChanged || previousFolderId != page.folder?.id) {
+            syncService.scheduleReconcileFromDisk()
         }
 
         saved.toResponse()

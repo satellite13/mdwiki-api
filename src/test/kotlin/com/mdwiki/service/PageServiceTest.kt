@@ -63,10 +63,10 @@ class PageServiceTest {
         val updatePageUseCase = UpdatePageUseCase(
             pageRepository, userRepository, folderRepository,
             pageMetadataService, ragService, wikiFileService, frontmatterMetaService,
-            wikilinkService, linkRepository
+            wikilinkService, linkRepository, syncService
         )
         val deletePageUseCase = DeletePageUseCase(
-            pageRepository, pageMetadataService, ragService, wikiFileService
+            pageRepository, pageMetadataService, ragService, wikiFileService, syncService
         )
         pageService = PageService(
             pageRepository,
@@ -158,18 +158,16 @@ class PageServiceTest {
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
-        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(emptyList())
-        whenever(pageRepository.findBySlug("new")).thenReturn(null)
-        whenever(linkRepository.updateAllTargetSlugs(any(), any())).thenReturn(0)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
-        whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
+
         pageService.update("my-page", UpdatePageRequest(title = "New", contentMd = "new content"), "editor")
 
-        verify(pageRepository, atLeastOnce()).save(argThat<Page> {
-            slug == "new" && title == "New" && contentMd == "new content"
+        // Slug is preserved unless explicitly requested to change
+        verify(pageRepository).save(argThat<Page> {
+            slug == "my-page" && title == "New" && contentMd == "new content"
         })
-        assertFalse(tempDir.resolve("my-page.md").toFile().exists())
-        assertEquals("new content", tempDir.resolve("new.md").toFile().readText())
+        assertTrue(tempDir.resolve("my-page.md").toFile().exists())
+        assertEquals("new content", tempDir.resolve("my-page.md").toFile().readText())
     }
 
     @Test
@@ -228,6 +226,51 @@ class PageServiceTest {
         assertThrows<NotFoundException> {
             pageService.update("nonexistent", UpdatePageRequest(title = "New"), "testuser")
         }
+    }
+
+    @Test
+    fun `update preserves slug when title changes`() {
+        val pageId = UUID.randomUUID()
+        val page = Page(id = pageId, slug = "schema", title = "Schema", contentMd = "content")
+        page.filePath = tempDir.resolve("schema.md").toString()
+        tempDir.resolve("schema.md").toFile().writeText("content")
+
+        val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("schema")).thenReturn(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(user)
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        // Update title to Cyrillic, slug should remain "schema"
+        pageService.update("schema", UpdatePageRequest(title = "Схема Вики"), "editor")
+
+        verify(pageRepository).save(argThat<Page> {
+            slug == "schema" && title == "Схема Вики"
+        })
+    }
+
+    @Test
+    fun `update changes slug only when explicitly requested`() {
+        val pageId = UUID.randomUUID()
+        val page = Page(id = pageId, slug = "old-slug", title = "Old", contentMd = "content")
+        page.filePath = tempDir.resolve("old-slug.md").toString()
+        tempDir.resolve("old-slug.md").toFile().writeText("content")
+
+        val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("old-slug")).thenReturn(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(user)
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(emptyList())
+        whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
+        whenever(linkRepository.updateAllTargetSlugs(any(), any())).thenReturn(0)
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+        whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageService.update("old-slug", UpdatePageRequest(slug = "new-slug"), "editor")
+
+        verify(pageRepository).save(argThat<Page> {
+            slug == "new-slug"
+        })
+        assertFalse(tempDir.resolve("old-slug.md").toFile().exists())
+        assertTrue(tempDir.resolve("new-slug.md").toFile().exists())
     }
 
     @Test

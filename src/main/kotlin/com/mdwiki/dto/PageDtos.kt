@@ -22,6 +22,7 @@ data class CreatePageRequest(
 data class UpdatePageRequest(
     val title: String? = null,
     val contentMd: String? = null,
+    val slug: String? = null,
     val folderId: UUID? = null,
     val clearFolder: Boolean? = null
 )
