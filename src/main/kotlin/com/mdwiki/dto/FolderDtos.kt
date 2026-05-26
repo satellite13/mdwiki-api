@@ -18,6 +18,11 @@ data class UpdateFolderRequest(
 )
 data class MoveFolderRequest(val parentId: UUID?)
 
+enum class FolderDeletePageAction {
+    DELETE,
+    MOVE_TO_ROOT
+}
+
 data class FolderResponse(val id: UUID, val name: String, val parentId: UUID?, val sortOrder: Int, val createdAt: Instant)
 
 data class FolderTreeNode(

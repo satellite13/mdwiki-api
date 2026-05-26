@@ -5,6 +5,7 @@ import com.mdwiki.model.Folder
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.usecase.DeletePageUseCase
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
@@ -17,7 +18,8 @@ class FolderService(
     private val pageRepository: PageRepository,
     private val userRepository: UserRepository,
     private val wikiFileService: WikiFileService,
-    private val treeEventsService: TreeEventsService
+    private val treeEventsService: TreeEventsService,
+    private val deletePageUseCase: DeletePageUseCase
 ) {
 
     @Volatile
@@ -152,7 +154,7 @@ class FolderService(
     }
 
     @Transactional
-    fun delete(id: UUID) {
+    fun delete(id: UUID, pageAction: FolderDeletePageAction = FolderDeletePageAction.DELETE) {
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
         val folderDir = wikiFileService.resolveFolderDirectory(folder)
@@ -160,13 +162,23 @@ class FolderService(
         val allFolders = folderRepository.findAll()
         val subtreeFolders = collectSubtree(folder, allFolders)
         val subtreeIds = subtreeFolders.mapNotNull { it.id }.toSet()
-        val pages = pageRepository.findAll().filter { page -> page.folder?.id in subtreeIds }
+        val pages = pageRepository.findAllByDeletedAtIsNull()
+            .filter { page -> page.folder?.id in subtreeIds }
 
-        for (page in pages) {
-            page.folder = null
-            wikiFileService.relocatePageFile(page, null)
+        when (pageAction) {
+            FolderDeletePageAction.DELETE -> {
+                for (page in pages) {
+                    deletePageUseCase.execute(page.slug, DeletePageUseCase.DeleteMode.HARD)
+                }
+            }
+            FolderDeletePageAction.MOVE_TO_ROOT -> {
+                for (page in pages) {
+                    page.folder = null
+                    wikiFileService.relocatePageFile(page, null)
+                }
+                pageRepository.saveAll(pages)
+            }
         }
-        pageRepository.saveAll(pages)
 
         // Удаляем директорию до удаления сущности папки из persistence context:
         // для вложенных папок это безопаснее с точки зрения lazy parent-цепочки.

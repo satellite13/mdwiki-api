@@ -29,5 +29,8 @@ class FolderController(private val folderService: FolderService) {
     }
 
     @DeleteMapping("/{id}")
-    fun delete(@PathVariable id: UUID) = folderService.delete(id)
+    fun delete(
+        @PathVariable id: UUID,
+        @RequestParam(defaultValue = "DELETE") pageAction: FolderDeletePageAction
+    ) = folderService.delete(id, pageAction)
 }

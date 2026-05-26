@@ -1,6 +1,7 @@
 package com.mdwiki.service
 
 import com.mdwiki.dto.CreateFolderRequest
+import com.mdwiki.dto.FolderDeletePageAction
 import com.mdwiki.dto.MoveFolderRequest
 import com.mdwiki.dto.UpdateFolderRequest
 import com.mdwiki.model.Folder
@@ -10,6 +11,7 @@ import com.mdwiki.model.UserRole
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.usecase.DeletePageUseCase
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -34,6 +36,7 @@ class FolderServiceTest {
     @Mock private lateinit var userRepository: UserRepository
     @Mock private lateinit var wikiFileService: WikiFileService
     @Mock private lateinit var treeEventsService: TreeEventsService
+    @Mock private lateinit var deletePageUseCase: DeletePageUseCase
 
     private lateinit var folderService: FolderService
 
@@ -50,7 +53,8 @@ class FolderServiceTest {
             pageRepository,
             userRepository,
             wikiFileService,
-            treeEventsService
+            treeEventsService,
+            deletePageUseCase
         )
     }
 
@@ -196,7 +200,7 @@ class FolderServiceTest {
 
         whenever(folderRepository.findById(parentId)).thenReturn(Optional.of(parent))
         whenever(folderRepository.findAll()).thenReturn(listOf(parent, child, grandchild))
-        whenever(pageRepository.findAll()).thenReturn(emptyList())
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(emptyList())
 
         folderService.delete(parentId)
 
@@ -204,19 +208,38 @@ class FolderServiceTest {
     }
 
     @Test
-    fun `delete folder nullifies page folder references`() {
+    fun `delete folder hard-deletes pages in subtree`() {
         val folderId = UUID.randomUUID()
         val folder = Folder(id = folderId, name = "doomed")
         val page = Page(id = UUID.randomUUID(), slug = "orphan", title = "Orphan", folder = folder)
 
         whenever(folderRepository.findById(folderId)).thenReturn(Optional.of(folder))
         whenever(folderRepository.findAll()).thenReturn(listOf(folder))
-        whenever(pageRepository.findAll()).thenReturn(listOf(page))
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
 
-        folderService.delete(folderId)
+        folderService.delete(folderId, FolderDeletePageAction.DELETE)
+
+        verify(deletePageUseCase).execute("orphan", DeletePageUseCase.DeleteMode.HARD)
+        verify(pageRepository, never()).saveAll(any<List<Page>>())
+        verify(folderRepository).delete(folder)
+    }
+
+    @Test
+    fun `delete folder moves pages to root when requested`() {
+        val folderId = UUID.randomUUID()
+        val folder = Folder(id = folderId, name = "doomed")
+        val page = Page(id = UUID.randomUUID(), slug = "orphan", title = "Orphan", folder = folder)
+
+        whenever(folderRepository.findById(folderId)).thenReturn(Optional.of(folder))
+        whenever(folderRepository.findAll()).thenReturn(listOf(folder))
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
+
+        folderService.delete(folderId, FolderDeletePageAction.MOVE_TO_ROOT)
 
         assertNull(page.folder)
+        verify(wikiFileService).relocatePageFile(page, null)
         verify(pageRepository).saveAll(listOf(page))
+        verify(deletePageUseCase, never()).execute(any(), any())
         verify(folderRepository).delete(folder)
     }
 }
