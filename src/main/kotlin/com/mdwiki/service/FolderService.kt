@@ -1,6 +1,7 @@
 package com.mdwiki.service
 
 import com.mdwiki.dto.*
+import com.mdwiki.mapper.displayTitle
 import com.mdwiki.model.Folder
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
@@ -56,11 +57,11 @@ class FolderService(
                 }
 
             val pageNodes = (pagesByFolder[parentId] ?: emptyList())
-                .sortedBy { it.title }
+                .sortedBy { it.displayTitle() }
                 .map { page ->
                     FolderTreeNode(
                         id = page.id.toString(),
-                        name = page.title,
+                        name = page.displayTitle(),
                         type = "page",
                         slug = page.slug
                     )

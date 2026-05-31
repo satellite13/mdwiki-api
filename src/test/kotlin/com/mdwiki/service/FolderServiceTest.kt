@@ -1,5 +1,6 @@
 package com.mdwiki.service
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.mdwiki.dto.CreateFolderRequest
 import com.mdwiki.dto.FolderDeletePageAction
 import com.mdwiki.dto.MoveFolderRequest
@@ -30,6 +31,7 @@ import java.util.UUID
 @ExtendWith(MockitoExtension::class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class FolderServiceTest {
+    private val objectMapper = jacksonObjectMapper()
 
     @Mock private lateinit var folderRepository: FolderRepository
     @Mock private lateinit var pageRepository: PageRepository
@@ -105,6 +107,25 @@ class FolderServiceTest {
         assertEquals(1, tree.size)
         assertEquals("kept", tree.single().slug)
         verify(pageRepository, never()).findAll()
+    }
+
+    @Test
+    fun `getTree uses frontmatter title for page nodes`() {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "agentic-patterns-glava-2-marshrutizaciya",
+            title = "agentic-patterns-glava-2-marshrutizaciya",
+            contentMd = "---\ntitle: Глава 2. Маршрутизация\n---\n# Body"
+        ).apply {
+            frontmatterMeta = objectMapper.readTree("""{"title":"Глава 2. Маршрутизация"}""")
+        }
+        whenever(folderRepository.findAll()).thenReturn(emptyList())
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
+
+        val tree = folderService.getTree()
+
+        assertEquals("Глава 2. Маршрутизация", tree.single().name)
+        assertEquals("agentic-patterns-glava-2-marshrutizaciya", tree.single().slug)
     }
 
     @Test
