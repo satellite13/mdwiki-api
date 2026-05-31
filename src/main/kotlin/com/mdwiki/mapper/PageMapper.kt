@@ -79,13 +79,39 @@ private fun parseFrontmatterTitleFromContent(contentMd: String?): String? {
 
     val parsed = runCatching {
         frontmatterYamlMapper.readTree(yaml.byteInputStream(Charsets.UTF_8))
-    }.getOrNull() ?: return null
+    }.getOrNull()
 
-    return parsed
-        .get("title")
+    val parsedTitle = parsed
+        ?.get("title")
         ?.asText()
         ?.trim()
         ?.takeIf { it.isNotBlank() }
+    if (parsedTitle != null) {
+        return parsedTitle
+    }
+
+    // Fallback for partially broken YAML blocks where full parse fails.
+    return extractTitleFromRawFrontmatter(yaml)
+}
+
+private fun extractTitleFromRawFrontmatter(yaml: String): String? {
+    val rawTitle = Regex("""(?m)^[ \t]*title[ \t]*:[ \t]*(.+)[ \t]*$""")
+        .find(yaml)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+
+    val unquoted = when {
+        rawTitle.length >= 2 && rawTitle.startsWith('"') && rawTitle.endsWith('"') ->
+            rawTitle.substring(1, rawTitle.length - 1)
+        rawTitle.length >= 2 && rawTitle.startsWith('\'') && rawTitle.endsWith('\'') ->
+            rawTitle.substring(1, rawTitle.length - 1)
+        else -> rawTitle
+    }.trim()
+
+    return unquoted.takeIf { it.isNotBlank() }
 }
 
 /** Normalizes PostgreSQL `ts_headline` output for API (plain text + length cap). */
