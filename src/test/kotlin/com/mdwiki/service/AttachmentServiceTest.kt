@@ -3,9 +3,11 @@ package com.mdwiki.service
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.model.Attachment
+import com.mdwiki.model.Page
 import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.AttachmentRepository
+import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -24,6 +26,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.mock.web.MockMultipartFile
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Base64
 import java.util.Optional
 import java.util.UUID
 
@@ -35,6 +38,9 @@ class AttachmentServiceTest {
 
     @Mock
     private lateinit var userRepository: UserRepository
+
+    @Mock
+    private lateinit var pageRepository: PageRepository
 
     @TempDir
     lateinit var contentRoot: Path
@@ -48,6 +54,7 @@ class AttachmentServiceTest {
         service = AttachmentService(
             attachmentRepository,
             userRepository,
+            pageRepository,
             WikiProperties(contentDir = contentRoot.toString())
         )
     }
@@ -93,6 +100,61 @@ class AttachmentServiceTest {
         val uploads = contentRoot.resolve("uploads")
         assertTrue(Files.exists(uploads.resolve(response.storedName)))
         verify(attachmentRepository).save(any<Attachment>())
+        assertEquals("/api/uploads/${response.storedName}", response.url)
+    }
+
+    @Test
+    fun `upload links attachment to page when pageId provided`() {
+        whenever(userRepository.findByUsername("alice")).thenReturn(uploader)
+        val pageId = UUID.randomUUID()
+        val page = Page(id = pageId, slug = "home", title = "Home", contentMd = "content")
+        whenever(pageRepository.findById(pageId)).thenReturn(Optional.of(page))
+        whenever(attachmentRepository.save(any<Attachment>())).thenAnswer { inv ->
+            val a = inv.getArgument<Attachment>(0)
+            Attachment(
+                id = UUID.randomUUID(),
+                originalName = a.originalName,
+                storedName = a.storedName,
+                contentType = a.contentType,
+                sizeBytes = a.sizeBytes,
+                uploadedBy = a.uploadedBy,
+                page = a.page
+            )
+        }
+
+        val file = MockMultipartFile("file", "page-note.txt", "text/plain", "hello".toByteArray())
+        val response = service.upload(file, "alice", pageId)
+
+        assertEquals(pageId, response.pageId)
+    }
+
+    @Test
+    fun `uploadFromBase64 stores decoded file and returns url`() {
+        whenever(userRepository.findByUsername("alice")).thenReturn(uploader)
+        whenever(attachmentRepository.save(any<Attachment>())).thenAnswer { inv ->
+            val a = inv.getArgument<Attachment>(0)
+            Attachment(
+                id = UUID.randomUUID(),
+                originalName = a.originalName,
+                storedName = a.storedName,
+                contentType = a.contentType,
+                sizeBytes = a.sizeBytes,
+                uploadedBy = a.uploadedBy,
+                page = a.page
+            )
+        }
+
+        val base64 = Base64.getEncoder().encodeToString("hi".toByteArray())
+        val response = service.uploadFromBase64(
+            base64Data = base64,
+            filename = "note.txt",
+            username = "alice",
+            pageId = null,
+            contentType = "text/plain"
+        )
+
+        val stored = contentRoot.resolve("uploads").resolve(response.storedName)
+        assertTrue(Files.exists(stored))
         assertEquals("/api/uploads/${response.storedName}", response.url)
     }
 
