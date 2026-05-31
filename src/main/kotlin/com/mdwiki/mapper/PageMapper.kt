@@ -24,7 +24,7 @@ private fun Folder?.buildPath(): List<FolderPathItem> {
 fun Page.toResponse(): PageResponse = PageResponse(
     id = id!!,
     slug = slug,
-    title = title,
+    title = displayTitle(),
     contentMd = contentMd,
     contentHtml = contentHtml,
     frontmatterMeta = frontmatterMeta,
@@ -40,7 +40,7 @@ fun Page.toResponse(): PageResponse = PageResponse(
 fun Page.toListItem(): PageListItem = PageListItem(
     id = id!!,
     slug = slug,
-    title = title,
+    title = displayTitle(),
     tags = tags.map { it.name },
     folderId = folder?.id,
     updatedAt = updatedAt
@@ -49,9 +49,21 @@ fun Page.toListItem(): PageListItem = PageListItem(
 fun Page.toSearchResult(): SearchResult = SearchResult(
     pageId = id!!,
     slug = slug,
-    title = title,
+    title = displayTitle(),
     snippet = contentMd.toSearchSnippet()
 )
+
+fun Page.displayTitle(): String {
+    val frontmatterTitle = frontmatterMeta
+        ?.get("title")
+        ?.asText()
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+    if (frontmatterTitle != null) {
+        return frontmatterTitle
+    }
+    return title.trim().ifBlank { slug }
+}
 
 /** Normalizes PostgreSQL `ts_headline` output for API (plain text + length cap). */
 fun headlineToSearchSnippet(headline: String): String {

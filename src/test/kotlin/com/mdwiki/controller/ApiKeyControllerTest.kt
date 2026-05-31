@@ -66,6 +66,6 @@ class ApiKeyControllerTest {
         mockMvc.post("/api/api-keys") {
             contentType = MediaType.APPLICATION_JSON
             content = objectMapper.writeValueAsString(CreateApiKeyRequest("test"))
-        }.andExpect { status { isForbidden() } }
+        }.andExpect { status { isUnauthorized() } }
     }
 }

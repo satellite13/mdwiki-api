@@ -2,6 +2,7 @@ package com.mdwiki.service
 
 import com.mdwiki.dto.*
 import com.mdwiki.error.NotFoundException
+import com.mdwiki.mapper.displayTitle
 import com.mdwiki.mapper.toListItem
 import com.mdwiki.mapper.toResponse
 import com.mdwiki.repository.PageRepository
@@ -56,7 +57,7 @@ class PageService(
     @Transactional(readOnly = true)
     fun getBacklinks(slug: String): List<BacklinkResponse> {
         return pageMetadataService.findBacklinks(slug).map {
-            BacklinkResponse(slug = it.sourcePage.slug, title = it.sourcePage.title)
+            BacklinkResponse(slug = it.sourcePage.slug, title = it.sourcePage.displayTitle())
         }
     }
 

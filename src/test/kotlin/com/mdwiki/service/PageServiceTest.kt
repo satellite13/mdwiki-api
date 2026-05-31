@@ -5,6 +5,7 @@ import com.mdwiki.dto.CreatePageRequest
 import com.mdwiki.dto.UpdatePageRequest
 import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.mdwiki.model.Page
 import com.mdwiki.model.User
 import com.mdwiki.repository.FolderRepository
@@ -32,6 +33,7 @@ import java.util.UUID
 
 @ExtendWith(MockitoExtension::class)
 class PageServiceTest {
+    private val objectMapper = jacksonObjectMapper()
 
     @Mock private lateinit var pageRepository: PageRepository
     @Mock private lateinit var linkRepository: LinkRepository
@@ -204,6 +206,40 @@ class PageServiceTest {
     }
 
     @Test
+    fun `findBySlug uses frontmatter title over database title`() {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "mcp",
+            title = "DB Title",
+            contentMd = "---\ntitle: Frontmatter Title\n---\n# Body"
+        ).apply {
+            frontmatterMeta = objectMapper.readTree("""{"title":"Frontmatter Title"}""")
+        }
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("mcp")).thenReturn(page)
+
+        val result = pageService.findBySlug("mcp")
+
+        assertEquals("Frontmatter Title", result.title)
+    }
+
+    @Test
+    fun `findBySlug falls back to slug when title is blank and no frontmatter title`() {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "fallback-slug",
+            title = "   ",
+            contentMd = "content"
+        ).apply {
+            frontmatterMeta = objectMapper.readTree("""{"foo":"bar"}""")
+        }
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("fallback-slug")).thenReturn(page)
+
+        val result = pageService.findBySlug("fallback-slug")
+
+        assertEquals("fallback-slug", result.title)
+    }
+
+    @Test
     fun `findBySlug throws when neither slug nor normalized title matches`() {
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("missing")).thenReturn(null)
         whenever(pageRepository.findByNormalizedTitle("missing")).thenReturn(null)
@@ -275,7 +311,6 @@ class PageServiceTest {
 
     @Test
     fun `delete throws when page and markdown file both missing`() {
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("nonexistent")).thenReturn(null)
         whenever(pageRepository.findBySlug("nonexistent")).thenReturn(null)
         assertThrows<NotFoundException> {
             pageService.delete("nonexistent")
@@ -286,10 +321,9 @@ class PageServiceTest {
     fun `delete removes orphan markdown file when no database row`() {
         val slug = "only-on-disk"
         tempDir.resolve("$slug.md").toFile().writeText("# x")
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull(slug)).thenReturn(null)
         whenever(pageRepository.findBySlug(slug)).thenReturn(null)
 
-        pageService.delete(slug)
+        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD)
 
         assertFalse(tempDir.resolve("$slug.md").toFile().exists())
         verify(pageRepository, never()).delete(any())
@@ -304,14 +338,13 @@ class PageServiceTest {
             filePath = file.absolutePath
             deletedAt = Instant.now()
         }
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull(slug)).thenReturn(null)
         whenever(pageRepository.findBySlug(slug)).thenReturn(page)
         doNothing().whenever(pageMetadataService).deleteSourceLinks(any())
         doNothing().whenever(pageMetadataService).detachIncomingLinks(any())
         doNothing().whenever(ragService).deletePageChunks(any())
         doNothing().whenever(pageMetadataService).cleanupOrphanedTags()
 
-        pageService.delete(slug)
+        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD)
 
         verify(pageMetadataService).deleteSourceLinks(page)
         verify(pageMetadataService).detachIncomingLinks(page)
@@ -324,7 +357,7 @@ class PageServiceTest {
         val page = Page(id = UUID.randomUUID(), slug = "doomed", title = "Doomed")
         page.filePath = tempDir.resolve("doomed.md").toString()
 
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("doomed")).thenReturn(page)
+        whenever(pageRepository.findBySlug("doomed")).thenReturn(page)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
         pageService.delete("doomed")
