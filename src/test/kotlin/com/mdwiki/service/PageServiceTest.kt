@@ -223,6 +223,21 @@ class PageServiceTest {
     }
 
     @Test
+    fun `findBySlug parses title from content frontmatter when frontmatterMeta is null`() {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "agentic-patterns-glava-2-marshrutizaciya",
+            title = "agentic-patterns-glava-2-marshrutizaciya",
+            contentMd = "---\ntitle: Глава 2. Маршрутизация\n---\n# Body"
+        )
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("agentic-patterns-glava-2-marshrutizaciya")).thenReturn(page)
+
+        val result = pageService.findBySlug("agentic-patterns-glava-2-marshrutizaciya")
+
+        assertEquals("Глава 2. Маршрутизация", result.title)
+    }
+
+    @Test
     fun `findBySlug falls back to slug when title is blank and no frontmatter title`() {
         val page = Page(
             id = UUID.randomUUID(),

@@ -1,5 +1,7 @@
 package com.mdwiki.mapper
 
+import com.fasterxml.jackson.dataformat.yaml.YAMLMapper
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.mdwiki.dto.FolderPathItem
 import com.mdwiki.dto.PageListItem
 import com.mdwiki.dto.PageResponse
@@ -9,6 +11,7 @@ import com.mdwiki.model.Page
 import com.mdwiki.util.MarkdownFrontmatter
 
 private const val SEARCH_SNIPPET_LIMIT = 200
+private val frontmatterYamlMapper = YAMLMapper().apply { registerKotlinModule() }
 
 private fun Folder?.buildPath(): List<FolderPathItem> {
     if (this == null) return emptyList()
@@ -62,7 +65,27 @@ fun Page.displayTitle(): String {
     if (frontmatterTitle != null) {
         return frontmatterTitle
     }
+    val contentFrontmatterTitle = parseFrontmatterTitleFromContent(contentMd)
+    if (contentFrontmatterTitle != null) {
+        return contentFrontmatterTitle
+    }
     return title.trim().ifBlank { slug }
+}
+
+private fun parseFrontmatterTitleFromContent(contentMd: String?): String? {
+    if (contentMd.isNullOrBlank()) return null
+    val yaml = MarkdownFrontmatter.extractYamlInner(contentMd) ?: return null
+    if (yaml.isBlank()) return null
+
+    val parsed = runCatching {
+        frontmatterYamlMapper.readTree(yaml.byteInputStream(Charsets.UTF_8))
+    }.getOrNull() ?: return null
+
+    return parsed
+        .get("title")
+        ?.asText()
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
 }
 
 /** Normalizes PostgreSQL `ts_headline` output for API (plain text + length cap). */
