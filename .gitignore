@@ -6,5 +6,5 @@ build/
 out/
 wiki-content/
 .kotlin/
-values*.yaml
+values-*.yaml
 .DS_Store

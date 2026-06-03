@@ -1,0 +1,98 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/example/mdwiki-api
+  tag: latest
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: mdwiki-api.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  mountPath: /data/wiki-content
+  # Init-container, чтобы выровнять ownership PVC под uid/gid приложения.
+  # Нужен, потому что локальные storage-классы (OrbStack, kind, hostPath и пр.)
+  # игнорируют podSecurityContext.fsGroup, а Paketo jammy-base builder запускает
+  # процесс как cnb (uid=1002, gid=1000) — без chown процесс не сможет писать
+  # в подпапки, созданные root (например, debug-подом).
+  # На managed-кластерах (GKE/EKS/AKS с CSI, поддерживающим fsGroup) можно
+  # отключить: `persistence.chownInit.enabled=false`.
+  chownInit:
+    enabled: true
+    image: busybox:1.36
+    uid: 1002
+    gid: 1000
+
+# podSecurityContext применяется, если storage class поддерживает fsGroup.
+# Для локальных кластеров этого мало — см. persistence.chownInit выше.
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+
+app:
+  jwtSecret: "change-me-before-production"
+  uploadMaxFileSize: "20MB"
+  uploadMaxRequestSize: "25MB"
+  logStacktraceLines: "16"
+  # JVM options. MaxDirectMemorySize поднят, потому что Netty (Reactor / WebClient
+  # для embedding API) по умолчанию может получить слишком маленький лимит direct
+  # memory (наблюдали 10MB из Paketo buildpack / cgroup), что приводит к
+  # io.netty.util.internal.OutOfDirectMemoryError.
+  javaToolOptions: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8 -XX:MaxDirectMemorySize=256m"
+  embeddingProvider: "openai"
+  embeddingDimension: "1536"
+  openaiBaseUrl: "https://api.openai.com/v1"
+  openaiEmbeddingModel: "text-embedding-3-small"
+  openaiApiKey: ""
+  ollamaBaseUrl: "http://localhost:11434"
+  ollamaEmbeddingModel: "nomic-embed-text"
+  lmstudioBaseUrl: "http://localhost:1234/v1"
+  lmstudioEmbeddingModel: "nomic-ai/nomic-embed-text-v1.5"
+  lmstudioApiKey: ""
+  rerankerModelPath: ""
+
+postgres:
+  image:
+    repository: pgvector/pgvector
+    tag: pg17
+    pullPolicy: IfNotPresent
+  database: mdwiki
+  username: mdwiki
+  password: mdwiki
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+  resources: {}
