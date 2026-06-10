@@ -31,7 +31,10 @@ fun Page.toResponse(): PageResponse = PageResponse(
     contentMd = contentMd,
     contentHtml = contentHtml,
     frontmatterMeta = frontmatterMeta,
-    locked = frontmatterMeta?.get("locked")?.isBoolean == true && frontmatterMeta.get("locked").booleanValue(),
+    locked = frontmatterMeta?.let { meta ->
+        val lockedNode = meta.get("locked")
+        lockedNode != null && lockedNode.isBoolean && lockedNode.booleanValue()
+    } ?: false,
     tags = tags.map { it.name },
     createdBy = createdBy?.username,
     updatedBy = updatedBy?.username,
