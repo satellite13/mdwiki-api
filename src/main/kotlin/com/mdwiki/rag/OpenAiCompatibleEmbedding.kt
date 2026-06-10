@@ -14,6 +14,8 @@ class OpenAiCompatibleEmbedding(
     private val model: String,
     private val apiKey: String,
     private val dimension: Int,
+    private val queryPrefix: String = "",
+    private val documentPrefix: String = "",
     webClientBuilder: WebClient.Builder
 ) : EmbeddingProvider {
 
@@ -22,7 +24,10 @@ class OpenAiCompatibleEmbedding(
     private val webClient: WebClient = webClientBuilder.baseUrl(baseUrl.trimEnd('/')).build()
 
     override fun embed(texts: List<String>): List<FloatArray> {
-        val requestBody = mapOf("model" to model, "input" to texts)
+        val prefixed = if (documentPrefix.isNotEmpty()) {
+            texts.map { "$documentPrefix $it" }
+        } else texts
+        val requestBody = mapOf("model" to model, "input" to prefixed)
         val response = try {
             webClient.post()
                 .uri("/embeddings")

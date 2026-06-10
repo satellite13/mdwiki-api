@@ -26,6 +26,8 @@ data class EmbeddingProperties(
     data class LmStudioEmbeddingConfig(
         val baseUrl: String = "http://localhost:1234/v1",
         val model: String = "text-embedding-nomic-embed-text-v1.5@q8_0",
-        val apiKey: String = ""
+        val apiKey: String = "",
+        val queryPrefix: String = "",
+        val documentPrefix: String = ""
     )
 }

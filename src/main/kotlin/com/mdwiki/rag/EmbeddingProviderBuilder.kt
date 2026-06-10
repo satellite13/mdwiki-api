@@ -82,6 +82,8 @@ class EmbeddingProviderBuilder(
                 model = normalizedModel,
                 apiKey = apiKey ?: "",
                 dimension = embeddingProperties.dimension,
+                queryPrefix = embeddingProperties.lmstudio.queryPrefix,
+                documentPrefix = embeddingProperties.lmstudio.documentPrefix,
                 webClientBuilder = webClientBuilder
             )
             else -> throw IllegalArgumentException("Unsupported embedding provider: $provider")
