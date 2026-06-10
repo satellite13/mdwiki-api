@@ -2,8 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: 005-create-page-chunks
       author: mdwiki
-      # Базовый changeset для page_chunks; последующие изменения схемы оформляйте
-      # отдельными changeset'ами, не редактируйте этот блок ретроспективно.
       changes:
         - sql:
             sql: CREATE EXTENSION IF NOT EXISTS vector;
@@ -38,10 +36,9 @@ databaseChangeLog:
               - column:
                   name: section_heading
                   type: varchar(500)
-        # Размерность из spring.liquibase.parameters.embeddingDim (= EMBEDDING_DIMENSION), нужна для HNSW в 011.
         - sql:
             sql: >
-              ALTER TABLE page_chunks ADD COLUMN embedding vector(${embeddingDim});
+              ALTER TABLE page_chunks ADD COLUMN embedding vector;
         - createIndex:
             indexName: idx_page_chunks_page_id
             tableName: page_chunks

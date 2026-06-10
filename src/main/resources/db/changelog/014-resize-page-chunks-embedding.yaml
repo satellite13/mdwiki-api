@@ -3,7 +3,6 @@ databaseChangeLog:
       id: 014-resize-page-chunks-embedding
       author: mdwiki
       # Пересоздаём колонку embedding под текущий embeddingDim. Размерность
-      # задаётся Liquibase-параметром (EMBEDDING_DIMENSION). Если размерность
       # провайдера изменилась (например, переключились с OpenAI 1536 на
       # LM Studio / nomic / bge-m3 с 768/1024), старые векторы нечитабельны:
       # безопаснее удалить все чанки и дать RAG переиндексировать страницы
