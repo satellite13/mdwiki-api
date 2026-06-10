@@ -1,9 +1,0 @@
-databaseChangeLog:
-  - changeSet:
-      id: 011-add-vector-index
-      author: mdwiki
-      changes:
-        - sql:
-            sql: >
-              CREATE INDEX IF NOT EXISTS idx_page_chunks_embedding
-              ON page_chunks USING hnsw (embedding vector_cosine_ops);
