@@ -15,7 +15,8 @@ class DeletePageUseCase(
     private val pageMetadataService: PageMetadataService,
     private val ragService: RagService,
     private val wikiFileService: WikiFileService,
-    private val syncService: SyncService
+    private val syncService: SyncService,
+    private val frontmatterMetaService: com.mdwiki.service.FrontmatterMetaService
 ) {
     enum class DeleteMode {
         SOFT,
@@ -25,6 +26,9 @@ class DeletePageUseCase(
     fun execute(slug: String, mode: DeleteMode = DeleteMode.SOFT) {
         val page = pageRepository.findBySlug(slug)
         if (page != null) {
+            if (frontmatterMetaService.isLocked(page)) {
+                throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be deleted")
+            }
             if (mode == DeleteMode.SOFT) {
                 if (page.deletedAt == null) {
                     page.deletedAt = Instant.now()

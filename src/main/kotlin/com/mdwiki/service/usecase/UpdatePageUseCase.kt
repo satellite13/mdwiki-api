@@ -37,6 +37,10 @@ class UpdatePageUseCase(
         val user = userRepository.findByUsername(username)
             ?: throw NotFoundException("User not found: $username")
 
+        if (frontmatterMetaService.isLocked(page)) {
+            throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be edited")
+        }
+
         val oldSlug = page.slug
 
         request.title?.let { page.title = it }

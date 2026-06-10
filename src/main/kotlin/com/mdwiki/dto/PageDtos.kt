@@ -35,6 +35,8 @@ data class PageResponse(
     val contentHtml: String?,
     /** Распарсенный YAML frontmatter документа (только чтение с API). */
     val frontmatterMeta: JsonNode? = null,
+    /** Является ли страница read-only (locked в frontmatter). */
+    val locked: Boolean = false,
     val tags: List<String>,
     val createdBy: String?,
     val updatedBy: String?,
