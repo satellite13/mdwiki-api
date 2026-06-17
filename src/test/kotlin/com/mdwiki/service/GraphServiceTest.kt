@@ -267,6 +267,22 @@ class GraphServiceTest {
         assertEquals(setOf("b", "c"), neighbors)
     }
 
+    @Test
+    fun `getGraph uses display title from frontmatter not db slug`() {
+        val root = page("my-page", "my-page", content = "---\ntitle: Human Title\n---\n[[b]]")
+        val target = page("b", "b")
+        val link = Link(sourcePage = root, targetPage = target, targetSlug = "b")
+
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(root)
+        whenever(linkRepository.findBySourcePage(root)).thenReturn(listOf(link))
+        whenever(linkRepository.findByTargetSlug("my-page")).thenReturn(emptyList())
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("b")).thenReturn(target)
+
+        val graph = graphService.getGraph("my-page", depth = 1)
+
+        assertEquals("Human Title", graph.nodes.find { it.slug == "my-page" }!!.title)
+    }
+
     private fun page(
         slug: String,
         title: String,
