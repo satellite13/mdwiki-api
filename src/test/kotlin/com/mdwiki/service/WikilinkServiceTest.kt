@@ -46,4 +46,18 @@ class WikilinkServiceTest {
         )
         assertEquals("See [[wiki-schema|документация]].", out)
     }
+
+    @Test
+    fun `rewriteInternalPageLinks updates matching markdown page links`() {
+        val md = "See [doc](/page/ghost) and [ok](/page/real)."
+        val out = svc.rewriteInternalPageLinks(md, "ghost", "real-page")
+        assertEquals("See [doc](/page/real-page) and [ok](/page/real).", out)
+    }
+
+    @Test
+    fun `rewriteInternalPageLinks handles cyrillic slug in href`() {
+        val md = "See [x](/page/${java.net.URLEncoder.encode("глава-17", Charsets.UTF_8)})."
+        val out = svc.rewriteInternalPageLinks(md, "глава-17", "glava-17")
+        assertEquals("See [x](/page/glava-17).", out)
+    }
 }

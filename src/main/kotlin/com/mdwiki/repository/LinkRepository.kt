@@ -18,4 +18,14 @@ interface LinkRepository : JpaRepository<Link, UUID> {
     @Modifying(clearAutomatically = false, flushAutomatically = true)
     @Query("UPDATE Link l SET l.targetSlug = :newSlug WHERE l.targetSlug = :oldSlug")
     fun updateAllTargetSlugs(@Param("oldSlug") oldSlug: String, @Param("newSlug") newSlug: String): Int
+
+    @Query(
+        """
+        SELECT l FROM Link l
+        JOIN FETCH l.sourcePage s
+        WHERE l.targetPage IS NULL AND s.deletedAt IS NULL
+        ORDER BY l.targetSlug, s.title
+        """
+    )
+    fun findAllDangling(): List<Link>
 }
