@@ -35,7 +35,7 @@ class GraphServiceTest {
 
     @BeforeEach
     fun setUp() {
-        graphService = GraphService(pageRepository, linkRepository)
+        graphService = GraphService(pageRepository, linkRepository, WikilinkService())
     }
 
     @Test
@@ -50,7 +50,7 @@ class GraphServiceTest {
 
     @Test
     fun `getGraph includes dangling target as node`() {
-        val root = page("root", "Root", tags = listOf(tagKotlin))
+        val root = page("root", "Root", tags = listOf(tagKotlin), content = "See [[ghost]]")
         val danglingLink = Link(sourcePage = root, targetPage = null, targetSlug = "ghost")
 
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("root")).thenReturn(root)
@@ -74,8 +74,23 @@ class GraphServiceTest {
     }
 
     @Test
+    fun `getGraph ignores stale links when wikilink only appears in code`() {
+        val root = page("root", "Root", content = "Docs: `[[ghost]]` and `[[slug|Title]]`")
+        val staleLink = Link(sourcePage = root, targetPage = null, targetSlug = "ghost")
+
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("root")).thenReturn(root)
+        whenever(linkRepository.findBySourcePage(root)).thenReturn(listOf(staleLink))
+        whenever(linkRepository.findByTargetSlug("root")).thenReturn(emptyList())
+
+        val graph = graphService.getGraph("root", depth = 1)
+
+        assertEquals(setOf("root"), graph.nodes.map { it.slug }.toSet())
+        assertTrue(graph.edges.isEmpty())
+    }
+
+    @Test
     fun `getGraph edge target uses resolved page slug when link targetSlug differs`() {
-        val root = page("mcp", "MCP протокол")
+        val root = page("mcp", "MCP протокол", content = "See [[настройка-mcp-для-mdwiki]]")
         val guide = page("mcp-setup-guide", "Настройка MCP для mdwiki")
         val link = Link(
             sourcePage = root,
@@ -98,7 +113,7 @@ class GraphServiceTest {
 
     @Test
     fun `getGraph deduplicates parallel edges`() {
-        val root = page("root", "Root")
+        val root = page("root", "Root", content = "[[b]]")
         val target = page("b", "B")
         val link1 = Link(sourcePage = root, targetPage = target, targetSlug = "b")
         val link2 = Link(sourcePage = root, targetPage = target, targetSlug = "b")
@@ -116,7 +131,7 @@ class GraphServiceTest {
     @Test
     fun `getGraph expands incoming backlinks`() {
         val root = page("root", "Root")
-        val other = page("other", "Other")
+        val other = page("other", "Other", content = "Back to [[root]]")
         val back = Link(sourcePage = other, targetPage = root, targetSlug = "root")
 
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("root")).thenReturn(root)
@@ -131,9 +146,9 @@ class GraphServiceTest {
 
     @Test
     fun `getGraph clamps depth to at most three levels`() {
-        val a = page("a", "A")
-        val b = page("b", "B")
-        val c = page("c", "C")
+        val a = page("a", "A", content = "[[b]]")
+        val b = page("b", "B", content = "[[c]]")
+        val c = page("c", "C", content = "[[d]]")
         val d = page("d", "D")
 
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("a")).thenReturn(a)
@@ -161,7 +176,7 @@ class GraphServiceTest {
 
     @Test
     fun `getFullWikiGraph includes all pages and links`() {
-        val a = page("a", "A")
+        val a = page("a", "A", content = "[[b]]")
         val b = page("b", "B")
         val link = Link(sourcePage = a, targetPage = b, targetSlug = "b")
 
@@ -191,7 +206,7 @@ class GraphServiceTest {
 
     @Test
     fun `getFullWikiGraph skips deleted source links`() {
-        val a = page("a", "A")
+        val a = page("a", "A", content = "[[b]]")
         a.deletedAt = java.time.Instant.now()
         val b = page("b", "B")
         val link = Link(sourcePage = a, targetPage = b, targetSlug = "b")
@@ -207,7 +222,7 @@ class GraphServiceTest {
 
     @Test
     fun `getNeighborSlugs returns neighbors excluding root`() {
-        val a = page("a", "A")
+        val a = page("a", "A", content = "[[b]]")
         val b = page("b", "B")
 
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("a")).thenReturn(a)
@@ -226,8 +241,8 @@ class GraphServiceTest {
 
     @Test
     fun `getNeighborSlugs clamps depth to two`() {
-        val a = page("a", "A")
-        val b = page("b", "B")
+        val a = page("a", "A", content = "[[b]]")
+        val b = page("b", "B", content = "[[c]]")
         val c = page("c", "C")
 
         whenever(pageRepository.findBySlugAndDeletedAtIsNull(any())).thenAnswer { inv ->
@@ -252,8 +267,13 @@ class GraphServiceTest {
         assertEquals(setOf("b", "c"), neighbors)
     }
 
-    private fun page(slug: String, title: String, tags: List<Tag> = emptyList()): Page {
-        val p = Page(slug = slug, title = title, contentMd = "")
+    private fun page(
+        slug: String,
+        title: String,
+        tags: List<Tag> = emptyList(),
+        content: String = "",
+    ): Page {
+        val p = Page(slug = slug, title = title, contentMd = content)
         tags.forEach { p.tags.add(it) }
         return p
     }

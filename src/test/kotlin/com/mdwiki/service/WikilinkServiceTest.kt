@@ -74,6 +74,18 @@ class WikilinkServiceTest {
     }
 
     @Test
+    fun `extractWikilinks ignores wikilinks in indented code and html code blocks`() {
+        val md = """
+            Real [[page-a]] and:
+                [[indented]]
+            <code>[[html-code]]</code>
+            <pre>[[html-pre]]</pre>
+        """.trimIndent()
+        val links = svc.extractWikilinks(md)
+        assertEquals(listOf("page-a"), links.map { it.slug })
+    }
+
+    @Test
     fun `rewriteWikilinksReferencingNormalizedSlug leaves matches inside code unchanged`() {
         val md = "[[mcp]] and `[[mcp]]` and ```\n[[mcp]]\n```"
         val out = svc.rewriteWikilinksReferencingNormalizedSlug(md, "mcp", "mcp-протокол")

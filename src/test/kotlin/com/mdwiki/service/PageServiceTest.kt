@@ -68,7 +68,7 @@ class PageServiceTest {
             wikilinkService, linkRepository, syncService
         )
         val deletePageUseCase = DeletePageUseCase(
-            pageRepository, pageMetadataService, ragService, wikiFileService, syncService
+            pageRepository, pageMetadataService, ragService, wikiFileService, syncService, frontmatterMetaService
         )
         pageService = PageService(
             pageRepository,

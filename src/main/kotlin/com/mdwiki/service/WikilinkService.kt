@@ -10,6 +10,8 @@ class WikilinkService {
     private val wikilinkPattern = Regex("""\[\[([^|\]]+?)(?:\|([^\]]+?))?\]\]""")
     private val tagPattern = Regex("""(?<=\s|^)#([\w\p{L}-]+)""")
     private val codeBlockPattern = Regex("""(`[^`]+`|```[\s\S]*?```)""")
+    private val htmlCodeBlockPattern = Regex("""<(code|pre)\b[^>]*>[\s\S]*?</\1>""", RegexOption.IGNORE_CASE)
+    private val indentedCodeLinePattern = Regex("""(?m)^(?:    |\t).*$""")
     private val slugNonAlnum = Regex("[^a-z0-9а-яё]+", RegexOption.IGNORE_CASE)
     private val slugTrimDashes = Regex("^-+|-+$")
 
@@ -31,7 +33,9 @@ class WikilinkService {
     ): String {
         if (oldNormalizedSlug == newSlug) return body
         return transformOutsideCode(body) { segment ->
+            val excluded = excludedProseRanges(segment)
             wikilinkPattern.replace(segment) { m ->
+                if (isInExcludedProse(excluded, m.range.first)) return@replace m.value
                 val rawInner = m.groupValues[1].trim()
                 val label = m.groupValues[2].trim()
                 val normalizedInner = normalizePageSlug(rawInner)
@@ -52,7 +56,9 @@ class WikilinkService {
     fun extractWikilinks(markdown: String): List<Wikilink> {
         val result = mutableListOf<Wikilink>()
         forEachOutsideCode(markdown) { segment ->
+            val excluded = excludedProseRanges(segment)
             wikilinkPattern.findAll(segment).forEach { match ->
+                if (isInExcludedProse(excluded, match.range.first)) return@forEach
                 val rawSlug = match.groupValues[1].trim()
                 val normalized = normalizePageSlug(rawSlug)
                 if (normalized.isEmpty()) return@forEach
@@ -68,10 +74,38 @@ class WikilinkService {
     fun extractTags(markdown: String): Set<String> {
         val result = mutableSetOf<String>()
         forEachOutsideCode(markdown) { segment ->
-            tagPattern.findAll(segment).forEach { result += it.groupValues[1] }
+            val excluded = excludedProseRanges(segment)
+            tagPattern.findAll(segment).forEach { match ->
+                if (isInExcludedProse(excluded, match.range.first)) return@forEach
+                result += match.groupValues[1]
+            }
         }
         return result
     }
+
+    private fun excludedProseRanges(segment: String): List<IntRange> {
+        val ranges = mutableListOf<IntRange>()
+        htmlCodeBlockPattern.findAll(segment).forEach { ranges += it.range }
+        indentedCodeLinePattern.findAll(segment).forEach { ranges += it.range }
+        if (ranges.isEmpty()) return emptyList()
+        ranges.sortBy { it.first }
+        val merged = mutableListOf<IntRange>()
+        var current = ranges.first()
+        for (i in 1 until ranges.size) {
+            val next = ranges[i]
+            if (next.first <= current.last + 1) {
+                current = current.first..maxOf(current.last, next.last)
+            } else {
+                merged += current
+                current = next
+            }
+        }
+        merged += current
+        return merged
+    }
+
+    private fun isInExcludedProse(excluded: List<IntRange>, position: Int): Boolean =
+        excluded.any { position in it }
 
     private fun forEachOutsideCode(markdown: String, action: (String) -> Unit) {
         var lastEnd = 0
@@ -109,7 +143,9 @@ class WikilinkService {
     fun extractInternalPageLinks(markdown: String): List<InternalPageLink> {
         val result = mutableListOf<InternalPageLink>()
         forEachOutsideCode(markdown) { segment ->
+            val excluded = excludedProseRanges(segment)
             mdInternalPageLinkPattern.findAll(segment).forEach { match ->
+                if (isInExcludedProse(excluded, match.range.first)) return@forEach
                 val raw = match.groupValues[2].trim()
                 val decoded = runCatching { java.net.URLDecoder.decode(raw, Charsets.UTF_8) }.getOrDefault(raw)
                 result += InternalPageLink(label = match.groupValues[1], slugRaw = decoded)
@@ -130,7 +166,9 @@ class WikilinkService {
     ): String {
         if (oldNormalizedSlug == newSlug) return body
         return transformOutsideCode(body) { segment ->
+            val excluded = excludedProseRanges(segment)
             mdInternalPageLinkPattern.replace(segment) { match ->
+                if (isInExcludedProse(excluded, match.range.first)) return@replace match.value
                 val label = match.groupValues[1]
                 val raw = match.groupValues[2].trim()
                 val decoded = runCatching { java.net.URLDecoder.decode(raw, Charsets.UTF_8) }.getOrDefault(raw)
