@@ -110,16 +110,20 @@ spec:
                   key: LMSTUDIO_API_KEY
             - name: MDWIKI_RERANKER_MODEL_PATH
               value: {{ .Values.app.rerankerModelPath | quote }}
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
           readinessProbe:
             tcpSocket:
               port: http
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
           livenessProbe:
             tcpSocket:
               port: http
-            initialDelaySeconds: 30
-            periodSeconds: 15
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           {{- if .Values.persistence.enabled }}

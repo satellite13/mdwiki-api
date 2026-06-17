@@ -43,6 +43,7 @@ class SyncServiceTest {
     @Mock private lateinit var fileWatcherService: FileWatcherService
     @Mock private lateinit var treeEventsService: TreeEventsService
     @Mock private lateinit var folderService: FolderService
+    @Mock private lateinit var attachmentService: AttachmentService
     @Mock private lateinit var platformTransactionManager: PlatformTransactionManager
 
     private lateinit var syncService: SyncService
@@ -70,6 +71,7 @@ class SyncServiceTest {
             folderRepository,
             wikiFileService
         )
+        whenever(attachmentService.syncFromDisk()).thenReturn(AttachmentService.AttachmentSyncResult(0))
         syncService = SyncService(
             pageRepository,
             folderRepository,
@@ -78,6 +80,7 @@ class SyncServiceTest {
             folderService,
             wikiSyncEngine,
             ragService,
+            attachmentService,
             platformTransactionManager
         )
     }

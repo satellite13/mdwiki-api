@@ -19,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.data.domain.PageImpl
@@ -191,5 +192,37 @@ class AttachmentServiceTest {
         assertThrows<NotFoundException> {
             service.delete(id)
         }
+    }
+
+    @Test
+    fun `syncFromDisk registers files missing in database`() {
+        val pageId = UUID.randomUUID()
+        val storedName = "abc-123.png"
+        val uploads = contentRoot.resolve("uploads")
+        Files.createDirectories(uploads)
+        Files.write(uploads.resolve(storedName), byteArrayOf(1, 2, 3))
+
+        whenever(attachmentRepository.findAll()).thenReturn(emptyList())
+        whenever(attachmentRepository.save(any<Attachment>())).thenAnswer { it.arguments[0] }
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(
+            listOf(
+                Page(
+                    id = pageId,
+                    slug = "with-image",
+                    title = "With image",
+                    contentMd = "![pic](/api/uploads/$storedName)"
+                )
+            )
+        )
+        whenever(pageRepository.findById(pageId)).thenReturn(
+            Optional.of(Page(id = pageId, slug = "with-image", title = "With image"))
+        )
+
+        val result = service.syncFromDisk()
+
+        assertEquals(1, result.added)
+        verify(attachmentRepository).save(argThat<Attachment> {
+            this.storedName == storedName && page?.id == pageId
+        })
     }
 }

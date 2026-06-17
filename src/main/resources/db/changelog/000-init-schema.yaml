@@ -2,6 +2,12 @@ databaseChangeLog:
   - changeSet:
       id: 000-init-schema
       author: mdwiki
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: users
       changes:
         - sql:
             splitStatements: false

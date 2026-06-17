@@ -15,6 +15,15 @@ Options:
   --openai-api-key <key>
                   Set app.openaiApiKey in Helm values for this deploy.
   -h, --help      Show this help.
+
+Environment:
+  BUILD_BASE_IMAGE=auto|false|true
+                  auto (default): use mdwiki-api-build-base:<fingerprint> when present,
+                  otherwise build Dockerfile.build-base once per Gradle fingerprint.
+  DOCKER_BUILD_BASE_IMAGE
+                  Override base image tag (default: mdwiki-api-build-base:<fingerprint>).
+  BUILD_BASE_IMAGE=true
+                  Force rebuild of the Gradle base image before app build.
 EOF
 }
 
@@ -66,6 +75,8 @@ FULL_IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
 # auto | docker | bootbuildimage
 BUILD_METHOD="${BUILD_METHOD:-auto}"
+DOCKER_BUILD_BASE_IMAGE="${DOCKER_BUILD_BASE_IMAGE:-mdwiki-api-build-base:latest}"
+BUILD_BASE_IMAGE="${BUILD_BASE_IMAGE:-auto}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -118,9 +129,50 @@ if [[ "${BUILD_METHOD}" == "auto" ]]; then
   fi
 fi
 
+gradle_build_fingerprint() {
+  local files=(
+    "${ROOT_DIR}/gradle/wrapper/gradle-wrapper.properties"
+    "${ROOT_DIR}/build.gradle.kts"
+    "${ROOT_DIR}/settings.gradle.kts"
+    "${ROOT_DIR}/gradle.properties"
+  )
+  cat "${files[@]}" 2>/dev/null | shasum -a 256 | awk '{print substr($1, 1, 12)}'
+}
+
+ensure_build_base_image() {
+  if [[ "${BUILD_BASE_IMAGE}" == "false" ]]; then
+    return 0
+  fi
+
+  local fp tagged_image
+  fp="$(gradle_build_fingerprint)"
+  if [[ "${DOCKER_BUILD_BASE_IMAGE}" == "mdwiki-api-build-base:latest" ]]; then
+    tagged_image="mdwiki-api-build-base:${fp}"
+    DOCKER_BUILD_BASE_IMAGE="${tagged_image}"
+    export DOCKER_BUILD_BASE_IMAGE
+  else
+    tagged_image="${DOCKER_BUILD_BASE_IMAGE}"
+  fi
+
+  if [[ "${BUILD_BASE_IMAGE}" == "auto" ]] && docker image inspect "${tagged_image}" >/dev/null 2>&1; then
+    echo "Using existing build base image ${tagged_image}"
+    return 0
+  fi
+
+  echo "Building Gradle base image ${tagged_image} (fingerprint ${fp})"
+  DOCKER_BUILDKIT=1 docker build -f "${ROOT_DIR}/Dockerfile.build-base" -t "${tagged_image}" "${ROOT_DIR}"
+  if [[ "${tagged_image}" != "mdwiki-api-build-base:latest" ]]; then
+    docker tag "${tagged_image}" mdwiki-api-build-base:latest
+  fi
+}
+
 echo "Building image ${FULL_IMAGE} using method=${BUILD_METHOD}"
 if [[ "${BUILD_METHOD}" == "docker" ]]; then
-  docker build -t "${FULL_IMAGE}" "${ROOT_DIR}"
+  ensure_build_base_image
+  DOCKER_BUILDKIT=1 docker build \
+    --build-arg "BUILD_BASE_IMAGE=${DOCKER_BUILD_BASE_IMAGE}" \
+    -t "${FULL_IMAGE}" \
+    "${ROOT_DIR}"
 elif [[ "${BUILD_METHOD}" == "bootbuildimage" ]]; then
   "${ROOT_DIR}/gradlew" -p "${ROOT_DIR}" bootBuildImage --imageName="${FULL_IMAGE}"
 else
