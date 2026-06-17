@@ -60,4 +60,23 @@ class WikilinkServiceTest {
         val out = svc.rewriteInternalPageLinks(md, "глава-17", "glava-17")
         assertEquals("See [x](/page/glava-17).", out)
     }
+
+    @Test
+    fun `extractWikilinks ignores wikilinks inside inline code and fenced blocks`() {
+        val md = """
+            Real [[page-a]] and `[[wikilinks]]` plus:
+            ```
+            [[ghost]]
+            ```
+        """.trimIndent()
+        val links = svc.extractWikilinks(md)
+        assertEquals(listOf("page-a"), links.map { it.slug })
+    }
+
+    @Test
+    fun `rewriteWikilinksReferencingNormalizedSlug leaves matches inside code unchanged`() {
+        val md = "[[mcp]] and `[[mcp]]` and ```\n[[mcp]]\n```"
+        val out = svc.rewriteWikilinksReferencingNormalizedSlug(md, "mcp", "mcp-протокол")
+        assertEquals("[[mcp-протокол]] and `[[mcp]]` and ```\n[[mcp]]\n```", out)
+    }
 }

@@ -16,6 +16,7 @@ import org.mockito.InjectMocks
 import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -39,15 +40,16 @@ class BrokenLinkServiceTest {
 
     @Test
     fun `listBroken returns dangling wikilinks and unresolved markdown links`() {
-        val source = Page(id = UUID.randomUUID(), slug = "from", title = "From")
+        val source = Page(id = UUID.randomUUID(), slug = "from", title = "From", contentMd = "[[ghost]]")
         val dangling = Link(id = UUID.randomUUID(), sourcePage = source, targetPage = null, targetSlug = "ghost")
         val target = Page(id = UUID.randomUUID(), slug = "real", title = "Real", contentMd = "# Real\n\n[ok](/page/real)")
         val brokenMd = Page(id = UUID.randomUUID(), slug = "broken-md", title = "Broken MD", contentMd = "# X\n\nSee [g](/page/ghost).")
 
         whenever(linkRepository.findAllDangling()).thenReturn(listOf(dangling))
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(target, brokenMd))
-        whenever(wikilinkService.extractInternalPageLinks(org.mockito.kotlin.any())).thenReturn(emptyList())
-        whenever(wikilinkService.extractInternalPageLinks(org.mockito.kotlin.argThat { it.contains("/page/ghost") }))
+        whenever(wikilinkService.extractWikilinks(any())).thenReturn(listOf(WikilinkService.Wikilink("ghost", null)))
+        whenever(wikilinkService.extractInternalPageLinks(any())).thenReturn(emptyList())
+        whenever(wikilinkService.extractInternalPageLinks(argThat { contains("/page/ghost") }))
             .thenReturn(listOf(WikilinkService.InternalPageLink("g", "ghost")))
         whenever(wikilinkService.resolvesToPage("ghost", listOf(target, brokenMd))).thenReturn(false)
 
@@ -56,6 +58,20 @@ class BrokenLinkServiceTest {
         assertEquals(2, result.size)
         assertTrue(result.any { it.kind == BrokenLinkKind.WIKILINK && it.brokenTarget == "ghost" })
         assertTrue(result.any { it.kind == BrokenLinkKind.MARKDOWN && it.sourceSlug == "broken-md" })
+    }
+
+    @Test
+    fun `listBroken ignores dangling wikilinks that only appear inside code`() {
+        val source = Page(id = UUID.randomUUID(), slug = "from", title = "From", contentMd = "`[[ghost]]`")
+        val dangling = Link(id = UUID.randomUUID(), sourcePage = source, targetPage = null, targetSlug = "ghost")
+
+        whenever(linkRepository.findAllDangling()).thenReturn(listOf(dangling))
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(source))
+        whenever(wikilinkService.extractWikilinks(any())).thenReturn(emptyList())
+
+        val result = service.listBroken()
+
+        assertTrue(result.none { it.kind == BrokenLinkKind.WIKILINK })
     }
 
     @Test

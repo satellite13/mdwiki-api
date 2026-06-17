@@ -97,6 +97,22 @@ class FolderServiceTest {
     }
 
     @Test
+    fun `getTree sorts pages with natural order for numbered titles`() {
+        val chapter9 = Page(id = UUID.randomUUID(), slug = "chapter-9", title = "Глава 9: Обучение и адаптация")
+        val chapter10 = Page(id = UUID.randomUUID(), slug = "chapter-10", title = "Глава 10: Протокол контекста модели (MCP)")
+
+        whenever(folderRepository.findAll()).thenReturn(emptyList())
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(chapter10, chapter9))
+
+        val tree = folderService.getTree()
+        val pages = tree.filter { it.type == "page" }
+
+        assertEquals(2, pages.size)
+        assertEquals("Глава 9: Обучение и адаптация", pages[0].name)
+        assertEquals("Глава 10: Протокол контекста модели (MCP)", pages[1].name)
+    }
+
+    @Test
     fun `getTree omits soft-deleted pages`() {
         val active = Page(id = UUID.randomUUID(), slug = "kept", title = "Kept")
         whenever(folderRepository.findAll()).thenReturn(emptyList())

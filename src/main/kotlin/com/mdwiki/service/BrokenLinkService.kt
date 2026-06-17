@@ -33,6 +33,10 @@ class BrokenLinkService(
 
         linkRepository.findAllDangling().forEach { link ->
             val source = link.sourcePage
+            val body = MarkdownFrontmatter.strip(source.contentMd ?: "")
+            val activeTargets = wikilinkService.extractWikilinks(body).map { it.slug }.toSet()
+            if (link.targetSlug !in activeTargets) return@forEach
+            if (wikilinkService.resolvesToPage(link.targetSlug, pages)) return@forEach
             result += BrokenLinkResponse(
                 id = link.id,
                 brokenTarget = link.targetSlug,
