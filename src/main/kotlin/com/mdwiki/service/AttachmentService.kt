@@ -7,6 +7,7 @@ import com.mdwiki.model.Attachment
 import com.mdwiki.repository.AttachmentRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -26,8 +27,86 @@ class AttachmentService(
     private val wikiProperties: WikiProperties
 ) {
 
+    private val log = LoggerFactory.getLogger(AttachmentService::class.java)
+
+    data class AttachmentSyncResult(val added: Int)
+
+    private val uploadRefPattern = Regex("""/api/uploads/([^)\s"'<>]+)""")
+
     private val uploadsDir: Path
         get() = Path.of(wikiProperties.contentDir).toAbsolutePath().normalize().resolve("uploads")
+
+    /**
+     * Регистрирует файлы из `uploads/`, которых нет в таблице `attachments`.
+     * Нужно после очистки БД: файлы на PVC остаются, а markdown-ссылки на них работают,
+     * но список вложений в UI пуст.
+     */
+    @Transactional
+    fun syncFromDisk(): AttachmentSyncResult {
+        val dir = uploadsDir
+        if (!Files.isDirectory(dir)) {
+            return AttachmentSyncResult(0)
+        }
+
+        val existingNames = attachmentRepository.findAll().map { it.storedName }.toSet()
+        val pageByStoredName = findPageLinksForUploads()
+        var added = 0
+
+        Files.list(dir).use { stream ->
+            stream.filter { Files.isRegularFile(it) }.forEach { path ->
+                val storedName = path.fileName.toString()
+                if (storedName in existingNames) return@forEach
+
+                val linkedPage = pageByStoredName[storedName]?.let { pageId ->
+                    pageRepository.findById(pageId).orElse(null)
+                }
+
+                attachmentRepository.save(
+                    Attachment(
+                        originalName = storedName,
+                        storedName = storedName,
+                        contentType = Files.probeContentType(path) ?: guessContentType(storedName),
+                        sizeBytes = Files.size(path),
+                        uploadedBy = null,
+                        page = linkedPage
+                    )
+                )
+                added++
+            }
+        }
+
+        if (added > 0) {
+            log.info("Attachment sync: registered {} file(s) from disk", added)
+        }
+        return AttachmentSyncResult(added)
+    }
+
+    private fun findPageLinksForUploads(): Map<String, UUID> {
+        val result = linkedMapOf<String, UUID>()
+        for (page in pageRepository.findAllByDeletedAtIsNull()) {
+            val content = page.contentMd ?: continue
+            val pageId = page.id ?: continue
+            for (match in uploadRefPattern.findAll(content)) {
+                val storedName = match.groupValues[1].trim().trimStart('/')
+                if (storedName.isNotEmpty()) {
+                    result.putIfAbsent(storedName, pageId)
+                }
+            }
+        }
+        return result
+    }
+
+    private fun guessContentType(fileName: String): String {
+        return when (fileName.substringAfterLast('.', "").lowercase()) {
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "svg" -> "image/svg+xml"
+            "pdf" -> "application/pdf"
+            else -> "application/octet-stream"
+        }
+    }
 
     @Transactional(readOnly = true)
     fun list(page: Int, size: Int, pageId: UUID?): List<AttachmentResponse> {

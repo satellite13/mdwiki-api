@@ -7,6 +7,7 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.usecase.DeletePageUseCase
+import com.mdwiki.util.NaturalSort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
@@ -57,7 +58,9 @@ class FolderService(
                 }
 
             val pageNodes = (pagesByFolder[parentId] ?: emptyList())
-                .sortedBy { it.displayTitle() }
+                .sortedWith { left, right ->
+                    NaturalSort.compare(left.displayTitle(), right.displayTitle())
+                }
                 .map { page ->
                     FolderTreeNode(
                         id = page.id.toString(),

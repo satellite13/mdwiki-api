@@ -28,6 +28,7 @@ class SyncService(
     @param:Lazy private val folderService: FolderService,
     private val wikiSyncEngine: WikiSyncEngine,
     private val ragService: RagService,
+    private val attachmentService: AttachmentService,
     transactionManager: PlatformTransactionManager
 ) {
     private val log = LoggerFactory.getLogger(SyncService::class.java)
@@ -44,7 +45,7 @@ class SyncService(
     private val reconcileScheduleLock = Any()
     private var reconcileFuture: ScheduledFuture<*>? = null
 
-    data class SyncResult(val added: Int, val updated: Int, val removed: Int)
+    data class SyncResult(val added: Int, val updated: Int, val removed: Int, val attachmentsAdded: Int = 0)
 
     data class ReindexResult(val total: Int, val reindexed: Int, val failed: Int)
 
@@ -77,11 +78,13 @@ class SyncService(
     @Transactional
     fun fullSync(): SyncResult = synchronized(wikiSyncLock) {
         val result = wikiSyncEngine.fullSync()
-        if (result.added > 0 || result.updated > 0 || result.removed > 0) {
+        val attachmentsAdded = attachmentService.syncFromDisk().added
+        val merged = SyncResult(result.added, result.updated, result.removed, attachmentsAdded)
+        if (merged.added > 0 || merged.updated > 0 || merged.removed > 0 || merged.attachmentsAdded > 0) {
             folderService.invalidateCache()
             treeEventsService.publishTreeUpdated()
         }
-        result
+        merged
     }
 
     @Transactional
@@ -128,12 +131,14 @@ class SyncService(
 
     private fun reconcileFromDiskBody(): SyncResult {
         val result = wikiSyncEngine.fullSync()
+        val attachmentsAdded = attachmentService.syncFromDisk().added
+        val merged = SyncResult(result.added, result.updated, result.removed, attachmentsAdded)
         val prunedFolders = pruneMissingFolders()
-        if (result.added > 0 || result.updated > 0 || result.removed > 0 || prunedFolders > 0) {
+        if (merged.added > 0 || merged.updated > 0 || merged.removed > 0 || merged.attachmentsAdded > 0 || prunedFolders > 0) {
             folderService.invalidateCache()
             treeEventsService.publishTreeUpdated()
         }
-        return result
+        return merged
     }
 
     @PreDestroy

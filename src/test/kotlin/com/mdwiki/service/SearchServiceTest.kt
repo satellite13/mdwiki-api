@@ -1,5 +1,8 @@
 package com.mdwiki.service
 
+import com.mdwiki.model.Page
+import com.mdwiki.model.Tag
+import com.mdwiki.rag.RagService
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.PageSearchHit
 import org.junit.jupiter.api.Assertions.*
@@ -18,11 +21,14 @@ class SearchServiceTest {
     @Mock
     private lateinit var pageRepository: PageRepository
 
+    @Mock
+    private lateinit var ragService: RagService
+
     private lateinit var searchService: SearchService
 
     @BeforeEach
     fun setUp() {
-        searchService = SearchService(pageRepository)
+        searchService = SearchService(pageRepository, ragService)
     }
 
     @Test
@@ -52,5 +58,40 @@ class SearchServiceTest {
         val results = searchService.search("nonexistent")
 
         assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `ragSearch maps RAG hits with page tags`() {
+        whenever(ragService.search("kotlin", 10)).thenReturn(
+            listOf(
+                RagService.SearchResult(
+                    chunkText = "Kotlin is **great**",
+                    sectionHeading = "Intro",
+                    pageTitle = "Kotlin Guide",
+                    pageSlug = "kotlin-guide",
+                    score = 0.92
+                )
+            )
+        )
+        val kotlinTag = Tag(name = "kotlin")
+        val page = Page(slug = "kotlin-guide", title = "Kotlin Guide").apply {
+            tags.add(kotlinTag)
+        }
+        whenever(pageRepository.findAllBySlugIn(listOf("kotlin-guide"))).thenReturn(listOf(page))
+
+        val results = searchService.ragSearch("kotlin")
+
+        assertEquals(1, results.size)
+        assertEquals("kotlin-guide", results[0].pageSlug)
+        assertEquals("Kotlin Guide", results[0].pageTitle)
+        assertEquals("Intro", results[0].sectionHeading)
+        assertTrue(results[0].snippet.contains("Kotlin"))
+        assertEquals(0.92, results[0].score)
+        assertEquals(listOf("kotlin"), results[0].tags)
+    }
+
+    @Test
+    fun `ragSearch returns empty for blank query`() {
+        assertTrue(searchService.ragSearch("  ").isEmpty())
     }
 }

@@ -1,0 +1,20 @@
+# Базовый образ сборки: Gradle wrapper/distribution + Maven-зависимости.
+# Пересобирается автоматически при изменении gradle-файлов (см. deploy-k8s-with-build.sh).
+# Вручную: ./scripts/build-base-image.sh
+FROM eclipse-temurin:25-jdk
+WORKDIR /app
+
+ENV GRADLE_USER_HOME=/gradle-cache
+
+COPY gradle gradle
+COPY gradlew gradlew.bat settings.gradle.kts build.gradle.kts gradle.properties ./
+
+# 1) Кэшируем дистрибутив Gradle (wrapper) в слое образа.
+RUN ./gradlew --no-daemon --version \
+  || (sleep 15 && ./gradlew --no-daemon --version) \
+  || (sleep 30 && ./gradlew --no-daemon --version)
+
+# 2) Прогреваем dependency cache. Повтор при сетевых сбоях (TLS / repo.spring.io).
+RUN ./gradlew --no-daemon dependencies -q \
+  || (sleep 15 && ./gradlew --no-daemon dependencies -q) \
+  || (sleep 30 && ./gradlew --no-daemon dependencies -q)

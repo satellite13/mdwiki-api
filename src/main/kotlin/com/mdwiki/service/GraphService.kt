@@ -4,15 +4,20 @@ import com.mdwiki.dto.GraphEdge
 import com.mdwiki.dto.GraphNode
 import com.mdwiki.dto.GraphResponse
 import com.mdwiki.error.NotFoundException
+import com.mdwiki.mapper.displayTitle
+import com.mdwiki.model.Link
+import com.mdwiki.model.Page
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.util.MarkdownFrontmatter
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class GraphService(
     private val pageRepository: PageRepository,
-    private val linkRepository: LinkRepository
+    private val linkRepository: LinkRepository,
+    private val wikilinkService: WikilinkService,
 ) {
 
     @Transactional(readOnly = true)
@@ -25,7 +30,7 @@ class GraphService(
         val edges = mutableListOf<GraphEdge>()
 
         // Add current page as node
-        nodes.add(GraphNode(slug = page.slug, title = page.title, tags = page.tags.map { it.name }, isCurrent = true, exists = true))
+        nodes.add(GraphNode(slug = page.slug, title = page.displayTitle(), tags = page.tags.map { it.name }, isCurrent = true, exists = true))
 
         // BFS expansion
         var frontier = setOf(slug)
@@ -37,6 +42,7 @@ class GraphService(
                 // Outgoing links
                 val outgoing = linkRepository.findBySourcePage(currentPage)
                 for (link in outgoing) {
+                    if (!isActiveOutgoingLink(currentPage, link)) continue
                     val targetSlug = link.targetSlug
                     val targetPage = link.targetPage ?: pageRepository.findBySlugAndDeletedAtIsNull(targetSlug)
                     // В БД target_slug может не совпадать со slug страницы (старые ссылки / rename);
@@ -50,7 +56,7 @@ class GraphService(
                             nodes.add(
                                 GraphNode(
                                     slug = targetPage.slug,
-                                    title = targetPage.title,
+                                    title = targetPage.displayTitle(),
                                     tags = targetPage.tags.map { it.name },
                                     isCurrent = false,
                                     exists = true
@@ -76,6 +82,7 @@ class GraphService(
                 val incoming = linkRepository.findByTargetSlug(currentSlug)
                 for (link in incoming) {
                     if (link.sourcePage.deletedAt != null) continue
+                    if (!isActiveIncomingLink(link.sourcePage, link.targetSlug)) continue
                     val sourceSlug = link.sourcePage.slug
                     edges.add(GraphEdge(source = sourceSlug, target = currentSlug))
                     if (sourceSlug !in visitedSlugs) {
@@ -84,7 +91,7 @@ class GraphService(
                         nodes.add(
                             GraphNode(
                                 slug = link.sourcePage.slug,
-                                title = link.sourcePage.title,
+                                title = link.sourcePage.displayTitle(),
                                 tags = link.sourcePage.tags.map { it.name },
                                 isCurrent = false,
                                 exists = true
@@ -113,7 +120,7 @@ class GraphService(
         val nodes = pages.map { p ->
             GraphNode(
                 slug = p.slug,
-                title = p.title,
+                title = p.displayTitle(),
                 tags = p.tags.map { it.name },
                 isCurrent = highlight != null && p.slug == highlight,
                 exists = true
@@ -124,6 +131,7 @@ class GraphService(
         for (link in linkRepository.findAll()) {
             val src = link.sourcePage
             if (src.deletedAt != null) continue
+            if (!isActiveOutgoingLink(src, link)) continue
             val srcSlug = src.slug
             if (srcSlug !in knownSlugs) continue
 
@@ -138,7 +146,7 @@ class GraphService(
                     nodes.add(
                         GraphNode(
                             slug = targetPage.slug,
-                            title = targetPage.title,
+                            title = targetPage.displayTitle(),
                             tags = targetPage.tags.map { it.name },
                             isCurrent = highlight != null && targetPage.slug == highlight,
                             exists = true
@@ -178,6 +186,7 @@ class GraphService(
 
                 // Outgoing
                 linkRepository.findBySourcePage(currentPage).forEach { link ->
+                    if (!isActiveOutgoingLink(currentPage, link)) return@forEach
                     if (link.targetSlug !in visited) {
                         visited.add(link.targetSlug)
                         nextFrontier.add(link.targetSlug)
@@ -186,6 +195,7 @@ class GraphService(
 
                 // Incoming
                 linkRepository.findByTargetSlug(currentSlug).forEach { link ->
+                    if (!isActiveIncomingLink(link.sourcePage, link.targetSlug)) return@forEach
                     val srcSlug = link.sourcePage.slug
                     if (srcSlug !in visited) {
                         visited.add(srcSlug)
@@ -199,4 +209,15 @@ class GraphService(
         visited.remove(slug) // exclude the original page
         return visited
     }
+
+    private fun activeWikilinkSlugs(page: Page): Set<String> {
+        val body = MarkdownFrontmatter.strip(page.contentMd ?: "")
+        return wikilinkService.extractWikilinks(body).map { it.slug }.toSet()
+    }
+
+    private fun isActiveOutgoingLink(source: Page, link: Link): Boolean =
+        link.targetSlug in activeWikilinkSlugs(source)
+
+    private fun isActiveIncomingLink(source: Page, targetSlug: String): Boolean =
+        targetSlug in activeWikilinkSlugs(source)
 }

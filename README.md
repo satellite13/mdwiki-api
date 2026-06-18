@@ -1,5 +1,90 @@
 # mdwiki-api
 
+Backend mdwiki: Spring Boot + Kotlin, PostgreSQL (pgvector), REST API, SSE,
+MCP-инструменты, RAG-поиск.
+
+## Быстрый старт (локально)
+
+```sh
+./gradlew bootRun          # http://localhost:8080
+./gradlew test             # unit/integration tests
+```
+
+Фронтенд в dev-режиме проксирует `/api` на `:8080` (см.
+[mdwiki-frontend](../mdwiki-frontend)).
+
+## Деплой в Kubernetes
+
+Скрипты в `scripts/` оборачивают Helm chart
+`deploy/helm/mdwiki-api`. Требуются `kubectl`, `helm` и доступ к кластеру.
+
+| Скрипт | Назначение |
+|--------|------------|
+| `scripts/deploy-k8s.sh` | `helm upgrade --install` без сборки образа (образ уже в registry или загружен вручную) |
+| `scripts/deploy-k8s-with-build.sh` | Сборка Docker-образа + деплой |
+| `scripts/build-base-image.sh` | Только Gradle base image (`Dockerfile.build-base`) для ускорения сборки app-образа |
+| `scripts/undeploy-k8s.sh` | `helm uninstall` релиза |
+
+### Типичный деплой
+
+```sh
+# Сборка образа (git short SHA) и выкладка в namespace mdwiki
+./scripts/deploy-k8s-with-build.sh
+
+# С кастомными values (JWT, postgres, embedding и т.д.)
+VALUES_FILE=deploy/helm/mdwiki-api/values-prod.yaml ./scripts/deploy-k8s-with-build.sh
+
+# Только helm, если образ уже собран и запушен
+IMAGE_REPOSITORY=ghcr.io/your-org/mdwiki-api \
+IMAGE_TAG=abc1234 \
+./scripts/deploy-k8s.sh
+```
+
+### Полезные переменные окружения
+
+| Переменная | По умолчанию | Описание |
+|------------|--------------|----------|
+| `RELEASE_NAME` | `mdwiki-api` | Имя Helm-релиза |
+| `NAMESPACE` | `mdwiki` | Namespace в кластере |
+| `VALUES_FILE` | — | Дополнительный `-f` values-файл |
+| `IMAGE_REPOSITORY` | `mdwiki-api` | Репозиторий образа |
+| `IMAGE_TAG` | `git rev-parse --short HEAD` | Тег образа |
+| `TIMEOUT` | `5m` | Таймаут `helm --wait` и rollout |
+
+### Опции `deploy-k8s-with-build.sh`
+
+```sh
+./scripts/deploy-k8s-with-build.sh --help
+
+# Чистая БД (удалить StatefulSet Postgres + PVC, перезапустить API / Liquibase)
+./scripts/deploy-k8s-with-build.sh --recreate-db
+
+# Провайдер эмбеддингов и ключ OpenAI на время деплоя
+./scripts/deploy-k8s-with-build.sh \
+  --embedding-provider openai \
+  --openai-api-key "$OPENAI_API_KEY"
+```
+
+Сборка образа: `BUILD_METHOD=auto` (по умолчанию) — Docker, если есть
+`Dockerfile`, иначе `./gradlew bootBuildImage`. Base image кэшируется по
+fingerprint Gradle-файлов (`BUILD_BASE_IMAGE=auto`).
+
+### Снятие с кластера
+
+```sh
+./scripts/undeploy-k8s.sh
+
+# Вместе с PVC (данные Postgres и wiki-content)
+PURGE_DATA=true ./scripts/undeploy-k8s.sh
+```
+
+Подробнее по values chart — `deploy/helm/mdwiki-api/README.md`.
+
+После API обычно деплоят фронтенд:
+[mdwiki-frontend/scripts/deploy-k8s-with-build.sh](../mdwiki-frontend/scripts/deploy-k8s-with-build.sh).
+
+---
+
 ## MCP: загрузка attachments
 
 Инструмент `wiki_upload` загружает файл в `uploads/` через MCP и возвращает URL вида `/api/uploads/{storedName}`.

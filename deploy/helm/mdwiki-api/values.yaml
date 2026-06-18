@@ -27,6 +27,15 @@ ingress:
 
 resources: {}
 
+probes:
+  startup:
+    failureThreshold: 24
+  readiness:
+    periodSeconds: 10
+  liveness:
+    periodSeconds: 15
+    failureThreshold: 3
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

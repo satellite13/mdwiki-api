@@ -1,5 +1,6 @@
 package com.mdwiki.controller
 
+import com.mdwiki.dto.RagSearchResult
 import com.mdwiki.dto.SearchResult
 import com.mdwiki.service.SearchService
 import org.junit.jupiter.api.Test
@@ -30,6 +31,31 @@ class SearchControllerTest {
         mockMvc.get("/api/search?q=kotlin").andExpect {
             status { isOk() }
             jsonPath("$[0].slug") { value("kotlin-page") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
+    fun `GET search rag returns results`() {
+        whenever(searchService.ragSearch("kotlin", 10)).thenReturn(
+            listOf(
+                RagSearchResult(
+                    chunkText = "Kotlin is great",
+                    pageSlug = "kotlin-page",
+                    pageTitle = "Kotlin Guide",
+                    sectionHeading = "Intro",
+                    snippet = "Kotlin is great",
+                    score = 0.91,
+                    tags = listOf("kotlin")
+                )
+            )
+        )
+
+        mockMvc.get("/api/search/rag?q=kotlin").andExpect {
+            status { isOk() }
+            jsonPath("$[0].pageSlug") { value("kotlin-page") }
+            jsonPath("$[0].score") { value(0.91) }
+            jsonPath("$[0].tags[0]") { value("kotlin") }
         }
     }
 }

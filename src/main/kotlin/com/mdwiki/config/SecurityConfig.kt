@@ -51,6 +51,8 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/attachments/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.DELETE, "/api/attachments/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/folders/**").hasAnyRole("READER", "EDITOR", "ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/links/**").hasAnyRole("READER", "EDITOR", "ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/api/links/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/folders/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/folders/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.DELETE, "/api/folders/**").hasAnyRole("EDITOR", "ADMIN")

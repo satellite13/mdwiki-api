@@ -46,4 +46,49 @@ class WikilinkServiceTest {
         )
         assertEquals("See [[wiki-schema|документация]].", out)
     }
+
+    @Test
+    fun `rewriteInternalPageLinks updates matching markdown page links`() {
+        val md = "See [doc](/page/ghost) and [ok](/page/real)."
+        val out = svc.rewriteInternalPageLinks(md, "ghost", "real-page")
+        assertEquals("See [doc](/page/real-page) and [ok](/page/real).", out)
+    }
+
+    @Test
+    fun `rewriteInternalPageLinks handles cyrillic slug in href`() {
+        val md = "See [x](/page/${java.net.URLEncoder.encode("глава-17", Charsets.UTF_8)})."
+        val out = svc.rewriteInternalPageLinks(md, "глава-17", "glava-17")
+        assertEquals("See [x](/page/glava-17).", out)
+    }
+
+    @Test
+    fun `extractWikilinks ignores wikilinks inside inline code and fenced blocks`() {
+        val md = """
+            Real [[page-a]] and `[[wikilinks]]` plus:
+            ```
+            [[ghost]]
+            ```
+        """.trimIndent()
+        val links = svc.extractWikilinks(md)
+        assertEquals(listOf("page-a"), links.map { it.slug })
+    }
+
+    @Test
+    fun `extractWikilinks ignores wikilinks in indented code and html code blocks`() {
+        val md = """
+            Real [[page-a]] and:
+                [[indented]]
+            <code>[[html-code]]</code>
+            <pre>[[html-pre]]</pre>
+        """.trimIndent()
+        val links = svc.extractWikilinks(md)
+        assertEquals(listOf("page-a"), links.map { it.slug })
+    }
+
+    @Test
+    fun `rewriteWikilinksReferencingNormalizedSlug leaves matches inside code unchanged`() {
+        val md = "[[mcp]] and `[[mcp]]` and ```\n[[mcp]]\n```"
+        val out = svc.rewriteWikilinksReferencingNormalizedSlug(md, "mcp", "mcp-протокол")
+        assertEquals("[[mcp-протокол]] and `[[mcp]]` and ```\n[[mcp]]\n```", out)
+    }
 }
