@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-annotations
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: false
+            sql: |
+              CREATE TABLE annotations (
+                id              uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+                page_id         uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+                anchor_context  text,
+                highlighted_text text NOT NULL,
+                comment         text,
+                range_start     int,
+                range_end       int,
+                color           varchar(20),
+                created_by      varchar(100) NOT NULL,
+                created_at      timestamptz NOT NULL DEFAULT now(),
+                updated_at      timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE INDEX idx_annotations_page_id ON annotations (page_id);
+      rollback:
+        - sql:
+            sql: DROP TABLE IF EXISTS annotations;

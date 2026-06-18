@@ -1,3 +1,5 @@
 databaseChangeLog:
   - include:
       file: db/changelog/000-init-schema.yaml
+  - include:
+      file: db/changelog/001-annotations.yaml
