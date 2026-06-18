@@ -20,6 +20,11 @@ data class LoginRequest(
     val password: String
 )
 
+data class ChangePasswordRequest(
+    val currentPassword: String,
+    val newPassword: String
+)
+
 data class AuthResponse(
     val token: String,
     val username: String,

@@ -37,6 +37,7 @@ class SecurityConfig(
             .securityContext { it.securityContextRepository(RequestAttributeSecurityContextRepository()) }
             .authorizeHttpRequests {
                 it
+                    .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
                     .requestMatchers("/api/auth/**").permitAll()
                     .requestMatchers("/error").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/tree").permitAll()
