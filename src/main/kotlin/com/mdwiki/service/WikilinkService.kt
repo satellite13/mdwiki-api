@@ -9,7 +9,7 @@ class WikilinkService {
 
     private val wikilinkPattern = Regex("""\[\[([^|\]]+?)(?:\|([^\]]+?))?\]\]""")
     private val tagPattern = Regex("""(?<=\s|^)#([\w\p{L}-]+)""")
-    private val codeBlockPattern = Regex("""(`[^`]+`|```[\s\S]*?```)""")
+    private val fencedCodePattern = Regex("""(?ms)^([`~]{3,}).*?^\1\s*$""")
     private val htmlCodeBlockPattern = Regex("""<(code|pre)\b[^>]*>[\s\S]*?</\1>""", RegexOption.IGNORE_CASE)
     private val indentedCodeLinePattern = Regex("""(?m)^(?:    |\t).*$""")
     private val slugNonAlnum = Regex("[^a-z0-9а-яё]+", RegexOption.IGNORE_CASE)
@@ -32,10 +32,8 @@ class WikilinkService {
         oldNormalizedTitle: String? = null
     ): String {
         if (oldNormalizedSlug == newSlug) return body
-        return transformOutsideCode(body) { segment ->
-            val excluded = excludedProseRanges(segment)
+        return transformOutsideProtected(body) { segment ->
             wikilinkPattern.replace(segment) { m ->
-                if (isInExcludedProse(excluded, m.range.first)) return@replace m.value
                 val rawInner = m.groupValues[1].trim()
                 val label = m.groupValues[2].trim()
                 val normalizedInner = normalizePageSlug(rawInner)
@@ -54,45 +52,86 @@ class WikilinkService {
     }
 
     fun extractWikilinks(markdown: String): List<Wikilink> {
+        val protected = protectedRanges(markdown)
         val result = mutableListOf<Wikilink>()
-        forEachOutsideCode(markdown) { segment ->
-            val excluded = excludedProseRanges(segment)
-            wikilinkPattern.findAll(segment).forEach { match ->
-                if (isInExcludedProse(excluded, match.range.first)) return@forEach
-                val rawSlug = match.groupValues[1].trim()
-                val normalized = normalizePageSlug(rawSlug)
-                if (normalized.isEmpty()) return@forEach
-                result += Wikilink(
-                    slug = normalized,
-                    displayText = match.groupValues[2].trim().ifEmpty { null }
-                )
-            }
+        wikilinkPattern.findAll(markdown).forEach { match ->
+            if (isInRanges(protected, match.range.first)) return@forEach
+            val rawSlug = match.groupValues[1].trim()
+            val normalized = normalizePageSlug(rawSlug)
+            if (normalized.isEmpty()) return@forEach
+            result += Wikilink(
+                slug = normalized,
+                displayText = match.groupValues[2].trim().ifEmpty { null }
+            )
         }
         return result
     }
 
     fun extractTags(markdown: String): Set<String> {
+        val protected = protectedRanges(markdown)
         val result = mutableSetOf<String>()
-        forEachOutsideCode(markdown) { segment ->
-            val excluded = excludedProseRanges(segment)
-            tagPattern.findAll(segment).forEach { match ->
-                if (isInExcludedProse(excluded, match.range.first)) return@forEach
-                result += match.groupValues[1]
-            }
+        tagPattern.findAll(markdown).forEach { match ->
+            if (isInRanges(protected, match.range.first)) return@forEach
+            result += match.groupValues[1]
         }
         return result
     }
 
-    private fun excludedProseRanges(segment: String): List<IntRange> {
+    private fun protectedRanges(markdown: String): List<IntRange> {
         val ranges = mutableListOf<IntRange>()
-        htmlCodeBlockPattern.findAll(segment).forEach { ranges += it.range }
-        indentedCodeLinePattern.findAll(segment).forEach { ranges += it.range }
+        fencedCodePattern.findAll(markdown).forEach { ranges += it.range }
+        ranges += inlineCodeRanges(markdown, mergeRanges(ranges))
+        htmlCodeBlockPattern.findAll(markdown).forEach { ranges += it.range }
+        indentedCodeLinePattern.findAll(markdown).forEach { ranges += it.range }
+        return mergeRanges(ranges)
+    }
+
+    private fun inlineCodeRanges(markdown: String, alreadyProtected: List<IntRange>): List<IntRange> {
+        val protected = mergeRanges(alreadyProtected)
+        val inline = mutableListOf<IntRange>()
+        var i = 0
+        while (i < markdown.length) {
+            if (isInRanges(protected, i)) {
+                i++
+                continue
+            }
+            if (markdown[i] != '`') {
+                i++
+                continue
+            }
+
+            var tickCount = 0
+            while (i + tickCount < markdown.length && markdown[i + tickCount] == '`') tickCount++
+            val openStart = i
+            i += tickCount
+            var closed = false
+            while (i < markdown.length) {
+                if (markdown[i] == '`') {
+                    var closeCount = 0
+                    while (i + closeCount < markdown.length && markdown[i + closeCount] == '`') closeCount++
+                    if (closeCount == tickCount) {
+                        inline += openStart until (i + closeCount)
+                        i += closeCount
+                        closed = true
+                        break
+                    }
+                }
+                i++
+            }
+            if (!closed) {
+                i = openStart + 1
+            }
+        }
+        return inline
+    }
+
+    private fun mergeRanges(ranges: List<IntRange>): List<IntRange> {
         if (ranges.isEmpty()) return emptyList()
-        ranges.sortBy { it.first }
+        val sorted = ranges.sortedBy { it.first }
         val merged = mutableListOf<IntRange>()
-        var current = ranges.first()
-        for (i in 1 until ranges.size) {
-            val next = ranges[i]
+        var current = sorted.first()
+        for (i in 1 until sorted.size) {
+            val next = sorted[i]
             if (next.first <= current.last + 1) {
                 current = current.first..maxOf(current.last, next.last)
             } else {
@@ -104,31 +143,21 @@ class WikilinkService {
         return merged
     }
 
-    private fun isInExcludedProse(excluded: List<IntRange>, position: Int): Boolean =
-        excluded.any { position in it }
+    private fun isInRanges(ranges: List<IntRange>, position: Int): Boolean =
+        ranges.any { position in it }
 
-    private fun forEachOutsideCode(markdown: String, action: (String) -> Unit) {
-        var lastEnd = 0
-        for (match in codeBlockPattern.findAll(markdown)) {
-            if (match.range.first > lastEnd) {
-                action(markdown.substring(lastEnd, match.range.first))
-            }
-            lastEnd = match.range.last + 1
-        }
-        if (lastEnd < markdown.length) {
-            action(markdown.substring(lastEnd))
-        }
-    }
+    private fun transformOutsideProtected(markdown: String, transform: (String) -> String): String {
+        val protected = protectedRanges(markdown)
+        if (protected.isEmpty()) return transform(markdown)
 
-    private fun transformOutsideCode(markdown: String, transform: (String) -> String): String {
         val out = StringBuilder()
         var lastEnd = 0
-        for (match in codeBlockPattern.findAll(markdown)) {
-            if (match.range.first > lastEnd) {
-                out.append(transform(markdown.substring(lastEnd, match.range.first)))
+        for (range in protected) {
+            if (range.first > lastEnd) {
+                out.append(transform(markdown.substring(lastEnd, range.first)))
             }
-            out.append(match.value)
-            lastEnd = match.range.last + 1
+            out.append(markdown.substring(range.first, range.last + 1))
+            lastEnd = range.last + 1
         }
         if (lastEnd < markdown.length) {
             out.append(transform(markdown.substring(lastEnd)))
@@ -141,15 +170,13 @@ class WikilinkService {
     private val mdInternalPageLinkPattern = Regex("""\[([^\]]*)\]\(/page/([^)]+)\)""")
 
     fun extractInternalPageLinks(markdown: String): List<InternalPageLink> {
+        val protected = protectedRanges(markdown)
         val result = mutableListOf<InternalPageLink>()
-        forEachOutsideCode(markdown) { segment ->
-            val excluded = excludedProseRanges(segment)
-            mdInternalPageLinkPattern.findAll(segment).forEach { match ->
-                if (isInExcludedProse(excluded, match.range.first)) return@forEach
-                val raw = match.groupValues[2].trim()
-                val decoded = runCatching { java.net.URLDecoder.decode(raw, Charsets.UTF_8) }.getOrDefault(raw)
-                result += InternalPageLink(label = match.groupValues[1], slugRaw = decoded)
-            }
+        mdInternalPageLinkPattern.findAll(markdown).forEach { match ->
+            if (isInRanges(protected, match.range.first)) return@forEach
+            val raw = match.groupValues[2].trim()
+            val decoded = runCatching { java.net.URLDecoder.decode(raw, Charsets.UTF_8) }.getOrDefault(raw)
+            result += InternalPageLink(label = match.groupValues[1], slugRaw = decoded)
         }
         return result
     }
@@ -165,10 +192,8 @@ class WikilinkService {
         oldNormalizedTitle: String? = null,
     ): String {
         if (oldNormalizedSlug == newSlug) return body
-        return transformOutsideCode(body) { segment ->
-            val excluded = excludedProseRanges(segment)
+        return transformOutsideProtected(body) { segment ->
             mdInternalPageLinkPattern.replace(segment) { match ->
-                if (isInExcludedProse(excluded, match.range.first)) return@replace match.value
                 val label = match.groupValues[1]
                 val raw = match.groupValues[2].trim()
                 val decoded = runCatching { java.net.URLDecoder.decode(raw, Charsets.UTF_8) }.getOrDefault(raw)

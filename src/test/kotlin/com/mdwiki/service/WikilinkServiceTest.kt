@@ -91,4 +91,30 @@ class WikilinkServiceTest {
         val out = svc.rewriteWikilinksReferencingNormalizedSlug(md, "mcp", "mcp-протокол")
         assertEquals("[[mcp-протокол]] and `[[mcp]]` and ```\n[[mcp]]\n```", out)
     }
+
+    @Test
+    fun `extractWikilinks ignores double-backtick inline code`() {
+        val md = "Real [[page-a]] and ``[[wikilinks]]``"
+        val links = svc.extractWikilinks(md)
+        assertEquals(listOf("page-a"), links.map { it.slug })
+    }
+
+    @Test
+    fun `extractWikilinks ignores tilde fenced code blocks`() {
+        val md = """
+            Real [[real]] and:
+            ~~~
+            [[wikilinks]]
+            ~~~
+        """.trimIndent()
+        val links = svc.extractWikilinks(md).map { it.slug }
+        assertEquals(listOf("real"), links)
+    }
+
+    @Test
+    fun `extractWikilinks ignores inline code wrapped in longer backtick fence`() {
+        val md = """Use `` `[[wikilinks]]` `` syntax and [[real]]"""
+        val links = svc.extractWikilinks(md).map { it.slug }
+        assertEquals(listOf("real"), links)
+    }
 }
