@@ -103,6 +103,7 @@ tasks.named<Copy>("processResources") {
 tasks.withType<Test> {
     useJUnitPlatform()
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+    environment("SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE", "1")
     finalizedBy(tasks.jacocoTestReport)
 }
 

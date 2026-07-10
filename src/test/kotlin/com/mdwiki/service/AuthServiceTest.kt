@@ -7,6 +7,7 @@ import com.mdwiki.error.UnauthorizedException
 import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.usecase.ChangePasswordUseCase
 import com.mdwiki.service.usecase.LoginUserUseCase
 import com.mdwiki.service.usecase.RegisterUserUseCase
 import org.junit.jupiter.api.Assertions.*
@@ -28,6 +29,9 @@ class AuthServiceTest {
     @Mock
     private lateinit var jwtService: JwtService
 
+    @Mock
+    private lateinit var changePasswordUseCase: ChangePasswordUseCase
+
     private lateinit var authService: AuthService
     private val passwordEncoder = BCryptPasswordEncoder()
 
@@ -35,7 +39,7 @@ class AuthServiceTest {
     fun setUp() {
         val registerUserUseCase = RegisterUserUseCase(userRepository, jwtService, passwordEncoder)
         val loginUserUseCase = LoginUserUseCase(userRepository, jwtService, passwordEncoder)
-        authService = AuthService(registerUserUseCase, loginUserUseCase)
+        authService = AuthService(registerUserUseCase, loginUserUseCase, changePasswordUseCase)
     }
 
     @Test

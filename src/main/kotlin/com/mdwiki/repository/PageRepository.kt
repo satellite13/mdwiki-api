@@ -1,8 +1,10 @@
 package com.mdwiki.repository
 
 import com.mdwiki.model.Page
+import jakarta.persistence.LockModeType
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
@@ -10,6 +12,11 @@ import java.util.UUID
 interface PageRepository : JpaRepository<Page, UUID> {
     fun findBySlug(slug: String): Page?
     fun findBySlugAndDeletedAtIsNull(slug: String): Page?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Page p where p.id = :id and p.deletedAt is null")
+    fun findActiveByIdForUpdate(@Param("id") id: UUID): Page?
+
     fun findByDeletedAtIsNotNull(): List<Page>
     fun findAllByDeletedAtIsNull(): List<Page>
     fun findAllByDeletedAtIsNull(pageable: Pageable): org.springframework.data.domain.Page<Page>
