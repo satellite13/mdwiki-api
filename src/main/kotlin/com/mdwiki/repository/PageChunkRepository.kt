@@ -11,8 +11,6 @@ interface PageChunkRepository : JpaRepository<PageChunk, UUID> {
 
     fun findByPageIdIn(pageIds: List<UUID>): List<PageChunk>
 
-    fun findByPageIdOrderByChunkIndex(pageId: UUID): List<PageChunk>
-
     @Modifying
     @Transactional
     @Query("DELETE FROM PageChunk pc WHERE pc.page.id = :pageId")

@@ -26,6 +26,7 @@ class EventsControllerTest {
     @MockitoBean
     private lateinit var jwtService: JwtService
 
+    // Нужен JwtAuthenticationFilter (header-путь); сам контроллер его больше не использует.
     @MockitoBean
     private lateinit var userRepository: UserRepository
 
@@ -60,20 +61,33 @@ class EventsControllerTest {
     }
 
     @Test
-    fun `tree events with valid jwt but missing user returns 401`() {
+    fun `tree events with valid bearer but missing user returns 401`() {
         whenever(jwtService.validateToken("t")).thenReturn(true)
         whenever(jwtService.extractUsername("t")).thenReturn("ghost")
         whenever(userRepository.findByUsername("ghost")).thenReturn(null)
 
         mockMvc.get("/api/events/tree") {
-            param("token", "t")
+            header("Authorization", "Bearer t")
         }.andExpect {
             status { isUnauthorized() }
         }
     }
 
     @Test
-    fun `tree events with valid jwt returns event stream`() {
+    fun `tree events with valid query token returns event stream`() {
+        whenever(jwtService.validateToken("ok")).thenReturn(true)
+        whenever(treeEventsService.subscribe()).thenAnswer { SseEmitter(30_000L) }
+
+        mockMvc.get("/api/events/tree") {
+            param("token", "ok")
+        }.andExpect {
+            status { isOk() }
+            content { contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM) }
+        }
+    }
+
+    @Test
+    fun `tree events with valid bearer token returns event stream`() {
         whenever(jwtService.validateToken("ok")).thenReturn(true)
         whenever(jwtService.extractUsername("ok")).thenReturn("alice")
         whenever(userRepository.findByUsername("alice")).thenReturn(
@@ -82,7 +96,7 @@ class EventsControllerTest {
         whenever(treeEventsService.subscribe()).thenAnswer { SseEmitter(30_000L) }
 
         mockMvc.get("/api/events/tree") {
-            param("token", "ok")
+            header("Authorization", "Bearer ok")
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM) }

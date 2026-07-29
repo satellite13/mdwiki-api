@@ -3,6 +3,7 @@ package com.mdwiki.service
 import com.mdwiki.dto.*
 import com.mdwiki.error.ConflictException
 import com.mdwiki.mapper.displayTitle
+import com.mdwiki.mapper.toResponse
 import com.mdwiki.model.Folder
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
@@ -236,12 +237,4 @@ class FolderService(
         walk(root)
         return result
     }
-
-    private fun Folder.toResponse() = FolderResponse(
-        id = id!!,
-        name = name,
-        parentId = parent?.id,
-        sortOrder = sortOrder,
-        createdAt = createdAt
-    )
 }

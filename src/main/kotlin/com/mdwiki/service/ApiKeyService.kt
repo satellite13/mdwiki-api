@@ -4,7 +4,6 @@ import com.mdwiki.dto.ApiKeyCreatedResponse
 import com.mdwiki.dto.ApiKeyResponse
 import com.mdwiki.dto.CreateApiKeyRequest
 import com.mdwiki.model.User
-import com.mdwiki.service.usecase.ApiKeyCrypto
 import com.mdwiki.service.usecase.CreateApiKeyUseCase
 import com.mdwiki.service.usecase.DeleteApiKeyUseCase
 import com.mdwiki.service.usecase.ListApiKeysUseCase
@@ -34,6 +33,4 @@ class ApiKeyService(
     fun listKeys(username: String): List<ApiKeyResponse> = listApiKeysUseCase.execute(username)
 
     fun deleteKey(keyId: UUID, username: String) = deleteApiKeyUseCase.execute(keyId, username)
-
-    fun hashKey(rawKey: String): String = ApiKeyCrypto.hashKey(rawKey)
 }

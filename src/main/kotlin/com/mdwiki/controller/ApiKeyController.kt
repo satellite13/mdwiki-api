@@ -4,6 +4,7 @@ import com.mdwiki.dto.ApiKeyCreatedResponse
 import com.mdwiki.dto.ApiKeyResponse
 import com.mdwiki.dto.CreateApiKeyRequest
 import com.mdwiki.service.ApiKeyService
+import jakarta.validation.Valid
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.util.UUID
@@ -12,7 +13,7 @@ import java.util.UUID
 @RequestMapping("/api/api-keys")
 class ApiKeyController(private val apiKeyService: ApiKeyService) {
     @PostMapping
-    fun create(@RequestBody request: CreateApiKeyRequest, auth: Authentication): ApiKeyCreatedResponse =
+    fun create(@Valid @RequestBody request: CreateApiKeyRequest, auth: Authentication): ApiKeyCreatedResponse =
         apiKeyService.create(request, auth.name)
 
     @GetMapping

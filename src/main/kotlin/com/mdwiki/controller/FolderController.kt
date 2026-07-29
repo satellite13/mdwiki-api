@@ -2,6 +2,7 @@ package com.mdwiki.controller
 
 import com.mdwiki.dto.*
 import com.mdwiki.service.FolderService
+import jakarta.validation.Valid
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.util.UUID
@@ -14,17 +15,17 @@ class FolderController(private val folderService: FolderService) {
     fun getTree(): List<FolderTreeNode> = folderService.getTree()
 
     @PostMapping
-    fun create(@RequestBody request: CreateFolderRequest, auth: Authentication): FolderResponse {
+    fun create(@Valid @RequestBody request: CreateFolderRequest, auth: Authentication): FolderResponse {
         return folderService.create(request, auth.name)
     }
 
     @PutMapping("/{id}")
-    fun rename(@PathVariable id: UUID, @RequestBody request: UpdateFolderRequest): FolderResponse {
+    fun rename(@PathVariable id: UUID, @Valid @RequestBody request: UpdateFolderRequest): FolderResponse {
         return folderService.rename(id, request)
     }
 
     @PutMapping("/{id}/move")
-    fun move(@PathVariable id: UUID, @RequestBody request: MoveFolderRequest): FolderResponse {
+    fun move(@PathVariable id: UUID, @Valid @RequestBody request: MoveFolderRequest): FolderResponse {
         return folderService.move(id, request)
     }
 

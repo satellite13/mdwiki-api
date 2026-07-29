@@ -85,7 +85,9 @@ class WikiSyncEngine(
         }
 
         for ((slug, page) in existingBySlug) {
-            if (slug !in filesBySlug) {
+            // Soft-deleted страницы sync не трогает: их файлы в корзине (.trash),
+            // а очистка корзины — ручное действие (hard delete через API).
+            if (slug !in filesBySlug && page.deletedAt == null) {
                 pageMetadataService.deleteSourceLinks(page)
                 // Без detach входящих ссылок FK fk_links_target блокирует удаление.
                 pageMetadataService.detachIncomingLinks(page)
@@ -266,11 +268,14 @@ class WikiSyncEngine(
      */
     private fun collectMarkdownFiles(contentDir: File): List<File> {
         val root: Path = contentDir.toPath()
+        val trashRoot = wikiFileService.trashDir().toPath().toAbsolutePath().normalize()
         val result = mutableListOf<File>()
         try {
             Files.walk(root).use { stream ->
                 stream.forEach { path ->
                     try {
+                        // Корзина (.trash) — не контент: soft-deleted страницы не воскрешаем.
+                        if (path.toAbsolutePath().normalize().startsWith(trashRoot)) return@forEach
                         if (Files.isRegularFile(path) && path.fileName?.toString()?.endsWith(".md") == true) {
                             result.add(path.toFile())
                         }

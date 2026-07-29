@@ -24,6 +24,13 @@ class FileWatcherService(
     private var watchThread: Thread? = null
     private val ignoredPaths = ConcurrentHashMap<String, Long>()
 
+    /** Корзина (.trash) не наблюдается: перемещения туда/обратно — не sync-события. */
+    private val trashRoot: Path =
+        File(wikiProperties.contentDir, WikiFileService.TRASH_DIR_NAME).toPath().toAbsolutePath().normalize()
+
+    private fun isInTrash(file: File): Boolean =
+        file.toPath().toAbsolutePath().normalize().startsWith(trashRoot)
+
     fun ignoreNextChange(filePath: String) {
         // Move/write operations may emit several FS events in a short burst.
         ignoredPaths[filePath] = Instant.now().toEpochMilli() + 5000
@@ -49,6 +56,7 @@ class FileWatcherService(
                         for (event in key.pollEvents()) {
                             val path = event.context() as? Path ?: continue
                             val fullPath = watchedDir.resolve(path).toFile()
+                            if (isInTrash(fullPath)) continue
                             val fullPathString = fullPath.absolutePath
 
                             when (event.kind()) {
@@ -109,6 +117,7 @@ class FileWatcherService(
         Files.walk(root).use { paths ->
             paths
                 .filter { Files.isDirectory(it) }
+                .filter { !isInTrash(it.toFile()) }
                 .forEach { dir ->
                     val key = dir.register(
                         watchService,

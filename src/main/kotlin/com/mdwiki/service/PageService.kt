@@ -92,6 +92,8 @@ class PageService(
             throw IllegalStateException("Page is not deleted: $slug")
         }
         page.deletedAt = null
+        // Возвращаем файл из корзины на место (если он там был).
+        wikiFileService.restorePageFileFromTrash(page)
         val saved = pageRepository.save(page)
         folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()

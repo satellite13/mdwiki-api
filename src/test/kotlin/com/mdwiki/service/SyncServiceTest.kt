@@ -149,6 +149,30 @@ class SyncServiceTest {
     }
 
     @Test
+    fun `fullSync keeps soft-deleted page when its file is missing (trash)`() {
+        val page = Page(id = UUID.randomUUID(), slug = "trashed", title = "Trashed")
+        page.filePath = tempDir.resolve(".trash/trashed.md").toString()
+        page.deletedAt = Instant.now()
+        mockPagedFindAll(listOf(page))
+
+        val result = syncService.fullSync()
+
+        assertEquals(0, result.removed)
+        verify(pageRepository, never()).delete(any<Page>())
+    }
+
+    @Test
+    fun `fullSync ignores markdown files inside trash dir`() {
+        val trash = File(tempDir.toFile(), ".trash").also { assertTrue(it.mkdirs()) }
+        File(trash, "hidden.md").writeText("# Hidden\nx")
+        mockPagedFindAll(emptyList())
+
+        val result = syncService.fullSync()
+
+        assertEquals(0, result.added)
+    }
+
+    @Test
     fun `fullSync updates modified files`() {
         val file = File(tempDir.toFile(), "modified.md")
         file.writeText("Updated content")

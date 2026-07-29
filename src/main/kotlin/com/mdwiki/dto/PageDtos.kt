@@ -32,7 +32,6 @@ data class PageResponse(
     val slug: String,
     val title: String,
     val contentMd: String?,
-    val contentHtml: String?,
     /** Распарсенный YAML frontmatter документа (только чтение с API). */
     val frontmatterMeta: JsonNode? = null,
     /** Является ли страница read-only (locked в frontmatter). */

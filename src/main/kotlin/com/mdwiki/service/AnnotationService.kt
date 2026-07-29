@@ -8,6 +8,7 @@ import com.mdwiki.dto.AnnotationResponse
 import com.mdwiki.dto.CreateAnnotationRequest
 import com.mdwiki.dto.UpdateAnnotationRequest
 import com.mdwiki.error.NotFoundException
+import com.mdwiki.mapper.toResponse
 import com.mdwiki.model.Annotation
 import com.mdwiki.repository.AnnotationRepository
 import com.mdwiki.repository.PageRepository
@@ -85,20 +86,6 @@ class AnnotationService(
         val data = mapOf("annotations" to annotations.map { it.toYamlMap() })
         yamlMapper.writeValue(yamlFile.toFile(), data)
     }
-
-    private fun Annotation.toResponse() = AnnotationResponse(
-        id = id!!,
-        pageId = pageId,
-        highlightedText = highlightedText,
-        anchorContext = anchorContext,
-        comment = comment,
-        rangeStart = rangeStart,
-        rangeEnd = rangeEnd,
-        color = color,
-        createdBy = createdBy,
-        createdAt = createdAt,
-        updatedAt = updatedAt
-    )
 
     private fun Annotation.toYamlMap(): Map<String, Any?> {
         val map = mutableMapOf<String, Any?>()

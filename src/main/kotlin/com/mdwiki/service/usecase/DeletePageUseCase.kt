@@ -32,6 +32,8 @@ class DeletePageUseCase(
             if (mode == DeleteMode.SOFT) {
                 if (page.deletedAt == null) {
                     page.deletedAt = Instant.now()
+                    // Файл уезжает в корзину — sync/watcher его не видят и страницу не воскрешают.
+                    wikiFileService.movePageFileToTrash(page)
                     pageRepository.save(page)
                 }
                 return

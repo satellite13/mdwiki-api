@@ -383,9 +383,10 @@ class PageServiceTest {
     }
 
     @Test
-    fun `delete soft-deletes page by setting deletedAt`() {
+    fun `delete soft-deletes page by setting deletedAt and moving file to trash`() {
+        val file = tempDir.resolve("doomed.md").toFile().apply { writeText("doomed body") }
         val page = Page(id = UUID.randomUUID(), slug = "doomed", title = "Doomed")
-        page.filePath = tempDir.resolve("doomed.md").toString()
+        page.filePath = file.absolutePath
 
         whenever(pageRepository.findBySlug("doomed")).thenReturn(page)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
@@ -393,7 +394,33 @@ class PageServiceTest {
         pageService.delete("doomed")
 
         assertNotNull(page.deletedAt)
+        val trashFile = tempDir.resolve(".trash/doomed.md").toFile()
+        assertTrue(trashFile.exists())
+        assertFalse(file.exists())
+        assertEquals(trashFile.absolutePath, page.filePath)
         verify(pageRepository).save(page)
         verify(pageRepository, never()).delete(any<Page>())
+    }
+
+    @Test
+    fun `restore returns file from trash and clears deletedAt`() {
+        val trashFile = tempDir.resolve(".trash/doomed.md").toFile().apply {
+            parentFile.mkdirs()
+            writeText("doomed body")
+        }
+        val page = Page(id = UUID.randomUUID(), slug = "doomed", title = "Doomed")
+        page.filePath = trashFile.absolutePath
+        page.deletedAt = Instant.now()
+
+        whenever(pageRepository.findBySlug("doomed")).thenReturn(page)
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageService.restore("doomed")
+
+        assertNull(page.deletedAt)
+        assertFalse(trashFile.exists())
+        val restoredFile = tempDir.resolve("doomed.md").toFile()
+        assertTrue(restoredFile.exists())
+        assertEquals(restoredFile.absolutePath, page.filePath)
     }
 }

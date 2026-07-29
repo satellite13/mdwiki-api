@@ -29,7 +29,6 @@ fun Page.toResponse(): PageResponse = PageResponse(
     slug = slug,
     title = displayTitle(),
     contentMd = contentMd,
-    contentHtml = contentHtml,
     frontmatterMeta = frontmatterMeta,
     locked = frontmatterMeta?.let { meta ->
         val lockedNode = meta.get("locked")

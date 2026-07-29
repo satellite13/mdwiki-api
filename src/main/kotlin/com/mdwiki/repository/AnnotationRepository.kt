@@ -6,5 +6,4 @@ import java.util.UUID
 
 interface AnnotationRepository : JpaRepository<Annotation, UUID> {
     fun findByPageId(pageId: UUID): List<Annotation>
-    fun deleteByPageId(pageId: UUID)
 }

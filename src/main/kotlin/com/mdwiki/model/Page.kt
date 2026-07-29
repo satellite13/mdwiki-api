@@ -29,9 +29,6 @@ class Page(
     @Column(name = "content_md", columnDefinition = "text")
     var contentMd: String? = null,
 
-    @Column(name = "content_html", columnDefinition = "text")
-    var contentHtml: String? = null,
-
     @Column(name = "file_path", length = 1000)
     var filePath: String? = null,
 

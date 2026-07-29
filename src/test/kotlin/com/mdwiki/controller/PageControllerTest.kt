@@ -35,7 +35,6 @@ class PageControllerTest {
         slug = "test-page",
         title = "Test Page",
         contentMd = "Hello",
-        contentHtml = null,
         tags = listOf("kotlin"),
         createdBy = "testuser",
         updatedBy = "testuser",

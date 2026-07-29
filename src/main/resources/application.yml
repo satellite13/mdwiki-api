@@ -7,9 +7,9 @@ logging:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:54328/mdwiki
-    username: mdwiki
-    password: mdwiki
+    url: ${DB_URL:jdbc:postgresql://localhost:54328/mdwiki}
+    username: ${DB_USERNAME:mdwiki}
+    password: ${DB_PASSWORD:mdwiki}
   jpa:
     open-in-view: false
     hibernate:
@@ -37,7 +37,8 @@ mdwiki:
   logging:
     stacktrace-max-lines: ${MDWIKI_LOG_STACKTRACE_LINES:16}
   jwt:
-    secret: ${JWT_SECRET:default-dev-secret-change-in-production-must-be-at-least-256-bits}
+    # Обязателен: без JWT_SECRET приложение не стартует (см. JwtProperties).
+    secret: ${JWT_SECRET:}
     expiration-ms: 86400000
   content-dir: ${MDWIKI_CONTENT_DIR:./wiki-content}
   attachments:

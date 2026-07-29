@@ -23,9 +23,10 @@ class AttachmentController(private val attachmentService: AttachmentService) {
     @PostMapping
     fun upload(
         @RequestParam("file") file: MultipartFile,
+        @RequestParam(required = false) pageId: UUID?,
         auth: Authentication
     ): AttachmentResponse {
-        return attachmentService.upload(file, auth.name, null)
+        return attachmentService.upload(file, auth.name, pageId)
     }
 
     @DeleteMapping("/{id}")

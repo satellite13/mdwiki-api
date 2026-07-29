@@ -5,6 +5,7 @@ import com.mdwiki.model.Folder
 import com.mdwiki.model.Page
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.util.PathSanitizer
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.io.File
 import java.nio.file.Files
@@ -16,6 +17,12 @@ class WikiFileService(
     private val fileWatcherService: FileWatcherService,
     private val folderRepository: FolderRepository
 ) {
+    private val log = LoggerFactory.getLogger(WikiFileService::class.java)
+
+    companion object {
+        const val TRASH_DIR_NAME = ".trash"
+    }
+
     fun contentRoot(): File = File(wikiProperties.contentDir).also { it.mkdirs() }
 
     fun resolveFolderDirectory(folder: Folder?): File {
@@ -143,13 +150,77 @@ class WikiFileService(
         }
     }
 
+    /** Корзина файлов: `<contentDir>/.trash/<slug>.md`. Исключена из sync и file-watcher. */
+    fun trashDir(): File = File(contentRoot(), TRASH_DIR_NAME)
+
+    /** true, если путь лежит внутри корзины. */
+    fun isTrashPath(file: File): Boolean =
+        file.toPath().toAbsolutePath().normalize()
+            .startsWith(trashDir().toPath().toAbsolutePath().normalize())
+
+    /**
+     * Перемещает файл страницы в корзину (soft-delete) и обновляет `page.filePath`.
+     * @return false, если файла на диске не было (страница без файла — тоже валидный случай).
+     */
+    fun movePageFileToTrash(page: Page): Boolean {
+        val sourcePath = page.filePath ?: return false
+        val sourceFile = File(sourcePath)
+        if (!sourceFile.isFile) return false
+        val targetFile = File(trashDir(), "${page.slug}.md")
+        targetFile.parentFile?.mkdirs()
+        fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
+        fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+        Files.move(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        page.filePath = targetFile.absolutePath
+        return true
+    }
+
+    /**
+     * Возвращает файл страницы из корзины на место (restore) и обновляет `page.filePath`.
+     * Если целевой файл уже существует (кто-то положил новый вручную) — не затираем его:
+     * строка всё равно воскреснет, а sync подтянет контент из файла.
+     * @return false, если файла в корзине нет.
+     */
+    fun restorePageFileFromTrash(page: Page): Boolean {
+        val sourceFile = File(trashDir(), "${page.slug}.md")
+        if (!sourceFile.isFile) return false
+        val targetFile = resolvePageFile(page.slug, page.folder)
+        if (targetFile.exists()) {
+            log.warn(
+                "restorePageFileFromTrash: target '{}' already exists; keeping it, trash copy left in place",
+                targetFile.absolutePath
+            )
+            page.filePath = targetFile.absolutePath
+            return false
+        }
+        fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
+        fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+        Files.move(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        page.filePath = targetFile.absolutePath
+        return true
+    }
+
     /** Первый `$slug.md` под корнем контента (как при синхронизации). */
     fun findMarkdownFileForSlug(slug: String): File? {
         val root = contentRoot()
         if (!root.exists()) return null
         val name = "$slug.md"
-        return root.walkTopDown()
-            .firstOrNull { it.isFile && it.name == name }
+        // NIO Files.walk — как в WikiSyncEngine.collectMarkdownFiles:
+        // File.walkTopDown() на части JVM слеп к не-ASCII (кириллическим) путям.
+        // Корзина (.trash) исключается: страница в корзине не должна «воскресать» при GET.
+        return try {
+            Files.walk(root.toPath()).use { stream ->
+                stream
+                    .filter { !isTrashPath(it.toFile()) }
+                    .filter { Files.isRegularFile(it) && it.fileName?.toString() == name }
+                    .findFirst()
+                    .map { it.toFile() }
+                    .orElse(null)
+            }
+        } catch (e: Exception) {
+            log.warn("findMarkdownFileForSlug: walk failed for slug '{}': {}", slug, e.message)
+            null
+        }
     }
 
     private fun isUnderContentRoot(file: File): Boolean =
@@ -178,14 +249,22 @@ class WikiFileService(
             newDir.mkdirs()
             return
         }
-        oldDir.walkTopDown()
-            .filter { it.isFile && it.extension == "md" }
-            .forEach { sourceFile ->
-                val relative = sourceFile.relativeTo(oldDir).path
-                val targetFile = File(newDir, relative)
-                fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
-                fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+        // NIO Files.walk — см. findMarkdownFileForSlug (walkTopDown слеп к не-ASCII путям).
+        try {
+            Files.walk(oldDir.toPath()).use { stream ->
+                stream
+                    .filter { Files.isRegularFile(it) && it.fileName?.toString()?.endsWith(".md") == true }
+                    .forEach { path ->
+                        val sourceFile = path.toFile()
+                        val relative = sourceFile.relativeTo(oldDir).path
+                        val targetFile = File(newDir, relative)
+                        fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
+                        fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+                    }
             }
+        } catch (e: Exception) {
+            log.warn("moveFolderDirectory: walk failed for '{}': {}", oldDir.absolutePath, e.message)
+        }
         newDir.parentFile?.mkdirs()
         Files.move(oldDir.toPath(), newDir.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }

@@ -3,6 +3,7 @@ package com.mdwiki.service
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.dto.AttachmentResponse
 import com.mdwiki.error.NotFoundException
+import com.mdwiki.mapper.toResponse
 import com.mdwiki.model.Attachment
 import com.mdwiki.repository.AttachmentRepository
 import com.mdwiki.repository.PageRepository
@@ -258,16 +259,4 @@ class AttachmentService(
         }
         attachmentRepository.delete(attachment)
     }
-
-    private fun Attachment.toResponse() = AttachmentResponse(
-        id = id!!,
-        originalName = originalName,
-        storedName = storedName,
-        contentType = contentType,
-        sizeBytes = sizeBytes,
-        uploadedBy = uploadedBy?.username,
-        pageId = page?.id,
-        url = "/api/uploads/$storedName",
-        createdAt = createdAt
-    )
 }

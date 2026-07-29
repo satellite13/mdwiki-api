@@ -1,10 +1,10 @@
 package com.mdwiki.controller
 
-import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.JwtService
 import com.mdwiki.service.TreeEventsService
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -16,32 +16,22 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 @RequestMapping("/api/events")
 class EventsController(
     private val jwtService: JwtService,
-    private val userRepository: UserRepository,
     private val treeEventsService: TreeEventsService
 ) {
-    // SECURITY NOTE: The JWT token is passed via query parameter because the SSE EventSource API
-    // does not support custom HTTP headers. This means the token may appear in server access logs,
-    // browser history, and proxy logs. Consider migrating to a short-lived, single-use ticket
-    // exchanged for the real token server-side, or use a polyfill library that supports headers.
+    // Основной путь — Authorization: Bearer (JwtAuthenticationFilter уже выставил Authentication).
+    // Query-param token — legacy для клиентов, которые не умеют ставить заголовки
+    // (нативный EventSource): токен в URL попадает в access-логи и историю браузера,
+    // поэтому новым клиентам следует использовать заголовок.
     @GetMapping("/tree", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
-    fun subscribeTree(@RequestParam token: String?): SseEmitter {
-        val rawToken = token?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing token")
-
-        if (!jwtService.validateToken(rawToken)) {
-            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid token")
+    fun subscribeTree(@RequestParam token: String?, authentication: Authentication?): SseEmitter {
+        if (authentication == null && !isValidQueryToken(token)) {
+            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized")
         }
-
-        val username = jwtService.extractUsername(rawToken)
-        val user = userRepository.findByUsername(username)
-            ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found")
-
-        // Only authenticated wiki users are allowed to subscribe to tree events.
-        if (user.role.name !in setOf("READER", "EDITOR", "ADMIN")) {
-            throw ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden")
-        }
-
         return treeEventsService.subscribe()
+    }
+
+    private fun isValidQueryToken(token: String?): Boolean {
+        val rawToken = token?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        return jwtService.validateToken(rawToken)
     }
 }
