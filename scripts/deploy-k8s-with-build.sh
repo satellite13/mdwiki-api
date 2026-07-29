@@ -72,7 +72,12 @@ IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-mdwiki-api}"
 GIT_SHA="$(git -C "${ROOT_DIR}" rev-parse --short HEAD)"
 VERSION_TAG="$(git -C "${ROOT_DIR}" describe --tags --always)"
 EXACT_VERSION_TAG="$(git -C "${ROOT_DIR}" describe --tags --exact-match HEAD 2>/dev/null || true)"
-IMAGE_TAG="${IMAGE_TAG:-${GIT_SHA}}"
+DIRTY_SUFFIX=""
+if [[ -n "$(git -C "${ROOT_DIR}" status --porcelain)" ]]; then
+  DIRTY_SUFFIX="-dirty"
+fi
+# Image tag is the git version tag (e.g. v0.1.0 or v0.1.0-2-g65e203a).
+IMAGE_TAG="${IMAGE_TAG:-${VERSION_TAG}${DIRTY_SUFFIX}}"
 IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-IfNotPresent}"
 FULL_IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
@@ -179,7 +184,10 @@ if [[ "${BUILD_METHOD}" == "docker" ]]; then
     --build-arg "APP_VERSION_TAG=${VERSION_TAG}" \
     -t "${FULL_IMAGE}" \
     "${ROOT_DIR}"
-  if [[ -n "${EXACT_VERSION_TAG}" ]]; then
+  if [[ "${IMAGE_TAG}" != "${GIT_SHA}" ]]; then
+    docker tag "${FULL_IMAGE}" "${IMAGE_REPOSITORY}:${GIT_SHA}"
+  fi
+  if [[ -n "${EXACT_VERSION_TAG}" && "${IMAGE_TAG}" != "${EXACT_VERSION_TAG}" ]]; then
     echo "Also tagging image as ${IMAGE_REPOSITORY}:${EXACT_VERSION_TAG}"
     docker tag "${FULL_IMAGE}" "${IMAGE_REPOSITORY}:${EXACT_VERSION_TAG}"
   fi
