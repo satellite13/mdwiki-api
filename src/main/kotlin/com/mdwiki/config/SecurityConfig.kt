@@ -40,6 +40,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
                     .requestMatchers("/api/auth/**").permitAll()
                     .requestMatchers("/error").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/version").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/tree").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/uploads/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/graph/**").hasAnyRole("READER", "EDITOR", "ADMIN")

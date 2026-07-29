@@ -140,6 +140,23 @@ fun parseDotEnv(file: java.io.File): Map<String, String> {
     return out
 }
 
+fun gitShortSha(): String =
+    try {
+        providers.exec {
+            commandLine("git", "rev-parse", "--short", "HEAD")
+        }.standardOutput.asText.get().trim().ifEmpty { "unknown" }
+    } catch (_: Exception) {
+        "unknown"
+    }
+
+springBoot {
+    buildInfo {
+        properties {
+            additional.put("gitSha", gitShortSha())
+        }
+    }
+}
+
 tasks.bootRun {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     environment(parseDotEnv(layout.projectDirectory.file(".env").asFile))
