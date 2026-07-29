@@ -2,10 +2,10 @@ package com.mdwiki.mcp
 
 import com.mdwiki.service.FolderService
 import com.mdwiki.dto.FolderDeletePageAction
+import com.mdwiki.mcp.McpSupport.parseUuid
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
 import org.springframework.stereotype.Component
-import java.util.UUID
 
 @Component
 class WikiFolderDeleteTool(private val folderService: FolderService) {
@@ -37,14 +37,6 @@ class WikiFolderDeleteTool(private val folderService: FolderService) {
             FolderDeletePageAction.valueOf(raw.trim().uppercase())
         } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("Invalid pageAction: $raw (expected DELETE or MOVE_TO_ROOT)")
-        }
-    }
-
-    private fun parseUuid(raw: String): UUID {
-        return try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
-            throw IllegalArgumentException("Invalid UUID: $raw")
         }
     }
 }

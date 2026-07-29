@@ -165,7 +165,7 @@ class FolderServiceTest {
     fun `create folder throws on duplicate name`() {
         whenever(folderRepository.existsByParentIdAndName(null, "existing")).thenReturn(true)
 
-        assertThrows<IllegalArgumentException> {
+        assertThrows<com.mdwiki.error.ConflictException> {
             folderService.create(CreateFolderRequest(name = "existing"), "testuser")
         }
     }

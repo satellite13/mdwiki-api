@@ -39,16 +39,19 @@ class RagServiceTest {
         whenever(chunkingService.chunk("# Test\nContent")).thenReturn(
             listOf(ChunkingService.Chunk(0, "Content", "Test"))
         )
-        whenever(pageChunkRepository.save(any<PageChunk>())).thenAnswer {
-            val chunk = it.arguments[0] as PageChunk
-            PageChunk(id = UUID.randomUUID(), page = chunk.page, chunkIndex = chunk.chunkIndex, chunkText = chunk.chunkText, sectionHeading = chunk.sectionHeading)
+        whenever(pageChunkRepository.saveAll(any<List<PageChunk>>())).thenAnswer {
+            @Suppress("UNCHECKED_CAST")
+            val chunks = it.arguments[0] as List<PageChunk>
+            chunks.map { chunk ->
+                PageChunk(id = UUID.randomUUID(), page = chunk.page, chunkIndex = chunk.chunkIndex, chunkText = chunk.chunkText, sectionHeading = chunk.sectionHeading)
+            }
         }
         whenever(embeddingProvider.embed(listOf("Content"))).thenReturn(listOf(floatArrayOf(0.1f, 0.2f, 0.3f)))
 
         ragService.indexPage(page)
 
         verify(pageChunkRepository).deleteByPageId(pageId)
-        verify(pageChunkRepository).save(any<PageChunk>())
+        verify(pageChunkRepository).saveAll(any<List<PageChunk>>())
         verify(pageChunkRepository).updateEmbedding(any(), any())
     }
 
@@ -58,7 +61,7 @@ class RagServiceTest {
         whenever(chunkingService.chunk("")).thenReturn(emptyList())
         ragService.indexPage(page)
         verify(pageChunkRepository).deleteByPageId(page.id!!)
-        verify(pageChunkRepository, never()).save(any<PageChunk>())
+        verify(pageChunkRepository, never()).saveAll(any<List<PageChunk>>())
         verify(embeddingProvider, never()).embed(any<List<String>>())
     }
 
@@ -77,8 +80,8 @@ class RagServiceTest {
         whenever(chunkingService.chunk("Body")).thenReturn(
             listOf(ChunkingService.Chunk(0, "Body", null))
         )
-        whenever(pageChunkRepository.save(any<PageChunk>())).thenReturn(
-            PageChunk(id = savedChunkId, page = page, chunkIndex = 0, chunkText = "Body", sectionHeading = null)
+        whenever(pageChunkRepository.saveAll(any<List<PageChunk>>())).thenReturn(
+            listOf(PageChunk(id = savedChunkId, page = page, chunkIndex = 0, chunkText = "Body", sectionHeading = null))
         )
         whenever(embeddingProvider.embed(listOf("Body")))
             .thenThrow(RuntimeException("transient-1"))
@@ -98,8 +101,8 @@ class RagServiceTest {
         whenever(chunkingService.chunk("Body")).thenReturn(
             listOf(ChunkingService.Chunk(0, "Body", null))
         )
-        whenever(pageChunkRepository.save(any<PageChunk>())).thenReturn(
-            PageChunk(id = UUID.randomUUID(), page = page, chunkIndex = 0, chunkText = "Body", sectionHeading = null)
+        whenever(pageChunkRepository.saveAll(any<List<PageChunk>>())).thenReturn(
+            listOf(PageChunk(id = UUID.randomUUID(), page = page, chunkIndex = 0, chunkText = "Body", sectionHeading = null))
         )
         whenever(embeddingProvider.embed(listOf("Body"))).thenThrow(RuntimeException("always-fail"))
 

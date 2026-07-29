@@ -1,10 +1,10 @@
 package com.mdwiki.mcp
 
 import com.mdwiki.dto.CreateAnnotationRequest
+import com.mdwiki.mcp.McpSupport.currentUsername
 import com.mdwiki.service.AnnotationService
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 
 @Component
@@ -23,8 +23,7 @@ class WikiAnnotationCreateTool(private val annotationService: AnnotationService)
         @McpToolParam(description = "Optional end offset in source markdown", required = false) rangeEnd: Int?,
         @McpToolParam(description = "Optional highlight color (hex)", required = false) color: String?
     ): Map<String, Any?> {
-        val username = SecurityContextHolder.getContext().authentication?.name
-            ?: throw IllegalStateException("Not authenticated")
+        val username = currentUsername()
         val annotation = annotationService.create(slug, CreateAnnotationRequest(
             highlightedText = highlightedText,
             anchorContext = anchorContext,

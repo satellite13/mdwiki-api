@@ -6,8 +6,12 @@ import java.util.Locale
 /** Сравнение строк с учётом чисел: «Глава 9» перед «Глава 10». */
 object NaturalSort {
     private val chunkPattern = Regex("""\d+|\D+""")
-    private val collator: Collator = Collator.getInstance(Locale.forLanguageTag("ru")).apply {
-        strength = Collator.PRIMARY
+
+    // java.text.Collator не потокобезопасен — держим экземпляр на поток
+    private val collator: ThreadLocal<Collator> = ThreadLocal.withInitial {
+        Collator.getInstance(Locale.forLanguageTag("ru")).apply {
+            strength = Collator.PRIMARY
+        }
     }
 
     fun compare(a: String, b: String): Int {
@@ -24,7 +28,7 @@ object NaturalSort {
                     val rightNum = right.trimStart('0').ifEmpty { "0" }.toBigInteger()
                     leftNum.compareTo(rightNum)
                 }
-                else -> collator.compare(left, right)
+                else -> collator.get().compare(left, right)
             }
             if (cmp != 0) return cmp
         }

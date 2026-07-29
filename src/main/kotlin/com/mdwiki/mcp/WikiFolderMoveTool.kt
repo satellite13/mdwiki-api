@@ -1,11 +1,11 @@
 package com.mdwiki.mcp
 
 import com.mdwiki.dto.MoveFolderRequest
+import com.mdwiki.mcp.McpSupport.parseUuid
 import com.mdwiki.service.FolderService
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
 import org.springframework.stereotype.Component
-import java.util.UUID
 
 @Component
 class WikiFolderMoveTool(private val folderService: FolderService) {
@@ -41,13 +41,5 @@ class WikiFolderMoveTool(private val folderService: FolderService) {
             "parentId" to moved.parentId?.toString(),
             "status" to "moved"
         )
-    }
-
-    private fun parseUuid(raw: String): UUID {
-        return try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
-            throw IllegalArgumentException("Invalid UUID: $raw")
-        }
     }
 }

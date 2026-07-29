@@ -4,6 +4,7 @@ import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Folder
 import com.mdwiki.model.Page
 import com.mdwiki.repository.FolderRepository
+import com.mdwiki.util.PathSanitizer
 import org.springframework.stereotype.Service
 import java.io.File
 import java.nio.file.Files
@@ -238,18 +239,10 @@ class WikiFileService(
         val segments = mutableListOf<String>()
         var current: Folder? = folder
         while (current != null) {
-            segments.add(sanitizePathSegment(current.name))
+            segments.add(PathSanitizer.sanitizePathSegment(current.name))
             current = current.parent
         }
         return segments.reversed()
-    }
-
-    private fun sanitizePathSegment(input: String): String {
-        val cleaned = input
-            .trim()
-            .replace('/', '-')
-            .replace('\\', '-')
-        return if (cleaned.isBlank()) "folder" else cleaned
     }
 
     /**

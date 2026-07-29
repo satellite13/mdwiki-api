@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-normalized-title
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: false
+            sql: |
+              ALTER TABLE pages ADD COLUMN normalized_title varchar(500);
+              -- Backfill той же нормализацией, что в PageSlugNormalizer (Kotlin).
+              UPDATE pages SET normalized_title = trim(both '-' from regexp_replace(lower(trim(title)), '[^a-z0-9а-яё]+', '-', 'g'));
+              CREATE INDEX idx_pages_normalized_title ON pages (normalized_title);
+      rollback:
+        - sql:
+            sql: ALTER TABLE pages DROP COLUMN IF EXISTS normalized_title;

@@ -1,12 +1,12 @@
 package com.mdwiki.mcp
 
 import com.mdwiki.dto.UpdatePageRequest
+import com.mdwiki.mcp.McpSupport.currentUsername
+import com.mdwiki.mcp.McpSupport.parseUuid
 import com.mdwiki.service.PageService
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
-import java.util.UUID
 
 @Component
 class WikiMoveDocumentTool(private val pageService: PageService) {
@@ -20,8 +20,7 @@ class WikiMoveDocumentTool(private val pageService: PageService) {
         @McpToolParam(description = "Destination folder UUID. Omit and set moveToRoot=true to move to root.", required = false) destinationFolderId: String?,
         @McpToolParam(description = "Set true to move page to root folder.", required = false) moveToRoot: Boolean?
     ): Map<String, Any?> {
-        val username = SecurityContextHolder.getContext().authentication?.name
-            ?: throw IllegalStateException("Not authenticated")
+        val username = currentUsername()
 
         val destinationProvided = !destinationFolderId.isNullOrBlank()
         val toRoot = moveToRoot == true
@@ -45,13 +44,5 @@ class WikiMoveDocumentTool(private val pageService: PageService) {
             "folderId" to page.folderId?.toString(),
             "updatedAt" to page.updatedAt.toString()
         )
-    }
-
-    private fun parseUuid(raw: String): UUID {
-        return try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
-            throw IllegalArgumentException("Invalid UUID: $raw")
-        }
     }
 }

@@ -64,7 +64,7 @@ class PageServiceTest {
         )
         val updatePageUseCase = UpdatePageUseCase(
             pageRepository, userRepository, folderRepository,
-            pageMetadataService, ragService, wikiFileService, frontmatterMetaService,
+            pageMetadataService, DeferredPageIndexer(ragService), wikiFileService, frontmatterMetaService,
             wikilinkService, linkRepository, syncService
         )
         val deletePageUseCase = DeletePageUseCase(
@@ -178,7 +178,7 @@ class PageServiceTest {
         tempDir.resolve("$slug.md").toFile().writeText("# T\nbody")
         val saved = Page(id = UUID.randomUUID(), slug = slug, title = "T", contentMd = "body")
         whenever(pageRepository.findBySlugAndDeletedAtIsNull(slug)).thenReturn(null, saved)
-        whenever(pageRepository.findByNormalizedTitle(slug)).thenReturn(null)
+        whenever(pageRepository.findFirstByNormalizedTitle(slug)).thenReturn(null)
         doNothing().whenever(syncService).syncSingleFile(any())
 
         val result = pageService.findBySlug(slug)
@@ -197,7 +197,7 @@ class PageServiceTest {
             contentMd = null
         )
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("mcp-протокол")).thenReturn(null)
-        whenever(pageRepository.findByNormalizedTitle("mcp-протокол")).thenReturn(page)
+        whenever(pageRepository.findFirstByNormalizedTitle("mcp-протокол")).thenReturn(page)
 
         val result = pageService.findBySlug("mcp-протокол")
 
@@ -272,7 +272,7 @@ class PageServiceTest {
     @Test
     fun `findBySlug throws when neither slug nor normalized title matches`() {
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("missing")).thenReturn(null)
-        whenever(pageRepository.findByNormalizedTitle("missing")).thenReturn(null)
+        whenever(pageRepository.findFirstByNormalizedTitle("missing")).thenReturn(null)
 
         assertThrows<NotFoundException> {
             pageService.findBySlug("missing")
@@ -282,7 +282,7 @@ class PageServiceTest {
     @Test
     fun `findBySlug throws for nonexistent page`() {
         whenever(pageRepository.findBySlugAndDeletedAtIsNull("nonexistent")).thenReturn(null)
-        whenever(pageRepository.findByNormalizedTitle("nonexistent")).thenReturn(null)
+        whenever(pageRepository.findFirstByNormalizedTitle("nonexistent")).thenReturn(null)
         assertThrows<NotFoundException> { pageService.findBySlug("nonexistent") }
     }
 

@@ -3,6 +3,7 @@ package com.mdwiki.repository
 import com.mdwiki.model.Page
 import jakarta.persistence.LockModeType
 import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
@@ -17,22 +18,26 @@ interface PageRepository : JpaRepository<Page, UUID> {
     @Query("select p from Page p where p.id = :id and p.deletedAt is null")
     fun findActiveByIdForUpdate(@Param("id") id: UUID): Page?
 
+    @EntityGraph(attributePaths = ["tags"])
     fun findByDeletedAtIsNotNull(): List<Page>
+
+    @EntityGraph(attributePaths = ["tags"])
     fun findAllByDeletedAtIsNull(): List<Page>
+
+    // Без EntityGraph: join fetch коллекции сломал бы пагинацию; N+1 по tags закрыт @BatchSize на Page.tags.
     fun findAllByDeletedAtIsNull(pageable: Pageable): org.springframework.data.domain.Page<Page>
     fun existsBySlug(slug: String): Boolean
     fun findByFolderId(folderId: UUID?): List<Page>
+
+    @EntityGraph(attributePaths = ["tags"])
     fun findAllBySlugIn(slugs: Collection<String>): List<Page>
 
-    @Query(
-        value = """
-            SELECT * FROM pages
-            WHERE trim(both '-' from regexp_replace(lower(trim(title)), '[^a-z0-9а-яё]+', '-', 'g')) = :slug
-            LIMIT 1
-        """,
-        nativeQuery = true
-    )
-    fun findByNormalizedTitle(@Param("slug") slug: String): Page?
+    /**
+     * Страница по нормализованному title (колонка normalized_title: @PrePersist/@PreUpdate в [Page]
+     * + backfill миграцией 002). Soft-delete намеренно не фильтруется — как в прежнем regexp-запросе
+     * с LIMIT 1; callers сами проверяют deletedAt, когда это нужно.
+     */
+    fun findFirstByNormalizedTitle(normalizedTitle: String): Page?
 
     @Query(
         value = """

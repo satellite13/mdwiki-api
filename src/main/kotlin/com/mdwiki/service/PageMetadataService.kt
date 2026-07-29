@@ -103,7 +103,7 @@ class PageMetadataService(
         val bySlug = pageRepository.findAllBySlugIn(slugs).associateBy { it.slug }
         val missing = slugs - bySlug.keys
         val byTitle = missing.mapNotNull { requestedSlug ->
-            pageRepository.findByNormalizedTitle(requestedSlug)?.let { requestedSlug to it }
+            pageRepository.findFirstByNormalizedTitle(requestedSlug)?.let { requestedSlug to it }
         }.toMap()
         return bySlug + byTitle
     }

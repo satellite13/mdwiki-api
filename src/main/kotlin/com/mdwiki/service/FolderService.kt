@@ -1,6 +1,7 @@
 package com.mdwiki.service
 
 import com.mdwiki.dto.*
+import com.mdwiki.error.ConflictException
 import com.mdwiki.mapper.displayTitle
 import com.mdwiki.model.Folder
 import com.mdwiki.repository.FolderRepository
@@ -81,8 +82,8 @@ class FolderService(
 
     @Transactional
     fun create(request: CreateFolderRequest, username: String): FolderResponse {
-        require(!folderRepository.existsByParentIdAndName(request.parentId, request.name)) {
-            "Folder with name '${request.name}' already exists in this location"
+        if (folderRepository.existsByParentIdAndName(request.parentId, request.name)) {
+            throw ConflictException("Folder with name '${request.name}' already exists in this location")
         }
 
         val user = userRepository.findByUsername(username)
@@ -107,8 +108,12 @@ class FolderService(
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
 
-        require(!folderRepository.existsByParentIdAndName(folder.parent?.id, request.name)) {
-            "Folder with name '${request.name}' already exists in this location"
+        // Проверяем конфликт только при реальной смене имени:
+        // иначе existsByParentIdAndName находит саму папку
+        if (request.name != folder.name &&
+            folderRepository.existsByParentIdAndName(folder.parent?.id, request.name)
+        ) {
+            throw ConflictException("Folder with name '${request.name}' already exists in this location")
         }
 
         val oldDir = wikiFileService.resolveFolderDirectory(folder)
@@ -128,6 +133,7 @@ class FolderService(
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
 
+        val oldParentId = folder.parent?.id
         val oldDir = wikiFileService.resolveFolderDirectory(folder)
 
         if (request.parentId != null) {
@@ -145,6 +151,14 @@ class FolderService(
             folder.parent = targetParent
         } else {
             folder.parent = null
+        }
+
+        // Конфликт имён в целевой папке (проверяем только при смене родителя,
+        // иначе existsByParentIdAndName находит саму папку)
+        if (request.parentId != oldParentId &&
+            folderRepository.existsByParentIdAndName(request.parentId, folder.name)
+        ) {
+            throw ConflictException("Folder with name '${folder.name}' already exists in target location")
         }
 
         val newDir = wikiFileService.resolveFolderDirectory(folder)

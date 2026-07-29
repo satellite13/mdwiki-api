@@ -26,6 +26,7 @@ class SyncService(
     private val wikiProperties: WikiProperties,
     private val treeEventsService: TreeEventsService,
     @param:Lazy private val folderService: FolderService,
+    private val wikiFileService: WikiFileService,
     private val wikiSyncEngine: WikiSyncEngine,
     private val ragService: RagService,
     private val attachmentService: AttachmentService,
@@ -183,24 +184,8 @@ class SyncService(
     }
 
     private fun resolveFolderDirectoryOnDisk(folder: Folder, contentRoot: File): File {
-        val segments = mutableListOf<String>()
-        var current: Folder? = folder
-        while (current != null) {
-            segments.add(sanitizePathSegment(current.name))
-            current = current.parent
-        }
-        var dir = contentRoot
-        for (segment in segments.reversed()) {
-            dir = File(dir, segment)
-        }
-        return dir
-    }
-
-    private fun sanitizePathSegment(input: String): String {
-        val cleaned = input
-            .trim()
-            .replace('/', '-')
-            .replace('\\', '-')
-        return if (cleaned.isBlank()) "folder" else cleaned
+        // Единая точка построения пути папки — WikiFileService (параметр contentRoot
+        // оставлен в сигнатуре: корень контента всегда один и тот же).
+        return wikiFileService.resolveFolderDirectory(folder)
     }
 }

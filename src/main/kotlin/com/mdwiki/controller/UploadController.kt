@@ -29,6 +29,11 @@ data class UploadResponse(
 class UploadController(
     private val wikiProperties: WikiProperties
 ) {
+    private val allowedImageTypes = setOf(
+        "image/png", "image/jpeg", "image/gif", "image/webp",
+        "image/avif", "image/bmp", "image/x-icon", "image/vnd.microsoft.icon"
+    )
+
     private val uploadsDir: Path
         get() = Path.of(wikiProperties.contentDir).toAbsolutePath().normalize().resolve("uploads")
 
@@ -37,9 +42,10 @@ class UploadController(
         if (file.isEmpty) {
             throw IllegalArgumentException("Uploaded file is empty")
         }
-        val contentType = file.contentType?.lowercase()
-        if (contentType == null || !contentType.startsWith("image/")) {
-            throw IllegalArgumentException("Only image files are allowed")
+        val contentType = file.contentType?.substringBefore(';')?.trim()?.lowercase()
+        // Allowlist безопасных типов: image/svg+xml исполняется браузером → stored XSS
+        if (contentType == null || contentType !in allowedImageTypes) {
+            throw IllegalArgumentException("Only PNG, JPEG, GIF, WebP, AVIF, BMP or ICO images are allowed")
         }
 
         Files.createDirectories(uploadsDir)
@@ -77,8 +83,14 @@ class UploadController(
 
         val resource = UrlResource(filePath.toUri())
         val mediaType = MediaTypeFactory.getMediaType(filePath.fileName.toString()).orElse(MediaType.APPLICATION_OCTET_STREAM)
-        return ResponseEntity.ok()
+        val builder = ResponseEntity.ok()
             .contentType(mediaType)
-            .body(resource)
+            // Файлы отдаются без аутентификации — запрещаем браузеру исполнять их как активный контент
+            .header("X-Content-Type-Options", "nosniff")
+        if (mediaType.subtype.contains("svg") || mediaType == MediaType.TEXT_HTML) {
+            // Легаси-файлы, загруженные до allowlist'а, отдаём только как скачиваемые
+            builder.header("Content-Disposition", "attachment")
+        }
+        return builder.body(resource)
     }
 }

@@ -22,8 +22,18 @@ class GraphService(
 
     @Transactional(readOnly = true)
     fun getGraph(slug: String, depth: Int): GraphResponse {
-        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
-            ?: throw NotFoundException("Page not found: $slug")
+        // Кэши на один вызов: повторные запросы одной страницы не ходят в БД,
+        // markdown каждой страницы парсится не более одного раза.
+        val pagesBySlug = mutableMapOf<String, Page?>()
+        fun findPage(pageSlug: String): Page? {
+            if (pageSlug in pagesBySlug) return pagesBySlug[pageSlug]
+            val found = pageRepository.findBySlugAndDeletedAtIsNull(pageSlug)
+            pagesBySlug[pageSlug] = found
+            return found
+        }
+        val wikilinksCache = mutableMapOf<String, Set<String>>()
+
+        val page = findPage(slug) ?: throw NotFoundException("Page not found: $slug")
 
         val visitedSlugs = mutableSetOf(slug)
         val nodes = mutableListOf<GraphNode>()
@@ -37,14 +47,14 @@ class GraphService(
         for (level in 1..depth.coerceIn(1, 3)) {
             val nextFrontier = mutableSetOf<String>()
             for (currentSlug in frontier) {
-                val currentPage = pageRepository.findBySlugAndDeletedAtIsNull(currentSlug) ?: continue
+                val currentPage = findPage(currentSlug) ?: continue
 
                 // Outgoing links
                 val outgoing = linkRepository.findBySourcePage(currentPage)
                 for (link in outgoing) {
-                    if (!isActiveOutgoingLink(currentPage, link)) continue
+                    if (!isActiveOutgoingLink(currentPage, link, wikilinksCache)) continue
                     val targetSlug = link.targetSlug
-                    val targetPage = link.targetPage ?: pageRepository.findBySlugAndDeletedAtIsNull(targetSlug)
+                    val targetPage = link.targetPage ?: findPage(targetSlug)
                     // В БД target_slug может не совпадать со slug страницы (старые ссылки / rename);
                     // в API графа рёбра и узлы должны совпадать по каноническому slug страницы.
                     val canonicalTarget = targetPage?.slug ?: targetSlug
@@ -82,7 +92,7 @@ class GraphService(
                 val incoming = linkRepository.findByTargetSlug(currentSlug)
                 for (link in incoming) {
                     if (link.sourcePage.deletedAt != null) continue
-                    if (!isActiveIncomingLink(link.sourcePage, link.targetSlug)) continue
+                    if (!isActiveIncomingLink(link.sourcePage, link.targetSlug, wikilinksCache)) continue
                     val sourceSlug = link.sourcePage.slug
                     edges.add(GraphEdge(source = sourceSlug, target = currentSlug))
                     if (sourceSlug !in visitedSlugs) {
@@ -116,7 +126,9 @@ class GraphService(
     @Transactional(readOnly = true)
     fun getFullWikiGraph(highlight: String?): GraphResponse {
         val pages = pageRepository.findAllByDeletedAtIsNull()
+        val pagesBySlug = pages.associateBy { it.slug }
         val knownSlugs = pages.map { it.slug }.toMutableSet()
+        val wikilinksCache = mutableMapOf<String, Set<String>>()
         val nodes = pages.map { p ->
             GraphNode(
                 slug = p.slug,
@@ -128,14 +140,14 @@ class GraphService(
         }.toMutableList()
 
         val edges = mutableListOf<GraphEdge>()
-        for (link in linkRepository.findAll()) {
+        for (link in linkRepository.findAllWithPages()) {
             val src = link.sourcePage
             if (src.deletedAt != null) continue
-            if (!isActiveOutgoingLink(src, link)) continue
+            if (!isActiveOutgoingLink(src, link, wikilinksCache)) continue
             val srcSlug = src.slug
             if (srcSlug !in knownSlugs) continue
 
-            val targetPage = link.targetPage ?: pageRepository.findBySlugAndDeletedAtIsNull(link.targetSlug)
+            val targetPage = link.targetPage ?: pagesBySlug[link.targetSlug]
             if (targetPage != null && targetPage.deletedAt != null) continue
             val canonicalTarget = targetPage?.slug ?: link.targetSlug
 
@@ -176,6 +188,7 @@ class GraphService(
      * Returns slugs of neighbor pages within given depth (for RAG graph expansion).
      */
     fun getNeighborSlugs(slug: String, depth: Int): Set<String> {
+        val wikilinksCache = mutableMapOf<String, Set<String>>()
         val visited = mutableSetOf(slug)
         var frontier = setOf(slug)
 
@@ -186,7 +199,7 @@ class GraphService(
 
                 // Outgoing
                 linkRepository.findBySourcePage(currentPage).forEach { link ->
-                    if (!isActiveOutgoingLink(currentPage, link)) return@forEach
+                    if (!isActiveOutgoingLink(currentPage, link, wikilinksCache)) return@forEach
                     if (link.targetSlug !in visited) {
                         visited.add(link.targetSlug)
                         nextFrontier.add(link.targetSlug)
@@ -195,7 +208,7 @@ class GraphService(
 
                 // Incoming
                 linkRepository.findByTargetSlug(currentSlug).forEach { link ->
-                    if (!isActiveIncomingLink(link.sourcePage, link.targetSlug)) return@forEach
+                    if (!isActiveIncomingLink(link.sourcePage, link.targetSlug, wikilinksCache)) return@forEach
                     val srcSlug = link.sourcePage.slug
                     if (srcSlug !in visited) {
                         visited.add(srcSlug)
@@ -210,14 +223,16 @@ class GraphService(
         return visited
     }
 
-    private fun activeWikilinkSlugs(page: Page): Set<String> {
-        val body = MarkdownFrontmatter.strip(page.contentMd ?: "")
-        return wikilinkService.extractWikilinks(body).map { it.slug }.toSet()
-    }
+    // Ключ — slug: он уникален (id может быть null у ещё не сохранённых сущностей, например в тестах).
+    private fun activeWikilinkSlugs(page: Page, cache: MutableMap<String, Set<String>>): Set<String> =
+        cache.getOrPut(page.slug) {
+            val body = MarkdownFrontmatter.strip(page.contentMd ?: "")
+            wikilinkService.extractWikilinks(body).map { it.slug }.toSet()
+        }
 
-    private fun isActiveOutgoingLink(source: Page, link: Link): Boolean =
-        link.targetSlug in activeWikilinkSlugs(source)
+    private fun isActiveOutgoingLink(source: Page, link: Link, cache: MutableMap<String, Set<String>>): Boolean =
+        link.targetSlug in activeWikilinkSlugs(source, cache)
 
-    private fun isActiveIncomingLink(source: Page, targetSlug: String): Boolean =
-        targetSlug in activeWikilinkSlugs(source)
+    private fun isActiveIncomingLink(source: Page, targetSlug: String, cache: MutableMap<String, Set<String>>): Boolean =
+        targetSlug in activeWikilinkSlugs(source, cache)
 }

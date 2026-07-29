@@ -122,7 +122,7 @@ class PageMetadataServiceTest {
             )
         )
         whenever(pageRepository.findAllBySlugIn(setOf("known", "unknown"))).thenReturn(listOf(targetPage))
-        whenever(pageRepository.findByNormalizedTitle("unknown")).thenReturn(null)
+        whenever(pageRepository.findFirstByNormalizedTitle("unknown")).thenReturn(null)
         whenever(wikilinkService.extractTags(content)).thenReturn(setOf("kotlin"))
         whenever(tagService.getOrCreateTags(setOf("kotlin"))).thenReturn(setOf(tag))
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
@@ -130,7 +130,7 @@ class PageMetadataServiceTest {
         pageMetadataService.syncLinksAndTags(page, content, cleanupOrphanedTags = true)
 
         verify(pageRepository).findAllBySlugIn(setOf("known", "unknown"))
-        verify(pageRepository).findByNormalizedTitle("unknown")
+        verify(pageRepository).findFirstByNormalizedTitle("unknown")
         val linksCaptor = argumentCaptor<Link>()
         verify(linkRepository, times(2)).save(linksCaptor.capture())
         assertEquals(targetPage, linksCaptor.firstValue.targetPage)
@@ -164,14 +164,14 @@ class PageMetadataServiceTest {
             listOf(WikilinkService.Wikilink(slug = "mcp-протокол", displayText = null))
         )
         whenever(pageRepository.findAllBySlugIn(setOf("mcp-протокол"))).thenReturn(emptyList())
-        whenever(pageRepository.findByNormalizedTitle("mcp-протокол")).thenReturn(targetPage)
+        whenever(pageRepository.findFirstByNormalizedTitle("mcp-протокол")).thenReturn(targetPage)
         whenever(wikilinkService.extractTags(content)).thenReturn(emptySet())
         whenever(tagService.getOrCreateTags(emptySet())).thenReturn(emptySet())
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
         pageMetadataService.syncLinksAndTags(page, content, cleanupOrphanedTags = false)
 
-        verify(pageRepository).findByNormalizedTitle("mcp-протокол")
+        verify(pageRepository).findFirstByNormalizedTitle("mcp-протокол")
         val linkCaptor = argumentCaptor<Link>()
         verify(linkRepository).save(linkCaptor.capture())
         assertEquals(targetPage, linkCaptor.firstValue.targetPage)

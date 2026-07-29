@@ -5,23 +5,25 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 
 data class RegisterRequest(
-    @param:NotBlank @param:Size(min = 3, max = 100)
+    @field:NotBlank @field:Size(min = 3, max = 100)
     val username: String,
-    @param:NotBlank @param:Email
+    @field:NotBlank @field:Email
     val email: String,
-    @param:NotBlank @param:Size(min = 8)
+    @field:NotBlank @field:Size(min = 8)
     val password: String
 )
 
 data class LoginRequest(
-    @param:NotBlank
+    @field:NotBlank
     val username: String,
-    @param:NotBlank
+    @field:NotBlank
     val password: String
 )
 
 data class ChangePasswordRequest(
+    @field:NotBlank
     val currentPassword: String,
+    @field:NotBlank @field:Size(min = 8)
     val newPassword: String
 )
 

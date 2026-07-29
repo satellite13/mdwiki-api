@@ -43,14 +43,15 @@ class OllamaEmbeddingTest {
     }
 
     @Test
-    fun `embed handles batch by calling per-text`() {
-        for (i in 0..1) {
-            mockServer.enqueue(MockResponse()
-                .setBody(objectMapper.writeValueAsString(mapOf("embeddings" to listOf(listOf(0.1 * (i+1), 0.2, 0.3)))))
-                .setHeader("Content-Type", "application/json"))
-        }
+    fun `embed sends batch as single request`() {
+        mockServer.enqueue(MockResponse()
+            .setBody(objectMapper.writeValueAsString(mapOf("embeddings" to listOf(listOf(0.1, 0.2, 0.3), listOf(0.4, 0.5, 0.6)))))
+            .setHeader("Content-Type", "application/json"))
         val result = embedding.embed(listOf("text1", "text2"))
         assertEquals(2, result.size)
-        assertEquals(2, mockServer.requestCount)
+        assertEquals(0.4f, result[1][0], 0.001f)
+        assertEquals(1, mockServer.requestCount)
+        val body = mockServer.takeRequest().body.readUtf8()
+        assertTrue(body.contains("text1") && body.contains("text2"))
     }
 }

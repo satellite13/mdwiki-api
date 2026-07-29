@@ -6,10 +6,12 @@ import com.mdwiki.model.Page
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
+import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
+import com.mdwiki.util.PathSanitizer
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Files
@@ -26,13 +28,16 @@ class WikiSyncEngine(
     private val ragService: RagService,
     private val frontmatterMetaService: FrontmatterMetaService,
     private val folderRepository: FolderRepository,
-    private val wikiFileService: WikiFileService
+    private val wikiFileService: WikiFileService,
+    private val pageIndexer: DeferredPageIndexer
 ) {
     private val log = LoggerFactory.getLogger(WikiSyncEngine::class.java)
     private companion object {
         private const val FULL_SYNC_PAGE_BATCH_SIZE = 500
-        private const val REPLACEMENT_CHAR = '\uFFFD'
+        private const val REPLACEMENT_CHAR = '�'
     }
+
+    private enum class UpsertOutcome { ADDED, UPDATED, UNCHANGED }
 
     fun fullSync(): SyncService.SyncResult {
         val startedAt = System.nanoTime()
@@ -72,45 +77,10 @@ class WikiSyncEngine(
         for ((slug, file) in filesBySlug) {
             val content = file.readText()
             val folder = resolveOrCreateFolderChain(contentDir, file)
-            val existing = existingBySlug[slug]
-            if (existing == null) {
-                val title = extractTitle(content, slug)
-                val page = Page(slug = slug, title = title, contentMd = content, filePath = file.absolutePath, folder = folder)
-                frontmatterMetaService.refreshFromContent(page, content)
-                val saved = pageRepository.save(page)
-                pageMetadataService.syncLinksAndTags(saved, content)
-                pageMetadataService.resolveIncomingLinks(saved)
-                ragService.indexPage(saved)
-                added++
-                log.info("Sync: added page '$slug'")
-            } else {
-                val wasDeleted = existing.deletedAt != null
-                if (wasDeleted) {
-                    existing.deletedAt = null
-                }
-                if (wasDeleted || existing.contentMd != content) {
-                    existing.contentMd = content
-                    existing.title = extractTitle(content, slug)
-                    existing.filePath = file.absolutePath
-                    existing.folder = folder
-                    existing.updatedAt = Instant.now()
-                    frontmatterMetaService.refreshFromContent(existing, content)
-                    val saved = pageRepository.save(existing)
-                    pageMetadataService.syncLinksAndTags(saved, content)
-                    if (wasDeleted) {
-                        pageMetadataService.resolveIncomingLinks(saved)
-                    }
-                    ragService.indexPage(saved)
-                    updated++
-                    log.info(
-                        if (wasDeleted) "Sync: restored soft-deleted page '$slug' from disk"
-                        else "Sync: updated page '$slug'"
-                    )
-                } else if (existing.filePath != file.absolutePath || existing.folder?.id != folder?.id) {
-                    existing.filePath = file.absolutePath
-                    existing.folder = folder
-                    pageRepository.save(existing)
-                }
+            when (upsertPageFromFile(slug, file, content, folder, existingBySlug[slug], "Sync")) {
+                UpsertOutcome.ADDED -> added++
+                UpsertOutcome.UPDATED -> updated++
+                UpsertOutcome.UNCHANGED -> {}
             }
         }
 
@@ -151,44 +121,63 @@ class WikiSyncEngine(
         val contentDir = File(wikiProperties.contentDir)
         val folder = resolveOrCreateFolderChain(contentDir, file)
         val existing = pageRepository.findBySlug(slug)
+        upsertPageFromFile(slug, file, content, folder, existing, "Watcher")
+    }
 
-        if (existing != null) {
-            val wasDeleted = existing.deletedAt != null
-            if (wasDeleted) {
-                existing.deletedAt = null
-            }
-            if (wasDeleted || existing.contentMd != content) {
-                existing.contentMd = content
-                existing.title = extractTitle(content, slug)
-                existing.filePath = file.absolutePath
-                existing.folder = folder
-                existing.updatedAt = Instant.now()
-                frontmatterMetaService.refreshFromContent(existing, content)
-                val saved = pageRepository.save(existing)
-                pageMetadataService.syncLinksAndTags(saved, content)
-                if (wasDeleted) {
-                    pageMetadataService.resolveIncomingLinks(saved)
-                }
-                ragService.indexPage(saved)
-                log.info(
-                    if (wasDeleted) "Watcher: restored soft-deleted page '$slug' from disk"
-                    else "Watcher: updated page '$slug'"
-                )
-            } else if (existing.filePath != file.absolutePath || existing.folder?.id != folder?.id) {
-                existing.filePath = file.absolutePath
-                existing.folder = folder
-                pageRepository.save(existing)
-            }
-        } else {
+    /**
+     * Общий upsert страницы из .md файла (используется и fullSync, и watcher'ом).
+     * RAG-индексация откладывается на afterCommit, чтобы не держать транзакцию на HTTP-вызовах.
+     */
+    private fun upsertPageFromFile(
+        slug: String,
+        file: File,
+        content: String,
+        folder: Folder?,
+        existing: Page?,
+        logPrefix: String
+    ): UpsertOutcome {
+        if (existing == null) {
             val title = extractTitle(content, slug)
             val page = Page(slug = slug, title = title, contentMd = content, filePath = file.absolutePath, folder = folder)
             frontmatterMetaService.refreshFromContent(page, content)
             val saved = pageRepository.save(page)
             pageMetadataService.syncLinksAndTags(saved, content)
             pageMetadataService.resolveIncomingLinks(saved)
-            ragService.indexPage(saved)
-            log.info("Watcher: added page '$slug'")
+            pageIndexer.indexAfterCommit(saved)
+            log.info("{}: added page '{}'", logPrefix, slug)
+            return UpsertOutcome.ADDED
         }
+
+        val wasDeleted = existing.deletedAt != null
+        if (wasDeleted) {
+            existing.deletedAt = null
+        }
+        if (wasDeleted || existing.contentMd != content) {
+            existing.contentMd = content
+            existing.title = extractTitle(content, slug)
+            existing.filePath = file.absolutePath
+            existing.folder = folder
+            existing.updatedAt = Instant.now()
+            frontmatterMetaService.refreshFromContent(existing, content)
+            val saved = pageRepository.save(existing)
+            pageMetadataService.syncLinksAndTags(saved, content)
+            if (wasDeleted) {
+                pageMetadataService.resolveIncomingLinks(saved)
+            }
+            pageIndexer.indexAfterCommit(saved)
+            log.info(
+                if (wasDeleted) "{}: restored soft-deleted page '{}' from disk" else "{}: updated page '{}'",
+                logPrefix, slug
+            )
+            return UpsertOutcome.UPDATED
+        }
+
+        if (existing.filePath != file.absolutePath || existing.folder?.id != folder?.id) {
+            existing.filePath = file.absolutePath
+            existing.folder = folder
+            pageRepository.save(existing)
+        }
+        return UpsertOutcome.UNCHANGED
     }
 
     fun removePage(slug: String) {
@@ -215,10 +204,8 @@ class WikiSyncEngine(
     }
 
     /** Как при создании папок в UI: безопасное имя сегмента пути. */
-    private fun sanitizeFolderSegment(segment: String): String {
-        val cleaned = segment.trim().replace('/', '-').replace('\\', '-')
-        return if (cleaned.isBlank()) "folder" else cleaned
-    }
+    private fun sanitizeFolderSegment(segment: String): String =
+        PathSanitizer.sanitizePathSegment(segment)
 
     /**
      * По пути `wiki-content/.../page.md` создаёт в БД цепочку папок и возвращает родителя страницы (лист цепочки).

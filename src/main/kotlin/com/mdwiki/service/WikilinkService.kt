@@ -1,5 +1,6 @@
 package com.mdwiki.service
 
+import com.mdwiki.util.PageSlugNormalizer
 import org.springframework.stereotype.Service
 
 @Service
@@ -12,14 +13,9 @@ class WikilinkService {
     private val fencedCodePattern = Regex("""(?ms)^([`~]{3,}).*?^\1\s*$""")
     private val htmlCodeBlockPattern = Regex("""<(code|pre)\b[^>]*>[\s\S]*?</\1>""", RegexOption.IGNORE_CASE)
     private val indentedCodeLinePattern = Regex("""(?m)^(?:    |\t).*$""")
-    private val slugNonAlnum = Regex("[^a-z0-9а-яё]+", RegexOption.IGNORE_CASE)
-    private val slugTrimDashes = Regex("^-+|-+$")
 
     /** Канонический slug страницы (как при создании из UI). */
-    fun normalizePageSlug(raw: String): String =
-        raw.lowercase().trim()
-            .replace(slugNonAlnum, "-")
-            .replace(slugTrimDashes, "")
+    fun normalizePageSlug(raw: String): String = PageSlugNormalizer.normalize(raw)
 
     /**
      * Заменяет вики-ссылки, у которых нормализованный slug/title цели равен [oldNormalizedSlug] или [oldNormalizedTitle], на [newSlug].

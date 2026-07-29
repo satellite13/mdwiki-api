@@ -1,7 +1,9 @@
 package com.mdwiki.model
 
 import com.fasterxml.jackson.databind.JsonNode
+import com.mdwiki.util.PageSlugNormalizer
 import jakarta.persistence.*
+import org.hibernate.annotations.BatchSize
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import java.time.Instant
@@ -19,6 +21,10 @@ class Page(
 
     @Column(nullable = false, length = 500)
     var title: String,
+
+    /** Нормализованный title для equality-поиска (заполняется хуком ниже и миграцией 002). */
+    @Column(name = "normalized_title", length = 500)
+    var normalizedTitle: String? = null,
 
     @Column(name = "content_md", columnDefinition = "text")
     var contentMd: String? = null,
@@ -46,6 +52,8 @@ class Page(
     var frontmatterMeta: JsonNode? = null,
 
     @ManyToMany
+    // Батч-подгрузка тегов: закрывает N+1 там, где нет EntityGraph (пагинированный findAll, BFS в GraphService).
+    @BatchSize(size = 50)
     @JoinTable(
         name = "page_tags",
         joinColumns = [JoinColumn(name = "page_id")],
@@ -61,4 +69,11 @@ class Page(
 
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now()
-)
+) {
+    /** Держит normalized_title синхронным с title при любом INSERT/UPDATE через JPA. */
+    @PrePersist
+    @PreUpdate
+    private fun syncNormalizedTitle() {
+        normalizedTitle = PageSlugNormalizer.normalize(title)
+    }
+}

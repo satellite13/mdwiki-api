@@ -33,6 +33,9 @@ class AttachmentService(
 
     private val uploadRefPattern = Regex("""/api/uploads/([^)\s"'<>]+)""")
 
+    // Типы, исполняемые браузером при отдаче с permitAll-endpoint'а — stored XSS
+    private val blockedContentTypes = setOf("image/svg+xml", "text/html", "application/xhtml+xml")
+
     private val uploadsDir: Path
         get() = Path.of(wikiProperties.contentDir).toAbsolutePath().normalize().resolve("uploads")
 
@@ -151,6 +154,9 @@ class AttachmentService(
         if (!Files.exists(normalizedPath) || !Files.isRegularFile(normalizedPath)) {
             throw IllegalArgumentException("File does not exist: $normalizedPath")
         }
+        // Защита от LFI: импорт по пути разрешён только из явно настроенных директорий
+        val realPath = normalizedPath.toRealPath()
+        requireImportPathAllowed(realPath)
         return persistUpload(
             originalName = originalName?.takeIf { it.isNotBlank() } ?: normalizedPath.fileName.toString(),
             contentType = contentType ?: Files.probeContentType(normalizedPath) ?: "application/octet-stream",
@@ -159,6 +165,22 @@ class AttachmentService(
             pageId = pageId
         ) { destination ->
             Files.copy(normalizedPath, destination, StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    private fun requireImportPathAllowed(realPath: Path) {
+        val allowedDirs = wikiProperties.attachments.allowedImportDirs
+        if (allowedDirs.isEmpty()) {
+            throw IllegalArgumentException(
+                "Import from host path is disabled: configure mdwiki.attachments.allowed-import-dirs"
+            )
+        }
+        val insideAllowed = allowedDirs.any { dir ->
+            val allowedDir = Path.of(dir).toAbsolutePath().normalize()
+            Files.isDirectory(allowedDir) && realPath.startsWith(allowedDir.toRealPath())
+        }
+        if (!insideAllowed) {
+            throw IllegalArgumentException("File path is outside allowed import directories: $realPath")
         }
     }
 
@@ -198,6 +220,10 @@ class AttachmentService(
         pageId: UUID?,
         writeToDestination: (Path) -> Unit
     ): AttachmentResponse {
+        val normalizedContentType = contentType.substringBefore(';').trim().lowercase()
+        if (normalizedContentType in blockedContentTypes) {
+            throw IllegalArgumentException("Files of type '$contentType' are not allowed")
+        }
         val user = userRepository.findByUsername(username)
         val linkedPage = pageId?.let {
             pageRepository.findById(it).orElseThrow { NotFoundException("Page not found: $it") }

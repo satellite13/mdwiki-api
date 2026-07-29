@@ -181,7 +181,7 @@ class GraphServiceTest {
         val link = Link(sourcePage = a, targetPage = b, targetSlug = "b")
 
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(a, b))
-        whenever(linkRepository.findAll()).thenReturn(listOf(link))
+        whenever(linkRepository.findAllWithPages()).thenReturn(listOf(link))
 
         val graph = graphService.getFullWikiGraph(highlight = null)
 
@@ -196,7 +196,7 @@ class GraphServiceTest {
         val b = page("b", "B")
 
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(a, b))
-        whenever(linkRepository.findAll()).thenReturn(emptyList())
+        whenever(linkRepository.findAllWithPages()).thenReturn(emptyList())
 
         val graph = graphService.getFullWikiGraph(highlight = "b")
 
@@ -212,7 +212,7 @@ class GraphServiceTest {
         val link = Link(sourcePage = a, targetPage = b, targetSlug = "b")
 
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(b))
-        whenever(linkRepository.findAll()).thenReturn(listOf(link))
+        whenever(linkRepository.findAllWithPages()).thenReturn(listOf(link))
 
         val graph = graphService.getFullWikiGraph(null)
 

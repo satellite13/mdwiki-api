@@ -41,7 +41,7 @@ class PageService(
         pageRepository.findBySlugAndDeletedAtIsNull(slug)?.let {
             return it.toResponse()
         }
-        pageRepository.findByNormalizedTitle(slug)?.takeIf { it.deletedAt == null }?.let {
+        pageRepository.findFirstByNormalizedTitle(slug)?.takeIf { it.deletedAt == null }?.let {
             return it.toResponse()
         }
         val onDisk = wikiFileService.findMarkdownFileForSlug(slug)

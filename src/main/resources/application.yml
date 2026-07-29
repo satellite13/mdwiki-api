@@ -40,6 +40,10 @@ mdwiki:
     secret: ${JWT_SECRET:default-dev-secret-change-in-production-must-be-at-least-256-bits}
     expiration-ms: 86400000
   content-dir: ${MDWIKI_CONTENT_DIR:./wiki-content}
+  attachments:
+    # Директории хоста, из которых разрешён импорт вложений по пути (MCP wiki_attachment_upload).
+    # Пустой список = импорт по пути запрещён (защита от LFI).
+    allowed-import-dirs: ${MDWIKI_ATTACHMENTS_ALLOWED_IMPORT_DIRS:}
   # Размерность вектора в БД задаётся тем же EMBEDDING_DIMENSION (см. spring.liquibase.parameters).
   # Ollama nomic-embed-text → обычно 768; OpenAI text-embedding-3-small → 1536.
   embedding:

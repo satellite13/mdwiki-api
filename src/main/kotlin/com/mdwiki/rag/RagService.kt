@@ -43,12 +43,14 @@ class RagService(
         val chunks = chunkingService.chunk(content)
         if (chunks.isEmpty()) return
 
-        val savedChunks = chunks.map { chunk ->
-            pageChunkRepository.save(PageChunk(
-                page = page, chunkIndex = chunk.index,
-                chunkText = chunk.text, sectionHeading = chunk.sectionHeading
-            ))
-        }
+        val savedChunks = pageChunkRepository.saveAll(
+            chunks.map { chunk ->
+                PageChunk(
+                    page = page, chunkIndex = chunk.index,
+                    chunkText = chunk.text, sectionHeading = chunk.sectionHeading
+                )
+            }
+        )
 
         val texts = savedChunks.map { it.chunkText }
         val embeddings = embedForIndexWithRetry(texts, page.slug) ?: return
@@ -156,8 +158,11 @@ class RagService(
         if (ftsPages.isEmpty()) return emptyList()
         val pagesById = ftsPages.mapNotNull { page -> page.id?.let { id -> id to page } }.toMap()
         if (pagesById.isEmpty()) return emptyList()
+        // Один запрос вместо per-page findByPageIdOrderByChunkIndex; порядок (ранк страниц, chunkIndex) сохраняем.
+        val chunksByPageId = pageChunkRepository.findByPageIdIn(pagesById.keys.toList())
+            .groupBy { it.page.id }
         val ftsChunks = pagesById.keys.flatMap { pageId ->
-            pageChunkRepository.findByPageIdOrderByChunkIndex(pageId)
+            chunksByPageId[pageId].orEmpty().sortedBy { it.chunkIndex }
         }
         return ftsChunks.mapNotNull { chunk ->
             val page = pagesById[chunk.page.id] ?: return@mapNotNull null

@@ -6,7 +6,6 @@ import com.mdwiki.dto.RewriteBrokenLinksResponse
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.mapper.displayTitle
 import com.mdwiki.model.Page
-import com.mdwiki.rag.RagService
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
@@ -23,7 +22,7 @@ class BrokenLinkService(
     private val pageMetadataService: PageMetadataService,
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikiFileService: WikiFileService,
-    private val ragService: RagService,
+    private val pageIndexer: DeferredPageIndexer,
     private val userRepository: UserRepository,
 ) {
     @Transactional(readOnly = true)
@@ -169,7 +168,7 @@ class BrokenLinkService(
         wikiFileService.createOrRewritePageFile(page, rewritten)
         val saved = pageRepository.save(page)
         pageMetadataService.syncLinksAndTags(saved, rewritten, cleanupOrphanedTags = false)
-        ragService.indexPage(saved)
+        pageIndexer.indexAfterCommit(saved)
         return true
     }
 }

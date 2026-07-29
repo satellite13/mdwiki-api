@@ -33,6 +33,7 @@ class BrokenLinkServiceTest {
     @Mock private lateinit var frontmatterMetaService: FrontmatterMetaService
     @Mock private lateinit var wikiFileService: WikiFileService
     @Mock private lateinit var ragService: com.mdwiki.rag.RagService
+    @Mock private lateinit var pageIndexer: DeferredPageIndexer
     @Mock private lateinit var userRepository: UserRepository
 
     @InjectMocks

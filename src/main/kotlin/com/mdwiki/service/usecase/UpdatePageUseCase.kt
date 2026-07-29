@@ -8,7 +8,7 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
-import com.mdwiki.rag.RagService
+import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
@@ -24,7 +24,7 @@ class UpdatePageUseCase(
     private val userRepository: UserRepository,
     private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
-    private val ragService: RagService,
+    private val pageIndexer: DeferredPageIndexer,
     private val wikiFileService: WikiFileService,
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikilinkService: WikilinkService,
@@ -94,7 +94,7 @@ class UpdatePageUseCase(
                         wikiFileService.createOrRewritePageFile(other, rewritten)
                         pageRepository.save(other)
                         pageMetadataService.syncLinksAndTags(other, rewritten, cleanupOrphanedTags = false)
-                        ragService.indexPage(other)
+                        pageIndexer.indexAfterCommit(other)
                     }
                 }
         }
@@ -116,7 +116,7 @@ class UpdatePageUseCase(
 
         if (request.contentMd != null || slugChanged) {
             pageMetadataService.syncLinksAndTags(saved, saved.contentMd ?: "", cleanupOrphanedTags = true)
-            ragService.indexPage(saved)
+            pageIndexer.indexAfterCommit(saved)
         }
 
         // Синхронизируем БД с ФС после операций переименования/перемещения

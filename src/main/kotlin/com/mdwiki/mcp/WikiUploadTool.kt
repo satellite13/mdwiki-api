@@ -1,11 +1,11 @@
 package com.mdwiki.mcp
 
+import com.mdwiki.mcp.McpSupport.currentUsername
+import com.mdwiki.mcp.McpSupport.parseUuid
 import com.mdwiki.service.AttachmentService
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
-import java.util.UUID
 
 @Component
 class WikiUploadTool(private val attachmentService: AttachmentService) {
@@ -24,8 +24,7 @@ class WikiUploadTool(private val attachmentService: AttachmentService) {
         @McpToolParam(description = "Optional page UUID to link attachment", required = false)
         pageId: String?
     ): Map<String, Any?> {
-        val username = SecurityContextHolder.getContext().authentication?.name
-            ?: throw IllegalStateException("Not authenticated")
+        val username = currentUsername()
         val parsedPageId = pageId?.takeIf { it.isNotBlank() }?.let(::parseUuid)
         val attachment = attachmentService.uploadFromBase64(
             base64Data = fileBase64,
@@ -44,13 +43,5 @@ class WikiUploadTool(private val attachmentService: AttachmentService) {
             "url" to attachment.url,
             "createdAt" to attachment.createdAt.toString()
         )
-    }
-
-    private fun parseUuid(raw: String): UUID {
-        return try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
-            throw IllegalArgumentException("Invalid UUID: $raw")
-        }
     }
 }

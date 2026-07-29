@@ -1,10 +1,10 @@
 package com.mdwiki.mcp
 
 import com.mdwiki.dto.UpdatePageRequest
+import com.mdwiki.mcp.McpSupport.currentUsername
 import com.mdwiki.service.PageService
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 
 @Component
@@ -20,8 +20,7 @@ class WikiUpdateTool(private val pageService: PageService) {
         @McpToolParam(description = "New page content in markdown", required = false) contentMd: String?,
         @McpToolParam(description = "New slug for the page (optional, only if you want to rename the URL)", required = false) newSlug: String?
     ): Map<String, Any?> {
-        val username = SecurityContextHolder.getContext().authentication?.name
-            ?: throw IllegalStateException("Not authenticated")
+        val username = currentUsername()
         val page = pageService.update(slug, UpdatePageRequest(title = title, contentMd = contentMd, slug = newSlug), username)
         return mapOf("slug" to page.slug, "title" to page.title, "updatedAt" to page.updatedAt.toString())
     }

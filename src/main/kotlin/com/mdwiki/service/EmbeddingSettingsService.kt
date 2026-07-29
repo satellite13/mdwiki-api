@@ -43,7 +43,7 @@ class EmbeddingSettingsService(
         )
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     fun getSettings(): EmbeddingSettingsResponse {
         val settings = getOrCreateSettings()
         val baseUrl = providerBuilder.resolveBaseUrl(settings.provider, settings.baseUrl)
@@ -56,7 +56,8 @@ class EmbeddingSettingsService(
         )
     }
 
-    @Transactional
+    // Без @Transactional на весь метод: probe-запрос к embedding-провайдеру — это HTTP,
+    // его нельзя выполнять, держа транзакцию БД. Репозиторные вызовы атомарны сами по себе.
     fun updateSettings(request: UpdateEmbeddingSettingsRequest): EmbeddingSettingsResponse {
         val settings = getOrCreateSettings()
         val provider = providerBuilder.normalizeProvider(request.provider)

@@ -26,7 +26,7 @@ class AuthController(private val authService: AuthService) {
     @PostMapping("/change-password")
     fun changePassword(
         authentication: Authentication,
-        @RequestBody request: ChangePasswordRequest
+        @Valid @RequestBody request: ChangePasswordRequest
     ) {
         authService.changePassword(authentication.name, request)
     }

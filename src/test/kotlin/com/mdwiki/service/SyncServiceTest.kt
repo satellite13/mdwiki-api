@@ -69,7 +69,8 @@ class SyncServiceTest {
             ragService,
             frontmatterMetaService,
             folderRepository,
-            wikiFileService
+            wikiFileService,
+            DeferredPageIndexer(ragService)
         )
         whenever(attachmentService.syncFromDisk()).thenReturn(AttachmentService.AttachmentSyncResult(0))
         syncService = SyncService(
@@ -78,6 +79,7 @@ class SyncServiceTest {
             props,
             treeEventsService,
             folderService,
+            wikiFileService,
             wikiSyncEngine,
             ragService,
             attachmentService,
