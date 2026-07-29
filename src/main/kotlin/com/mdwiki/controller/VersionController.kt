@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController
 data class VersionResponse(
     val name: String,
     val version: String,
+    val versionTag: String,
     val gitSha: String
 )
 
@@ -18,9 +19,13 @@ class VersionController(
 ) {
 
     @GetMapping
-    fun version(): VersionResponse = VersionResponse(
-        name = buildProperties.name?.takeIf { it.isNotBlank() } ?: "mdwiki-api",
-        version = buildProperties.version?.takeIf { it.isNotBlank() } ?: "0.1.0",
-        gitSha = buildProperties.get("gitSha")?.takeIf { it.isNotBlank() } ?: "unknown"
-    )
+    fun version(): VersionResponse {
+        val version = buildProperties.version?.takeIf { it.isNotBlank() } ?: "0.1.0"
+        return VersionResponse(
+            name = buildProperties.name?.takeIf { it.isNotBlank() } ?: "mdwiki-api",
+            version = version,
+            versionTag = buildProperties.get("versionTag")?.takeIf { it.isNotBlank() } ?: "v$version",
+            gitSha = buildProperties.get("gitSha")?.takeIf { it.isNotBlank() } ?: "unknown"
+        )
+    }
 }

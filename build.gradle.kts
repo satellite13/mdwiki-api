@@ -153,10 +153,23 @@ fun gitShortSha(): String {
     }
 }
 
+fun gitVersionTag(): String {
+    val fromEnv = System.getenv("APP_VERSION_TAG")?.trim().orEmpty()
+    if (fromEnv.isNotEmpty()) return fromEnv
+    return try {
+        providers.exec {
+            commandLine("git", "describe", "--tags", "--always")
+        }.standardOutput.asText.get().trim().ifEmpty { "v${version}" }
+    } catch (_: Exception) {
+        "v${version}"
+    }
+}
+
 springBoot {
     buildInfo {
         properties {
             additional.put("gitSha", gitShortSha())
+            additional.put("versionTag", gitVersionTag())
         }
     }
 }

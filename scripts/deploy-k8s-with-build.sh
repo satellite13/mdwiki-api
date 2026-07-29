@@ -70,6 +70,8 @@ OPENAI_API_KEY_VALUE="${OPENAI_API_KEY_VALUE:-${OPENAI_API_KEY:-}}"
 
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-mdwiki-api}"
 GIT_SHA="$(git -C "${ROOT_DIR}" rev-parse --short HEAD)"
+VERSION_TAG="$(git -C "${ROOT_DIR}" describe --tags --always)"
+EXACT_VERSION_TAG="$(git -C "${ROOT_DIR}" describe --tags --exact-match HEAD 2>/dev/null || true)"
 IMAGE_TAG="${IMAGE_TAG:-${GIT_SHA}}"
 IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-IfNotPresent}"
 FULL_IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
@@ -170,13 +172,20 @@ ensure_build_base_image() {
 echo "Building image ${FULL_IMAGE} using method=${BUILD_METHOD}"
 if [[ "${BUILD_METHOD}" == "docker" ]]; then
   ensure_build_base_image
+  echo "Building with APP_VERSION_TAG=${VERSION_TAG}"
   DOCKER_BUILDKIT=1 docker build \
     --build-arg "BUILD_BASE_IMAGE=${DOCKER_BUILD_BASE_IMAGE}" \
     --build-arg "APP_GIT_SHA=${GIT_SHA}" \
+    --build-arg "APP_VERSION_TAG=${VERSION_TAG}" \
     -t "${FULL_IMAGE}" \
     "${ROOT_DIR}"
+  if [[ -n "${EXACT_VERSION_TAG}" ]]; then
+    echo "Also tagging image as ${IMAGE_REPOSITORY}:${EXACT_VERSION_TAG}"
+    docker tag "${FULL_IMAGE}" "${IMAGE_REPOSITORY}:${EXACT_VERSION_TAG}"
+  fi
 elif [[ "${BUILD_METHOD}" == "bootbuildimage" ]]; then
-  "${ROOT_DIR}/gradlew" -p "${ROOT_DIR}" bootBuildImage --imageName="${FULL_IMAGE}"
+  APP_GIT_SHA="${GIT_SHA}" APP_VERSION_TAG="${VERSION_TAG}" \
+    "${ROOT_DIR}/gradlew" -p "${ROOT_DIR}" bootBuildImage --imageName="${FULL_IMAGE}"
 else
   echo "Unsupported BUILD_METHOD: ${BUILD_METHOD}" >&2
   echo "Supported values: auto, docker, bootbuildimage" >&2
