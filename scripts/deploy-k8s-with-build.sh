@@ -69,7 +69,8 @@ EMBEDDING_PROVIDER_VALUE="${EMBEDDING_PROVIDER_VALUE:-${EMBEDDING_PROVIDER:-}}"
 OPENAI_API_KEY_VALUE="${OPENAI_API_KEY_VALUE:-${OPENAI_API_KEY:-}}"
 
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-mdwiki-api}"
-IMAGE_TAG="${IMAGE_TAG:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD)}"
+GIT_SHA="$(git -C "${ROOT_DIR}" rev-parse --short HEAD)"
+IMAGE_TAG="${IMAGE_TAG:-${GIT_SHA}}"
 IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-IfNotPresent}"
 FULL_IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
@@ -171,6 +172,7 @@ if [[ "${BUILD_METHOD}" == "docker" ]]; then
   ensure_build_base_image
   DOCKER_BUILDKIT=1 docker build \
     --build-arg "BUILD_BASE_IMAGE=${DOCKER_BUILD_BASE_IMAGE}" \
+    --build-arg "APP_GIT_SHA=${GIT_SHA}" \
     -t "${FULL_IMAGE}" \
     "${ROOT_DIR}"
 elif [[ "${BUILD_METHOD}" == "bootbuildimage" ]]; then

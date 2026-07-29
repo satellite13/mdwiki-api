@@ -6,6 +6,10 @@ WORKDIR /app
 
 ENV GRADLE_USER_HOME=/gradle-cache
 
+# .git is dockerignored — pass sha from host at build time.
+ARG APP_GIT_SHA=unknown
+ENV APP_GIT_SHA=$APP_GIT_SHA
+
 # При изменении зависимостей пересоберите build-base (fingerprint в deploy-скрипте).
 COPY build.gradle.kts settings.gradle.kts gradle.properties ./
 COPY src src

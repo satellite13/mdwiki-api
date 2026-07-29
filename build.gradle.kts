@@ -140,14 +140,18 @@ fun parseDotEnv(file: java.io.File): Map<String, String> {
     return out
 }
 
-fun gitShortSha(): String =
-    try {
+fun gitShortSha(): String {
+    // In Docker builds .git is ignored — pass APP_GIT_SHA as build-arg/ENV.
+    val fromEnv = System.getenv("APP_GIT_SHA")?.trim().orEmpty()
+    if (fromEnv.isNotEmpty()) return fromEnv
+    return try {
         providers.exec {
             commandLine("git", "rev-parse", "--short", "HEAD")
         }.standardOutput.asText.get().trim().ifEmpty { "unknown" }
     } catch (_: Exception) {
         "unknown"
     }
+}
 
 springBoot {
     buildInfo {
