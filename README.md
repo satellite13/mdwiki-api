@@ -3,15 +3,57 @@
 Backend mdwiki: Spring Boot + Kotlin, PostgreSQL (pgvector), REST API, SSE,
 MCP-инструменты, RAG-поиск.
 
+Текущая версия: **v0.1.1** (см. git tag; runtime — `GET /api/version`).
+
 ## Быстрый старт (локально)
 
 ```sh
+# JWT_SECRET обязателен (без него приложение не стартует)
+export JWT_SECRET='local-dev-secret-change-me'
+
 ./gradlew bootRun          # http://localhost:8080
 ./gradlew test             # unit/integration tests
 ```
 
 Фронтенд в dev-режиме проксирует `/api` на `:8080` (см.
 [mdwiki-frontend](../mdwiki-frontend)).
+
+Локальный Postgres: `docker-compose up -d` (порт `54328`, БД/user/password
+`mdwiki`).
+
+## Версия API
+
+Публичный endpoint (без auth):
+
+```http
+GET /api/version
+```
+
+```json
+{
+  "name": "mdwiki-api",
+  "version": "0.1.1",
+  "versionTag": "v0.1.1",
+  "gitSha": "…"
+}
+```
+
+- `version` — из `build.gradle.kts` (Spring Boot `build-info`)
+- `versionTag` / `gitSha` — из `git describe` / `rev-parse` на сборке;
+  в Docker передаются как `APP_VERSION_TAG` / `APP_GIT_SHA` (`.git` в
+  образе нет)
+
+## Вложения и `/api/uploads`
+
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| `GET` | `/api/uploads/{storedName}` | Раздача файла (public, для картинок в markdown) |
+| `POST` | `/api/attachments` | Загрузка вложения (EDITOR/ADMIN, запись в БД) |
+| ~~`POST`~~ | ~~`/api/uploads`~~ | **Удалён** — не использовать |
+
+Загрузка только через `AttachmentService` (HTTP `POST /api/attachments`
+или MCP-инструменты ниже). URL в ответе по-прежнему вида
+`/api/uploads/{uuid}.png` — это ссылка на **GET**-раздачу, не на POST.
 
 ## Деплой в Kubernetes
 
@@ -28,17 +70,22 @@ MCP-инструменты, RAG-поиск.
 ### Типичный деплой
 
 ```sh
-# Сборка образа (git short SHA) и выкладка в namespace mdwiki
-./scripts/deploy-k8s-with-build.sh
+# Локальный OrbStack / k8s (JWT, embedding LM Studio и т.д. в values-local.yaml)
+VALUES_FILE=./values-local.yaml ./scripts/deploy-k8s-with-build.sh
 
 # С кастомными values (JWT, postgres, embedding и т.д.)
 VALUES_FILE=deploy/helm/mdwiki-api/values-prod.yaml ./scripts/deploy-k8s-with-build.sh
 
 # Только helm, если образ уже собран и запушен
 IMAGE_REPOSITORY=ghcr.io/your-org/mdwiki-api \
-IMAGE_TAG=abc1234 \
+IMAGE_TAG=v0.1.0 \
 ./scripts/deploy-k8s.sh
 ```
+
+Образ тегируется одним тегом — **`git describe --tags --always`**
+(например `mdwiki-api:v0.1.0` или `mdwiki-api:v0.1.0-3-g8d4bfd5`).
+В Docker-сборку передаются `APP_GIT_SHA` и `APP_VERSION_TAG` (для
+`/api/version`, не как второй docker-тег).
 
 ### Полезные переменные окружения
 
@@ -48,7 +95,7 @@ IMAGE_TAG=abc1234 \
 | `NAMESPACE` | `mdwiki` | Namespace в кластере |
 | `VALUES_FILE` | — | Дополнительный `-f` values-файл |
 | `IMAGE_REPOSITORY` | `mdwiki-api` | Репозиторий образа |
-| `IMAGE_TAG` | `git rev-parse --short HEAD` | Тег образа |
+| `IMAGE_TAG` | `git describe --tags --always` (+ `-dirty`) | Тег образа |
 | `TIMEOUT` | `5m` | Таймаут `helm --wait` и rollout |
 
 ### Опции `deploy-k8s-with-build.sh`
@@ -87,7 +134,11 @@ PURGE_DATA=true ./scripts/undeploy-k8s.sh
 
 ## MCP: загрузка attachments
 
-Инструмент `wiki_upload` загружает файл в `uploads/` через MCP и возвращает URL вида `/api/uploads/{storedName}`.
+Инструменты пишут файл через `AttachmentService` (БД + `uploads/` на диске)
+и возвращают URL вида `/api/uploads/{storedName}` для **GET**-раздачи.
+HTTP `POST /api/uploads` не используется и удалён.
+
+### `wiki_upload` (base64)
 
 Параметры:
 - `fileBase64` — содержимое файла в base64 (также поддерживается `data:...;base64,...`)
@@ -124,6 +175,15 @@ PURGE_DATA=true ./scripts/undeploy-k8s.sh
   "createdAt": "2026-05-31T14:45:00Z"
 }
 ```
+
+### `wiki_attachment_upload` (путь на хосте API)
+
+Загружает файл с диска сервера. Путь должен быть внутри
+`mdwiki.attachments.allowed-import-dirs`
+(`MDWIKI_ATTACHMENTS_ALLOWED_IMPORT_DIRS`). По умолчанию список пуст —
+импорт с пути запрещён (осознанно, security).
+
+Параметры: `filePath`, опционально `originalName`, `contentType`, `pageId`.
 
 ## MCP: список attachments
 

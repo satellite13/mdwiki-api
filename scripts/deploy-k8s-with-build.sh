@@ -71,7 +71,6 @@ OPENAI_API_KEY_VALUE="${OPENAI_API_KEY_VALUE:-${OPENAI_API_KEY:-}}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-mdwiki-api}"
 GIT_SHA="$(git -C "${ROOT_DIR}" rev-parse --short HEAD)"
 VERSION_TAG="$(git -C "${ROOT_DIR}" describe --tags --always)"
-EXACT_VERSION_TAG="$(git -C "${ROOT_DIR}" describe --tags --exact-match HEAD 2>/dev/null || true)"
 DIRTY_SUFFIX=""
 if [[ -n "$(git -C "${ROOT_DIR}" status --porcelain)" ]]; then
   DIRTY_SUFFIX="-dirty"
@@ -184,13 +183,6 @@ if [[ "${BUILD_METHOD}" == "docker" ]]; then
     --build-arg "APP_VERSION_TAG=${VERSION_TAG}" \
     -t "${FULL_IMAGE}" \
     "${ROOT_DIR}"
-  if [[ "${IMAGE_TAG}" != "${GIT_SHA}" ]]; then
-    docker tag "${FULL_IMAGE}" "${IMAGE_REPOSITORY}:${GIT_SHA}"
-  fi
-  if [[ -n "${EXACT_VERSION_TAG}" && "${IMAGE_TAG}" != "${EXACT_VERSION_TAG}" ]]; then
-    echo "Also tagging image as ${IMAGE_REPOSITORY}:${EXACT_VERSION_TAG}"
-    docker tag "${FULL_IMAGE}" "${IMAGE_REPOSITORY}:${EXACT_VERSION_TAG}"
-  fi
 elif [[ "${BUILD_METHOD}" == "bootbuildimage" ]]; then
   APP_GIT_SHA="${GIT_SHA}" APP_VERSION_TAG="${VERSION_TAG}" \
     "${ROOT_DIR}/gradlew" -p "${ROOT_DIR}" bootBuildImage --imageName="${FULL_IMAGE}"
