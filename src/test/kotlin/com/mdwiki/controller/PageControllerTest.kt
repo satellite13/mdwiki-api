@@ -147,4 +147,25 @@ class PageControllerTest {
         }
         verify(graphService).getGraph("test-page", 3)
     }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `GET deleted pages returns deletedAt`() {
+        val deletedAt = Instant.parse("2026-07-29T14:22:00Z")
+        val item = PageListItem(
+            id = samplePage.id,
+            slug = "gone",
+            title = "Gone",
+            tags = emptyList(),
+            updatedAt = Instant.now(),
+            deletedAt = deletedAt
+        )
+        whenever(pageService.findDeleted()).thenReturn(listOf(item))
+
+        mockMvc.get("/api/pages/deleted").andExpect {
+            status { isOk() }
+            jsonPath("$[0].slug") { value("gone") }
+            jsonPath("$[0].deletedAt") { value("2026-07-29T14:22:00Z") }
+        }
+    }
 }

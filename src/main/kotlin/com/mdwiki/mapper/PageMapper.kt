@@ -49,7 +49,8 @@ fun Page.toListItem(): PageListItem = PageListItem(
     title = displayTitle(),
     tags = tags.map { it.name },
     folderId = folder?.id,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    deletedAt = deletedAt
 )
 
 fun Page.toSearchResult(): SearchResult = SearchResult(

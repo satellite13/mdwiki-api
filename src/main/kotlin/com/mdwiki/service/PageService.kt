@@ -102,6 +102,6 @@ class PageService(
 
     @Transactional(readOnly = true)
     fun findDeleted(): List<PageListItem> {
-        return pageRepository.findByDeletedAtIsNotNull().map { it.toListItem() }
+        return pageRepository.findByDeletedAtIsNotNullOrderByDeletedAtDesc().map { it.toListItem() }
     }
 }

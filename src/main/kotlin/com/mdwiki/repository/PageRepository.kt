@@ -19,7 +19,7 @@ interface PageRepository : JpaRepository<Page, UUID> {
     fun findActiveByIdForUpdate(@Param("id") id: UUID): Page?
 
     @EntityGraph(attributePaths = ["tags"])
-    fun findByDeletedAtIsNotNull(): List<Page>
+    fun findByDeletedAtIsNotNullOrderByDeletedAtDesc(): List<Page>
 
     @EntityGraph(attributePaths = ["tags"])
     fun findAllByDeletedAtIsNull(): List<Page>

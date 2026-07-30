@@ -51,7 +51,8 @@ data class PageListItem(
     val title: String,
     val tags: List<String>,
     val folderId: UUID? = null,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    val deletedAt: Instant? = null
 )
 
 data class BacklinkResponse(
