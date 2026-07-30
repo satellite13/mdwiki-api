@@ -46,6 +46,8 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/graph/**").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/tasks/open").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/tasks/complete").hasAnyRole("EDITOR", "ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/pages/deleted").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/api/pages/*/restore").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/pages/**", "/api/tags/**", "/api/search/**").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")

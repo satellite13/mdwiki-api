@@ -168,4 +168,32 @@ class PageControllerTest {
             jsonPath("$[0].deletedAt") { value("2026-07-29T14:22:00Z") }
         }
     }
+
+    @Test
+    @WithMockUser(roles = ["EDITOR"])
+    fun `GET deleted pages forbidden for EDITOR`() {
+        mockMvc.get("/api/pages/deleted").andExpect {
+            status { isForbidden() }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["EDITOR"])
+    fun `POST restore forbidden for EDITOR`() {
+        mockMvc.post("/api/pages/gone/restore").andExpect {
+            status { isForbidden() }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `POST restore allowed for ADMIN`() {
+        whenever(pageService.restore("gone")).thenReturn(samplePage)
+
+        mockMvc.post("/api/pages/gone/restore").andExpect {
+            status { isOk() }
+            jsonPath("$.slug") { value("test-page") }
+        }
+        verify(pageService).restore("gone")
+    }
 }
