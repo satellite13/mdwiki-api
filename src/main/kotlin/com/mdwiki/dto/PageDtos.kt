@@ -1,5 +1,6 @@
 package com.mdwiki.dto
 
+import com.fasterxml.jackson.annotation.JsonValue
 import com.fasterxml.jackson.databind.JsonNode
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
@@ -63,4 +64,32 @@ data class BacklinkResponse(
 data class FolderPathItem(
     val id: UUID,
     val name: String
+)
+
+data class ImportMdFileInput(
+    val filename: String,
+    val contentMd: String
+)
+
+enum class ImportMdItemStatus(@get:JsonValue val wire: String) {
+    CREATED("created"),
+    UPDATED("updated"),
+    SKIPPED("skipped"),
+    ERROR("error")
+}
+
+data class ImportMdItemResult(
+    val filename: String,
+    val slug: String? = null,
+    val title: String? = null,
+    val status: ImportMdItemStatus,
+    val message: String? = null
+)
+
+data class ImportMdPagesResponse(
+    val results: List<ImportMdItemResult>,
+    val created: Int,
+    val updated: Int,
+    val skipped: Int,
+    val errors: Int
 )

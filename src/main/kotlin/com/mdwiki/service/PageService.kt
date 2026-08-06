@@ -8,11 +8,13 @@ import com.mdwiki.mapper.toResponse
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.usecase.CreatePageUseCase
 import com.mdwiki.service.usecase.DeletePageUseCase
+import com.mdwiki.service.usecase.ImportMdPagesUseCase
 import com.mdwiki.service.usecase.UpdatePageUseCase
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
 
 @Service
 class PageService(
@@ -24,7 +26,8 @@ class PageService(
     private val syncService: SyncService,
     private val createPageUseCase: CreatePageUseCase,
     private val updatePageUseCase: UpdatePageUseCase,
-    private val deletePageUseCase: DeletePageUseCase
+    private val deletePageUseCase: DeletePageUseCase,
+    private val importMdPagesUseCase: ImportMdPagesUseCase
 ) {
     @Transactional(readOnly = true)
     fun findAll(page: Int = 0, size: Int = 50): Page<PageListItem> {
@@ -67,6 +70,21 @@ class PageService(
         folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
         return created
+    }
+
+    @Transactional
+    fun importMd(
+        files: List<ImportMdFileInput>,
+        folderId: UUID?,
+        overwrite: Boolean,
+        username: String
+    ): ImportMdPagesResponse {
+        val result = importMdPagesUseCase.execute(files, folderId, overwrite, username)
+        if (result.created > 0 || result.updated > 0) {
+            folderService.invalidateCache()
+            treeEventsService.publishTreeUpdated()
+        }
+        return result
     }
 
     @Transactional

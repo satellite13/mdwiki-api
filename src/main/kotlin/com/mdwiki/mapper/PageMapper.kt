@@ -69,14 +69,15 @@ fun Page.displayTitle(): String {
     if (frontmatterTitle != null) {
         return frontmatterTitle
     }
-    val contentFrontmatterTitle = parseFrontmatterTitleFromContent(contentMd)
+    val contentFrontmatterTitle = extractFrontmatterTitleFromContent(contentMd)
     if (contentFrontmatterTitle != null) {
         return contentFrontmatterTitle
     }
     return title.trim().ifBlank { slug }
 }
 
-private fun parseFrontmatterTitleFromContent(contentMd: String?): String? {
+/** Title from YAML frontmatter `title`, or null if absent / unparseable. */
+fun extractFrontmatterTitleFromContent(contentMd: String?): String? {
     if (contentMd.isNullOrBlank()) return null
     val yaml = MarkdownFrontmatter.extractYamlInner(contentMd) ?: return null
     if (yaml.isBlank()) return null

@@ -132,6 +132,26 @@ PURGE_DATA=true ./scripts/undeploy-k8s.sh
 
 ---
 
+## MCP: импорт markdown-страниц
+
+### `wiki_import`
+
+Создаёт wiki-страницу из markdown-файла (не attachment).
+Slug — из имени файла; title — frontmatter `title` → H1 → имя файла.
+При конфликте slug по умолчанию пропускает; `overwrite=true` перезаписывает.
+
+Параметры:
+- `filename` — например `my-note.md`
+- `contentMd` — полный markdown
+- `folderId` — опционально, UUID папки
+- `overwrite` — опционально, default `false`
+
+Пример ответа: `status` = `created` | `updated` | `skipped` | `error`.
+
+HTTP-аналог: `POST /api/pages/import` (multipart `files`, `folderId`, `overwrite`).
+
+---
+
 ## MCP: загрузка attachments
 
 Инструменты пишут файл через `AttachmentService` (БД + `uploads/` на диске)

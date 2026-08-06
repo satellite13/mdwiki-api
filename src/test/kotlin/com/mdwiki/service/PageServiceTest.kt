@@ -15,6 +15,7 @@ import com.mdwiki.rag.RagService
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.usecase.CreatePageUseCase
 import com.mdwiki.service.usecase.DeletePageUseCase
+import com.mdwiki.service.usecase.ImportMdPagesUseCase
 import com.mdwiki.service.usecase.UpdatePageUseCase
 import com.mdwiki.service.WikilinkService
 import org.junit.jupiter.api.Assertions.*
@@ -70,6 +71,9 @@ class PageServiceTest {
         val deletePageUseCase = DeletePageUseCase(
             pageRepository, pageMetadataService, ragService, wikiFileService, syncService, frontmatterMetaService
         )
+        val importMdPagesUseCase = ImportMdPagesUseCase(
+            pageRepository, createPageUseCase, updatePageUseCase, wikilinkService
+        )
         pageService = PageService(
             pageRepository,
             pageMetadataService,
@@ -79,7 +83,8 @@ class PageServiceTest {
             syncService,
             createPageUseCase,
             updatePageUseCase,
-            deletePageUseCase
+            deletePageUseCase,
+            importMdPagesUseCase
         )
     }
 

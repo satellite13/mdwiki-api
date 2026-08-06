@@ -94,6 +94,35 @@ class PageControllerTest {
     }
 
     @Test
+    @WithMockUser(username = "editor", roles = ["EDITOR"])
+    fun `POST pages import delegates to pageService`() {
+        val importResult = ImportMdPagesResponse(
+            results = listOf(
+                ImportMdItemResult(
+                    filename = "note.md",
+                    slug = "note",
+                    title = "Note",
+                    status = ImportMdItemStatus.CREATED
+                )
+            ),
+            created = 1,
+            updated = 0,
+            skipped = 0,
+            errors = 0
+        )
+        whenever(pageService.importMd(any(), eq(null), eq(false), eq("editor"))).thenReturn(importResult)
+
+        mockMvc.multipart("/api/pages/import") {
+            file(org.springframework.mock.web.MockMultipartFile("files", "note.md", "text/markdown", "# Note".toByteArray()))
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.created") { value(1) }
+            jsonPath("$.results[0].status") { value("created") }
+            jsonPath("$.results[0].slug") { value("note") }
+        }
+    }
+
+    @Test
     @WithMockUser(roles = ["READER"])
     fun `POST pages forbidden for READER`() {
         mockMvc.post("/api/pages") {

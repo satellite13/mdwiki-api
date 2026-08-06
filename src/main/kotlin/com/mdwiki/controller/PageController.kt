@@ -8,6 +8,9 @@ import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.multipart.MultipartFile
+import java.nio.charset.StandardCharsets
+import java.util.UUID
 
 @RestController
 @RequestMapping("/api/pages")
@@ -44,6 +47,22 @@ class PageController(
     @PostMapping
     fun create(@Valid @RequestBody request: CreatePageRequest, auth: Authentication): PageResponse {
         return pageService.create(request, auth.name)
+    }
+
+    @PostMapping("/import")
+    fun importMd(
+        @RequestParam("files") files: List<MultipartFile>,
+        @RequestParam(required = false) folderId: UUID?,
+        @RequestParam(defaultValue = "false") overwrite: Boolean,
+        auth: Authentication
+    ): ImportMdPagesResponse {
+        val inputs = files.map { file ->
+            ImportMdFileInput(
+                filename = file.originalFilename?.takeIf { it.isNotBlank() } ?: "untitled.md",
+                contentMd = file.bytes.toString(StandardCharsets.UTF_8)
+            )
+        }
+        return pageService.importMd(inputs, folderId, overwrite, auth.name)
     }
 
     @PutMapping("/{slug}")
