@@ -39,6 +39,7 @@ class FolderServiceTest {
     @Mock private lateinit var wikiFileService: WikiFileService
     @Mock private lateinit var treeEventsService: TreeEventsService
     @Mock private lateinit var deletePageUseCase: DeletePageUseCase
+    @Mock private lateinit var syncService: SyncService
 
     private lateinit var folderService: FolderService
 
@@ -56,7 +57,8 @@ class FolderServiceTest {
             userRepository,
             wikiFileService,
             treeEventsService,
-            deletePageUseCase
+            deletePageUseCase,
+            syncService
         )
     }
 
@@ -237,7 +239,7 @@ class FolderServiceTest {
 
         whenever(folderRepository.findById(parentId)).thenReturn(Optional.of(parent))
         whenever(folderRepository.findAll()).thenReturn(listOf(parent, child, grandchild))
-        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(emptyList())
+        whenever(pageRepository.findByFolderId(any())).thenReturn(emptyList())
 
         folderService.delete(parentId)
 
@@ -252,12 +254,45 @@ class FolderServiceTest {
 
         whenever(folderRepository.findById(folderId)).thenReturn(Optional.of(folder))
         whenever(folderRepository.findAll()).thenReturn(listOf(folder))
-        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
+        whenever(pageRepository.findByFolderId(folderId)).thenReturn(listOf(page))
 
         folderService.delete(folderId, FolderDeletePageAction.DELETE)
 
-        verify(deletePageUseCase).execute("orphan", DeletePageUseCase.DeleteMode.HARD)
+        verify(deletePageUseCase).execute(
+            "orphan",
+            DeletePageUseCase.DeleteMode.HARD,
+            scheduleReconcile = false,
+            ignoreLocked = true
+        )
         verify(pageRepository, never()).saveAll(any<List<Page>>())
+        verify(folderRepository).delete(folder)
+        verify(syncService).scheduleReconcileFromDisk()
+    }
+
+    @Test
+    fun `delete folder hard-deletes soft-deleted pages that still reference folder`() {
+        val folderId = UUID.randomUUID()
+        val folder = Folder(id = folderId, name = "doomed")
+        val trashed = Page(
+            id = UUID.randomUUID(),
+            slug = "trashed",
+            title = "Trashed",
+            folder = folder,
+            deletedAt = java.time.Instant.now()
+        )
+
+        whenever(folderRepository.findById(folderId)).thenReturn(Optional.of(folder))
+        whenever(folderRepository.findAll()).thenReturn(listOf(folder))
+        whenever(pageRepository.findByFolderId(folderId)).thenReturn(listOf(trashed))
+
+        folderService.delete(folderId, FolderDeletePageAction.DELETE)
+
+        verify(deletePageUseCase).execute(
+            "trashed",
+            DeletePageUseCase.DeleteMode.HARD,
+            scheduleReconcile = false,
+            ignoreLocked = true
+        )
         verify(folderRepository).delete(folder)
     }
 
@@ -269,14 +304,14 @@ class FolderServiceTest {
 
         whenever(folderRepository.findById(folderId)).thenReturn(Optional.of(folder))
         whenever(folderRepository.findAll()).thenReturn(listOf(folder))
-        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
+        whenever(pageRepository.findByFolderId(folderId)).thenReturn(listOf(page))
 
         folderService.delete(folderId, FolderDeletePageAction.MOVE_TO_ROOT)
 
         assertNull(page.folder)
         verify(wikiFileService).relocatePageFile(page, null)
         verify(pageRepository).saveAll(listOf(page))
-        verify(deletePageUseCase, never()).execute(any(), any())
+        verify(deletePageUseCase, never()).execute(any(), any(), any(), any())
         verify(folderRepository).delete(folder)
     }
 }

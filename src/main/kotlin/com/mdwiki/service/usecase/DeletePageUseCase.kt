@@ -23,10 +23,15 @@ class DeletePageUseCase(
         HARD
     }
 
-    fun execute(slug: String, mode: DeleteMode = DeleteMode.SOFT) {
+    fun execute(
+        slug: String,
+        mode: DeleteMode = DeleteMode.SOFT,
+        scheduleReconcile: Boolean = true,
+        ignoreLocked: Boolean = false
+    ) {
         val page = pageRepository.findBySlug(slug)
         if (page != null) {
-            if (frontmatterMetaService.isLocked(page)) {
+            if (!ignoreLocked && frontmatterMetaService.isLocked(page)) {
                 throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be deleted")
             }
             if (mode == DeleteMode.SOFT) {
@@ -38,7 +43,7 @@ class DeletePageUseCase(
                 }
                 return
             }
-            hardDelete(slug, page)
+            hardDelete(slug, page, scheduleReconcile = scheduleReconcile)
             return
         }
 
@@ -52,7 +57,7 @@ class DeletePageUseCase(
         throw NotFoundException("Page not found: $slug")
     }
 
-    private fun hardDelete(slug: String, page: com.mdwiki.model.Page) {
+    private fun hardDelete(slug: String, page: com.mdwiki.model.Page, scheduleReconcile: Boolean) {
         pageMetadataService.deleteSourceLinks(page)
         // Отвязываем входящие ссылки, иначе FK fk_links_target ломает hard-delete.
         pageMetadataService.detachIncomingLinks(page)
@@ -65,6 +70,8 @@ class DeletePageUseCase(
         pageRepository.delete(page)
         pageMetadataService.cleanupOrphanedTags()
         // Синхронизируем БД с ФС: удаляем пустые папки и отсутствующие на диске сущности
-        syncService.scheduleReconcileFromDisk()
+        if (scheduleReconcile) {
+            syncService.scheduleReconcileFromDisk()
+        }
     }
 }

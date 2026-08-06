@@ -10,6 +10,7 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.util.NaturalSort
+import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
@@ -23,7 +24,8 @@ class FolderService(
     private val userRepository: UserRepository,
     private val wikiFileService: WikiFileService,
     private val treeEventsService: TreeEventsService,
-    private val deletePageUseCase: DeletePageUseCase
+    private val deletePageUseCase: DeletePageUseCase,
+    @Lazy private val syncService: SyncService
 ) {
 
     @Volatile
@@ -181,21 +183,34 @@ class FolderService(
         val allFolders = folderRepository.findAll()
         val subtreeFolders = collectSubtree(folder, allFolders)
         val subtreeIds = subtreeFolders.mapNotNull { it.id }.toSet()
-        val pages = pageRepository.findAllByDeletedAtIsNull()
-            .filter { page -> page.folder?.id in subtreeIds }
+        // Include soft-deleted pages: fk_pages_folder has no ON DELETE CASCADE, so leftover
+        // trash rows with folder_id block folder removal and the TX rolls back quietly from UX POV.
+        val pages = subtreeIds.flatMap { folderId -> pageRepository.findByFolderId(folderId) }
+            .distinctBy { it.id }
 
         when (pageAction) {
             FolderDeletePageAction.DELETE -> {
                 for (page in pages) {
-                    deletePageUseCase.execute(page.slug, DeletePageUseCase.DeleteMode.HARD)
+                    deletePageUseCase.execute(
+                        slug = page.slug,
+                        mode = DeletePageUseCase.DeleteMode.HARD,
+                        scheduleReconcile = false,
+                        ignoreLocked = true
+                    )
                 }
             }
             FolderDeletePageAction.MOVE_TO_ROOT -> {
                 for (page in pages) {
+                    val previousFolder = page.folder
                     page.folder = null
-                    wikiFileService.relocatePageFile(page, null)
+                    // Soft-deleted files already live under .trash — only relocate active pages.
+                    if (page.deletedAt == null && previousFolder != null) {
+                        wikiFileService.relocatePageFile(page, null)
+                    }
                 }
-                pageRepository.saveAll(pages)
+                if (pages.isNotEmpty()) {
+                    pageRepository.saveAll(pages)
+                }
             }
         }
 
@@ -204,9 +219,13 @@ class FolderService(
         if (folderDir.exists()) {
             folderDir.deleteRecursively()
         }
+        // Child folders cascade via FK ON DELETE CASCADE; delete root after pages are unlinked.
         folderRepository.delete(folder)
         invalidateCache()
         treeEventsService.publishTreeUpdated()
+        if (pageAction == FolderDeletePageAction.DELETE && pages.isNotEmpty()) {
+            syncService.scheduleReconcileFromDisk()
+        }
     }
 
     private fun syncSubtreePagePaths(rootFolderId: UUID) {
