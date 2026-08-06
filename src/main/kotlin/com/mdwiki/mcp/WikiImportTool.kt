@@ -21,16 +21,18 @@ class WikiImportTool(private val pageService: PageService) {
         @McpToolParam(description = "Full markdown content (including optional YAML frontmatter)")
         contentMd: String,
         @McpToolParam(description = "Optional parent folder UUID. If omitted, page is created/moved to root.", required = false)
-        folderId: String? = null,
+        folderId: String?,
         @McpToolParam(description = "If true, overwrite existing page with the same slug. Default false (skip).", required = false)
-        overwrite: Boolean = false
+        overwrite: Boolean?
     ): Map<String, Any?> {
         val username = currentUsername()
         val parsedFolderId = folderId?.takeIf { it.isNotBlank() }?.let(::parseUuid)
+        // Use Boolean? (not primitive Boolean) and avoid Kotlin default args: Spring AI MCP
+        // ValueConversions NPEs on omitted primitives / $default bitmask Int params.
         val response = pageService.importMd(
             files = listOf(ImportMdFileInput(filename = filename, contentMd = contentMd)),
             folderId = parsedFolderId,
-            overwrite = overwrite,
+            overwrite = overwrite == true,
             username = username
         )
         val item = response.results.firstOrNull()
