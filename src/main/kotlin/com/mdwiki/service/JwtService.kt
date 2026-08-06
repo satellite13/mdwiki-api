@@ -6,8 +6,15 @@ import io.jsonwebtoken.security.Keys
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.time.Instant
 import java.util.Date
 import javax.crypto.SecretKey
+
+data class ParsedJwt(
+    val username: String,
+    val scope: String?,
+    val expiresAt: Instant
+)
 
 @Service
 class JwtService(private val properties: JwtProperties) {
@@ -28,20 +35,43 @@ class JwtService(private val properties: JwtProperties) {
             .compact()
     }
 
-    fun extractUsername(token: String): String {
-        return Jwts.parser()
+    fun generateScopedToken(
+        username: String,
+        scope: String,
+        expirationMs: Long = properties.scopedExpirationMs
+    ): String {
+        val now = Date()
+        val expiry = Date(now.time + expirationMs)
+        return Jwts.builder()
+            .subject(username)
+            .claim("scope", scope)
+            .issuedAt(now)
+            .expiration(expiry)
+            .signWith(key)
+            .compact()
+    }
+
+    fun parseToken(token: String): ParsedJwt {
+        val claims = Jwts.parser()
             .verifyWith(key)
             .build()
             .parseSignedClaims(token)
             .payload
-            .subject
+        val scope = claims["scope"]?.toString()?.takeIf { it.isNotBlank() }
+        return ParsedJwt(
+            username = claims.subject,
+            scope = scope,
+            expiresAt = claims.expiration.toInstant()
+        )
     }
+
+    fun extractUsername(token: String): String = parseToken(token).username
 
     fun validateToken(token: String): Boolean {
         return try {
-            Jwts.parser().verifyWith(key).build().parseSignedClaims(token)
+            parseToken(token)
             true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }

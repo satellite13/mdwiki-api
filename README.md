@@ -134,9 +134,22 @@ PURGE_DATA=true ./scripts/undeploy-k8s.sh
 
 ## MCP: импорт markdown-страниц
 
+Для **больших** файлов предпочтителен обход MCP-контента:
+
+1. `wiki_auth_token` → короткий Bearer JWT (`scope=pages:import`, ~10 мин)
+2. `POST /api/pages/import` с `Authorization: Bearer …` и multipart `files`
+
+### `wiki_auth_token`
+
+Параметров нет. Требует EDITOR/ADMIN (через MCP API key владельца).
+
+Ответ: `token`, `tokenType`, `scope`, `expiresAt`, `expiresInSeconds`, `usage`.
+
+Scoped JWT на REST разрешён **только** для `POST /api/pages/import`; остальные пути → 403.
+
 ### `wiki_import`
 
-Создаёт wiki-страницу из markdown-файла (не attachment).
+Создаёт wiki-страницу из markdown-файла (не attachment). Удобен для небольших текстов.
 Slug — из имени файла; title — frontmatter `title` → H1 → имя файла.
 При конфликте slug по умолчанию пропускает; `overwrite=true` перезаписывает.
 

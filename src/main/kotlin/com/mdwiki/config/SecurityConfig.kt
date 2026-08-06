@@ -3,6 +3,7 @@ package com.mdwiki.config
 import com.mdwiki.security.ApiKeyAuthenticationFilter
 import com.mdwiki.security.JwtAuthenticationFilter
 import com.mdwiki.security.McpAcceptHeaderFilter
+import com.mdwiki.security.ScopedJwtAuthorizationFilter
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
@@ -22,6 +23,7 @@ import org.springframework.security.web.context.RequestAttributeSecurityContextR
 class SecurityConfig(
     private val mcpAcceptHeaderFilter: McpAcceptHeaderFilter,
     private val jwtAuthenticationFilter: JwtAuthenticationFilter,
+    private val scopedJwtAuthorizationFilter: ScopedJwtAuthorizationFilter,
     private val apiKeyAuthenticationFilter: ApiKeyAuthenticationFilter,
     private val conciseAccessDeniedHandler: ConciseAccessDeniedHandler,
     private val conciseAuthenticationEntryPoint: ConciseAuthenticationEntryPoint
@@ -78,6 +80,7 @@ class SecurityConfig(
             .addFilterBefore(mcpAcceptHeaderFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
+            .addFilterAfter(scopedJwtAuthorizationFilter, JwtAuthenticationFilter::class.java)
 
         return http.build()
     }

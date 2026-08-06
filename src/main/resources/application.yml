@@ -40,6 +40,8 @@ mdwiki:
     # Обязателен: без JWT_SECRET приложение не стартует (см. JwtProperties).
     secret: ${JWT_SECRET:}
     expiration-ms: 86400000
+    # Короткий TTL для MCP wiki_auth_token (scoped REST JWT).
+    scoped-expiration-ms: ${JWT_SCOPED_EXPIRATION_MS:600000}
   content-dir: ${MDWIKI_CONTENT_DIR:./wiki-content}
   attachments:
     # Директории хоста, из которых разрешён импорт вложений по пути (MCP wiki_attachment_upload).

@@ -13,7 +13,7 @@ class WikiImportTool(private val pageService: PageService) {
 
     @McpTool(
         name = "wiki_import",
-        description = "Import a markdown file as a wiki page. Slug is derived from filename; title from frontmatter title, then H1, then filename. If a page with the same slug exists, skips unless overwrite=true. Requires EDITOR or ADMIN role."
+        description = "Import a markdown file as a wiki page (small/medium content). For large files prefer wiki_auth_token + POST /api/pages/import. Slug from filename; title from frontmatter title, then H1, then filename. Skips existing slug unless overwrite=true. Requires EDITOR or ADMIN."
     )
     fun importMd(
         @McpToolParam(description = "Markdown filename, e.g. my-note.md")

@@ -1,5 +1,6 @@
 package com.mdwiki.security
 
+import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.JwtService
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -9,7 +10,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
-import com.mdwiki.repository.UserRepository
 
 @Component
 class JwtAuthenticationFilter(
@@ -26,11 +26,12 @@ class JwtAuthenticationFilter(
         if (header != null && header.startsWith("Bearer ")) {
             val token = header.substring(7)
             if (jwtService.validateToken(token)) {
-                val username = jwtService.extractUsername(token)
-                val user = userRepository.findByUsername(username)
+                val parsed = jwtService.parseToken(token)
+                val user = userRepository.findByUsername(parsed.username)
                 if (user != null) {
                     val authorities = listOf(SimpleGrantedAuthority("ROLE_${user.role.name}"))
-                    val auth = UsernamePasswordAuthenticationToken(username, null, authorities)
+                    val auth = UsernamePasswordAuthenticationToken(parsed.username, null, authorities)
+                    auth.details = JwtAuthDetails(scope = parsed.scope)
                     SecurityContextHolder.getContext().authentication = auth
                 }
             }

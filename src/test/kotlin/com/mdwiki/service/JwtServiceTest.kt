@@ -1,7 +1,11 @@
 package com.mdwiki.service
 
 import com.mdwiki.config.JwtProperties
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -50,5 +54,14 @@ class JwtServiceTest {
         val token = short.generateToken("u")
         assertTrue(short.validateToken(token))
         assertEquals("u", short.extractUsername(token))
+    }
+
+    @Test
+    fun `scoped token carries scope claim and short TTL metadata`() {
+        val token = jwtService.generateScopedToken("editor", "pages:import", expirationMs = 60_000)
+        val parsed = jwtService.parseToken(token)
+        assertEquals("editor", parsed.username)
+        assertEquals("pages:import", parsed.scope)
+        assertNull(jwtService.parseToken(jwtService.generateToken("editor")).scope)
     }
 }
