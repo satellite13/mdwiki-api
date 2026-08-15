@@ -9,6 +9,8 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.usecase.CreatePageUseCase
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.service.usecase.ImportMdPagesUseCase
+import com.mdwiki.service.usecase.PatchPageUseCase
+import com.mdwiki.service.usecase.PatchSectionUseCase
 import com.mdwiki.service.usecase.UpdatePageUseCase
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -27,7 +29,10 @@ class PageService(
     private val createPageUseCase: CreatePageUseCase,
     private val updatePageUseCase: UpdatePageUseCase,
     private val deletePageUseCase: DeletePageUseCase,
-    private val importMdPagesUseCase: ImportMdPagesUseCase
+    private val importMdPagesUseCase: ImportMdPagesUseCase,
+    private val patchPageUseCase: PatchPageUseCase,
+    private val patchSectionUseCase: PatchSectionUseCase,
+    private val sectionIndexService: SectionIndexService
 ) {
     @Transactional(readOnly = true)
     fun findAll(page: Int = 0, size: Int = 50): Page<PageListItem> {
@@ -96,6 +101,52 @@ class PageService(
     }
 
     @Transactional
+    fun mapSections(slug: String): PageSectionMapResponse {
+        findBySlug(slug)
+        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
+            ?: throw NotFoundException("Page not found: $slug")
+        val content = page.contentMd ?: ""
+        val sections = sectionIndexService.listOrRebuild(page)
+        return PageSectionMapResponse(
+            slug = page.slug,
+            updatedAt = page.updatedAt,
+            sections = sections.map { section ->
+                PageSectionMapItem(
+                    key = section.stableKey,
+                    heading = section.heading,
+                    headingPath = section.headingPath,
+                    level = section.headingLevel,
+                    length = (section.endOffset - section.startOffset).coerceAtLeast(0),
+                    hash = section.contentHash.ifBlank {
+                        SectionIndexService.hashOf(content, section.startOffset, section.endOffset)
+                    },
+                    includesChildren = sections.any { other ->
+                        other !== section &&
+                            other.startOffset > section.startOffset &&
+                            other.startOffset < section.endOffset
+                    }
+                )
+            }
+        )
+    }
+
+    @Transactional
+    fun patchSection(slug: String, request: PatchSectionRequest, username: String): PatchSectionResponse {
+        val patched = patchSectionUseCase.execute(slug, request, username)
+        folderService.invalidateCache()
+        treeEventsService.publishTreeUpdated()
+        return patched
+    }
+
+    @Transactional
+    fun patch(slug: String, request: PatchPageRequest, username: String): PatchPageResponse {
+        val patched = patchPageUseCase.execute(slug, request, username)
+        folderService.invalidateCache()
+        treeEventsService.publishTreeUpdated()
+        return patched
+    }
+
+    @Transactional
     fun delete(slug: String, mode: DeletePageUseCase.DeleteMode = DeletePageUseCase.DeleteMode.SOFT) {
         deletePageUseCase.execute(slug, mode)
         folderService.invalidateCache()
@@ -113,6 +164,7 @@ class PageService(
         // Возвращаем файл из корзины на место (если он там был).
         wikiFileService.restorePageFileFromTrash(page)
         val saved = pageRepository.save(page)
+        sectionIndexService.rebuild(saved)
         folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
         return saved.toResponse()

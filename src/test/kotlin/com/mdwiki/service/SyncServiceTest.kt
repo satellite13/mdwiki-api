@@ -45,6 +45,7 @@ class SyncServiceTest {
     @Mock private lateinit var folderService: FolderService
     @Mock private lateinit var attachmentService: AttachmentService
     @Mock private lateinit var platformTransactionManager: PlatformTransactionManager
+    @Mock private lateinit var sectionIndexService: SectionIndexService
 
     private lateinit var syncService: SyncService
 
@@ -70,7 +71,8 @@ class SyncServiceTest {
             frontmatterMetaService,
             folderRepository,
             wikiFileService,
-            DeferredPageIndexer(ragService)
+            DeferredPageIndexer(ragService),
+            sectionIndexService
         )
         whenever(attachmentService.syncFromDisk()).thenReturn(AttachmentService.AttachmentSyncResult(0))
         syncService = SyncService(

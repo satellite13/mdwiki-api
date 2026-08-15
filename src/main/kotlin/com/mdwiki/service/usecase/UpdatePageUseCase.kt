@@ -1,6 +1,7 @@
 package com.mdwiki.service.usecase
 
 import com.mdwiki.dto.UpdatePageRequest
+import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.mapper.toResponse
 import com.mdwiki.model.Page
@@ -11,6 +12,7 @@ import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
+import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
@@ -29,7 +31,8 @@ class UpdatePageUseCase(
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikilinkService: WikilinkService,
     private val linkRepository: LinkRepository,
-    private val syncService: SyncService
+    private val syncService: SyncService,
+    private val sectionIndexService: SectionIndexService
 ) {
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
         val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
@@ -39,6 +42,9 @@ class UpdatePageUseCase(
 
         if (frontmatterMetaService.isLocked(page)) {
             throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be edited")
+        }
+        if (request.expectedUpdatedAt != null && page.updatedAt != request.expectedUpdatedAt) {
+            throw ConflictException("Page '$slug' has changed; refresh and retry with current updatedAt")
         }
 
         val oldSlug = page.slug
@@ -95,6 +101,7 @@ class UpdatePageUseCase(
                         pageRepository.save(other)
                         pageMetadataService.syncLinksAndTags(other, rewritten, cleanupOrphanedTags = false)
                         pageIndexer.indexAfterCommit(other)
+                        sectionIndexService.rebuild(other, rewritten)
                     }
                 }
         }
@@ -117,6 +124,7 @@ class UpdatePageUseCase(
         if (request.contentMd != null || slugChanged) {
             pageMetadataService.syncLinksAndTags(saved, saved.contentMd ?: "", cleanupOrphanedTags = true)
             pageIndexer.indexAfterCommit(saved)
+            sectionIndexService.rebuild(saved, saved.contentMd ?: "")
         }
 
         // Синхронизируем БД с ФС после операций переименования/перемещения

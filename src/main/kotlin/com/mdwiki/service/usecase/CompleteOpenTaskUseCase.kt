@@ -9,6 +9,7 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
+import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.util.MarkdownTaskScanner
 import org.springframework.stereotype.Component
@@ -22,7 +23,8 @@ class CompleteOpenTaskUseCase(
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikiFileService: WikiFileService,
     private val pageMetadataService: PageMetadataService,
-    private val ragService: RagService
+    private val ragService: RagService,
+    private val sectionIndexService: SectionIndexService
 ) {
     @Transactional
     fun execute(request: CompleteOpenTaskRequest, username: String) {
@@ -56,6 +58,7 @@ class CompleteOpenTaskUseCase(
         val saved = pageRepository.save(page)
         pageMetadataService.syncLinksAndTags(saved, updatedContent, cleanupOrphanedTags = true)
         ragService.indexPage(saved)
+        sectionIndexService.rebuild(saved, updatedContent)
     }
 
     private fun sourceLineAt(content: String, sourceOffset: Int): String? {

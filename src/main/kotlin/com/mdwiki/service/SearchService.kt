@@ -5,6 +5,7 @@ import com.mdwiki.dto.SearchResult
 import com.mdwiki.mapper.headlineToSearchSnippet
 import com.mdwiki.rag.RagService
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.util.SectionAnchorResolver
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -34,13 +35,12 @@ class SearchService(
         val hits = ragService.search(query, limit)
         if (hits.isEmpty()) return emptyList()
 
-        val tagsBySlug = pageRepository.findAllBySlugIn(hits.map { it.pageSlug }.distinct())
+        val pagesBySlug = pageRepository.findAllBySlugIn(hits.map { it.pageSlug }.distinct())
             .filter { it.deletedAt == null }
-            .associate { page ->
-                page.slug to page.tags.map { it.name }.sorted()
-            }
+            .associateBy { it.slug }
 
         return hits.map { hit ->
+            val page = pagesBySlug[hit.pageSlug]
             RagSearchResult(
                 chunkText = hit.chunkText,
                 pageSlug = hit.pageSlug,
@@ -48,7 +48,10 @@ class SearchService(
                 sectionHeading = hit.sectionHeading,
                 snippet = headlineToSearchSnippet(hit.chunkText),
                 score = hit.score,
-                tags = tagsBySlug[hit.pageSlug].orEmpty()
+                tags = page?.tags?.map { it.name }?.sorted().orEmpty(),
+                sectionKey = page?.contentMd?.let { content ->
+                    SectionAnchorResolver.resolveKey(content, hit.sectionHeading, hit.chunkText)
+                }
             )
         }
     }

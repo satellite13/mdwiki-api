@@ -7,6 +7,7 @@ import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.mdwiki.model.Page
+import com.mdwiki.model.PageSection
 import com.mdwiki.model.User
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.LinkRepository
@@ -16,6 +17,8 @@ import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.usecase.CreatePageUseCase
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.service.usecase.ImportMdPagesUseCase
+import com.mdwiki.service.usecase.PatchPageUseCase
+import com.mdwiki.service.usecase.PatchSectionUseCase
 import com.mdwiki.service.usecase.UpdatePageUseCase
 import com.mdwiki.service.WikilinkService
 import org.junit.jupiter.api.Assertions.*
@@ -47,6 +50,7 @@ class PageServiceTest {
     @Mock private lateinit var treeEventsService: TreeEventsService
     @Mock private lateinit var folderService: FolderService
     @Mock private lateinit var syncService: SyncService
+    @Mock private lateinit var sectionIndexService: SectionIndexService
 
     private lateinit var pageService: PageService
     private lateinit var wikiFileService: WikiFileService
@@ -61,18 +65,25 @@ class PageServiceTest {
         val wikilinkService = WikilinkService()
         val createPageUseCase = CreatePageUseCase(
             pageRepository, userRepository, folderRepository,
-            pageMetadataService, ragService, wikiFileService, frontmatterMetaService, wikilinkService
+            pageMetadataService, ragService, wikiFileService, frontmatterMetaService, wikilinkService,
+            sectionIndexService
         )
         val updatePageUseCase = UpdatePageUseCase(
             pageRepository, userRepository, folderRepository,
             pageMetadataService, DeferredPageIndexer(ragService), wikiFileService, frontmatterMetaService,
-            wikilinkService, linkRepository, syncService
+            wikilinkService, linkRepository, syncService, sectionIndexService
         )
         val deletePageUseCase = DeletePageUseCase(
             pageRepository, pageMetadataService, ragService, wikiFileService, syncService, frontmatterMetaService
         )
         val importMdPagesUseCase = ImportMdPagesUseCase(
             pageRepository, createPageUseCase, updatePageUseCase, wikilinkService
+        )
+        val patchPageUseCase = PatchPageUseCase(
+            pageRepository, frontmatterMetaService, updatePageUseCase
+        )
+        val patchSectionUseCase = PatchSectionUseCase(
+            pageRepository, frontmatterMetaService, updatePageUseCase
         )
         pageService = PageService(
             pageRepository,
@@ -84,7 +95,10 @@ class PageServiceTest {
             createPageUseCase,
             updatePageUseCase,
             deletePageUseCase,
-            importMdPagesUseCase
+            importMdPagesUseCase,
+            patchPageUseCase,
+            patchSectionUseCase,
+            sectionIndexService
         )
     }
 
@@ -175,6 +189,139 @@ class PageServiceTest {
         })
         assertTrue(tempDir.resolve("my-page.md").toFile().exists())
         assertEquals("new content", tempDir.resolve("my-page.md").toFile().readText())
+        verify(sectionIndexService).rebuild(argThat { slug == "my-page" }, eq("new content"))
+    }
+
+    @Test
+    fun `mapSections rebuilds empty index`() {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "note",
+            title = "Note",
+            contentMd = "## API\nbody",
+            updatedAt = Instant.parse("2026-08-15T10:00:00Z")
+        )
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("note")).thenReturn(page)
+        whenever(sectionIndexService.listOrRebuild(page)).thenReturn(
+            listOf(
+                PageSection(
+                    id = UUID.randomUUID(),
+                    page = page,
+                    stableKey = "api",
+                    heading = "API",
+                    headingLevel = 2,
+                    headingPath = "API",
+                    sortOrder = 0,
+                    startOffset = 0,
+                    endOffset = 10,
+                    contentHash = "abc"
+                )
+            )
+        )
+
+        val map = pageService.mapSections("note")
+        assertEquals("note", map.slug)
+        assertEquals(listOf("api"), map.sections.map { it.key })
+        assertEquals("API", map.sections.single().headingPath)
+        assertEquals(false, map.sections.single().includesChildren)
+    }
+
+    @Test
+    fun `mapSections marks parent section as including children`() {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "note",
+            title = "Note",
+            contentMd = "# Intro\nbefore\n\n## API\nbody",
+            updatedAt = Instant.parse("2026-08-15T10:00:00Z")
+        )
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("note")).thenReturn(page)
+        whenever(sectionIndexService.listOrRebuild(page)).thenReturn(
+            listOf(
+                PageSection(
+                    id = UUID.randomUUID(),
+                    page = page,
+                    stableKey = "intro",
+                    heading = "Intro",
+                    headingLevel = 1,
+                    headingPath = "Intro",
+                    sortOrder = 0,
+                    startOffset = 0,
+                    endOffset = 30,
+                    contentHash = "parent"
+                ),
+                PageSection(
+                    id = UUID.randomUUID(),
+                    page = page,
+                    stableKey = "intro/api",
+                    heading = "API",
+                    headingLevel = 2,
+                    headingPath = "Intro::API",
+                    sortOrder = 1,
+                    startOffset = 16,
+                    endOffset = 30,
+                    contentHash = "child"
+                )
+            )
+        )
+
+        val map = pageService.mapSections("note")
+        assertEquals(true, map.sections.single { it.key == "intro" }.includesChildren)
+        assertEquals(false, map.sections.single { it.key == "intro/api" }.includesChildren)
+    }
+
+    @Test
+    fun `update rejects stale expectedUpdatedAt`() {
+        val updatedAt = Instant.parse("2026-08-15T10:00:00Z")
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "my-page",
+            title = "Old",
+            contentMd = "old content",
+            updatedAt = updatedAt
+        )
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+
+        assertThrows<ConflictException> {
+            pageService.update(
+                "my-page",
+                UpdatePageRequest(
+                    contentMd = "new content",
+                    expectedUpdatedAt = updatedAt.minusSeconds(1)
+                ),
+                "editor"
+            )
+        }
+        verify(pageRepository, never()).save(any<Page>())
+    }
+
+    @Test
+    fun `update accepts matching expectedUpdatedAt`() {
+        val updatedAt = Instant.parse("2026-08-15T10:00:00Z")
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "my-page",
+            title = "Old",
+            contentMd = "old content",
+            updatedAt = updatedAt
+        )
+        page.filePath = tempDir.resolve("my-page.md").toString()
+        tempDir.resolve("my-page.md").toFile().writeText("old content")
+        val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(user)
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageService.update(
+            "my-page",
+            UpdatePageRequest(contentMd = "new content", expectedUpdatedAt = updatedAt),
+            "editor"
+        )
+
+        verify(pageRepository).save(argThat<Page> { contentMd == "new content" })
     }
 
     @Test
@@ -427,5 +574,6 @@ class PageServiceTest {
         val restoredFile = tempDir.resolve("doomed.md").toFile()
         assertTrue(restoredFile.exists())
         assertEquals(restoredFile.absolutePath, page.filePath)
+        verify(sectionIndexService).rebuild(page)
     }
 }

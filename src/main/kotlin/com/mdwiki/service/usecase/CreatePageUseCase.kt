@@ -11,6 +11,7 @@ import com.mdwiki.repository.UserRepository
 import com.mdwiki.rag.RagService
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
+import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import org.springframework.stereotype.Component
@@ -24,7 +25,8 @@ class CreatePageUseCase(
     private val ragService: RagService,
     private val wikiFileService: WikiFileService,
     private val frontmatterMetaService: FrontmatterMetaService,
-    private val wikilinkService: WikilinkService
+    private val wikilinkService: WikilinkService,
+    private val sectionIndexService: SectionIndexService
 ) {
     fun execute(request: CreatePageRequest, username: String) = run {
         // Явно заданный `slug` имеет приоритет (после нормализации); fallback — slug из title.
@@ -59,6 +61,7 @@ class CreatePageUseCase(
         pageMetadataService.syncLinksAndTags(saved, request.contentMd, cleanupOrphanedTags = true)
         pageMetadataService.resolveIncomingLinks(saved)
         ragService.indexPage(saved)
+        sectionIndexService.rebuild(saved, request.contentMd)
 
         saved.toResponse()
     }

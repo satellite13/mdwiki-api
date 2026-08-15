@@ -1,0 +1,63 @@
+package com.mdwiki.service.usecase
+
+import com.mdwiki.dto.PatchSectionMode
+import com.mdwiki.dto.PatchSectionRequest
+import com.mdwiki.dto.PatchSectionResponse
+import com.mdwiki.dto.UpdatePageRequest
+import com.mdwiki.error.ConflictException
+import com.mdwiki.error.ForbiddenException
+import com.mdwiki.error.NotFoundException
+import com.mdwiki.repository.PageRepository
+import com.mdwiki.service.FrontmatterMetaService
+import com.mdwiki.service.SectionIndexService
+import com.mdwiki.util.MarkdownSectionParser
+import org.springframework.stereotype.Component
+
+@Component
+class PatchSectionUseCase(
+    private val pageRepository: PageRepository,
+    private val frontmatterMetaService: FrontmatterMetaService,
+    private val updatePageUseCase: UpdatePageUseCase
+) {
+    fun execute(slug: String, request: PatchSectionRequest, username: String): PatchSectionResponse {
+        if (request.content.length > PatchPageUseCase.MAX_NEW_TEXT_CHARS) {
+            throw IllegalArgumentException("content exceeds ${PatchPageUseCase.MAX_NEW_TEXT_CHARS} characters")
+        }
+        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
+            ?: throw NotFoundException("Page not found: $slug")
+        if (frontmatterMetaService.isLocked(page)) {
+            throw ForbiddenException("Page '$slug' is locked and cannot be edited")
+        }
+        if (page.updatedAt != request.expectedUpdatedAt) {
+            throw ConflictException("Page '$slug' has changed; refresh and retry with current updatedAt")
+        }
+        val content = page.contentMd ?: ""
+        val section = MarkdownSectionParser.parse(content).find { it.stableKey == request.sectionKey }
+            ?: throw NotFoundException("Section '${request.sectionKey}' not found on page '$slug'")
+        val currentHash = SectionIndexService.hashOf(content, section.startOffset, section.endOffset)
+        if (request.expectedHash != null && request.expectedHash != currentHash) {
+            throw ConflictException("Section '${request.sectionKey}' has changed; refresh wiki_map")
+        }
+        val from = if (request.mode == PatchSectionMode.BODY) section.bodyStartOffset else section.startOffset
+        val spliced = content.substring(0, from) + request.content + content.substring(section.endOffset)
+        val saved = updatePageUseCase.execute(
+            slug,
+            UpdatePageRequest(contentMd = spliced, expectedUpdatedAt = request.expectedUpdatedAt),
+            username
+        )
+        val newHash = MarkdownSectionParser.parse(saved.contentMd ?: "")
+            .find { it.stableKey == request.sectionKey }
+            ?.let { SectionIndexService.hashOf(saved.contentMd ?: "", it.startOffset, it.endOffset) }
+            ?: SectionIndexService.hashOf(request.content, 0, request.content.length)
+        return PatchSectionResponse(
+            slug = saved.slug,
+            title = saved.title,
+            sectionKey = request.sectionKey,
+            contentMd = saved.contentMd,
+            replacements = 1,
+            previousUpdatedAt = request.expectedUpdatedAt,
+            updatedAt = saved.updatedAt,
+            contentHash = newHash
+        )
+    }
+}

@@ -33,6 +33,7 @@ class CompleteOpenTaskUseCaseTest {
     @Mock private lateinit var pageMetadataService: PageMetadataService
     @Mock private lateinit var wikiFileService: WikiFileService
     @Mock private lateinit var ragService: RagService
+    @Mock private lateinit var sectionIndexService: com.mdwiki.service.SectionIndexService
 
     private val frontmatterMetaService = FrontmatterMetaService()
 
@@ -45,7 +46,7 @@ class CompleteOpenTaskUseCaseTest {
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
         CompleteOpenTaskUseCase(
-            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService
+            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService, sectionIndexService
         ).execute(requestFor(page), user.username)
 
         assertEquals("- [x] Deploy\nnext", page.contentMd)
@@ -65,7 +66,7 @@ class CompleteOpenTaskUseCaseTest {
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
         CompleteOpenTaskUseCase(
-            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService
+            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService, sectionIndexService
         ).execute(requestFor(page, "released\nverified"), user.username)
 
         assertEquals("- [x] Deploy\n> released\n> verified\nnext", page.contentMd)
@@ -80,7 +81,7 @@ class CompleteOpenTaskUseCaseTest {
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
         CompleteOpenTaskUseCase(
-            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService
+            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService, sectionIndexService
         ).execute(requestFor(page, "released"), user.username)
 
         assertEquals("- [x] Deploy\n> released", page.contentMd)
@@ -95,7 +96,7 @@ class CompleteOpenTaskUseCaseTest {
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
         CompleteOpenTaskUseCase(
-            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService
+            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService, sectionIndexService
         ).execute(requestFor(page, "\n done \n"), user.username)
 
         assertEquals("- [x] Deploy\n> done", page.contentMd)
@@ -106,7 +107,7 @@ class CompleteOpenTaskUseCaseTest {
         val lockedPage = page(content = "---\nlocked: true\n---\n- [ ] Deploy")
         whenever(pageRepository.findActiveByIdForUpdate(lockedPage.id!!)).thenReturn(lockedPage)
         val useCase = CompleteOpenTaskUseCase(
-            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService
+            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService, sectionIndexService
         )
 
         assertThrows<ForbiddenException> { useCase.execute(requestFor(lockedPage), "editor") }
@@ -134,7 +135,7 @@ class CompleteOpenTaskUseCaseTest {
         whenever(userRepository.findByUsername(user.username)).thenReturn(user)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
         val useCase = CompleteOpenTaskUseCase(
-            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService
+            pageRepository, userRepository, frontmatterMetaService, wikiFileService, pageMetadataService, ragService, sectionIndexService
         )
 
         useCase.execute(snapshot, user.username)

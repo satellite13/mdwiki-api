@@ -10,6 +10,7 @@ import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
+import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.util.PathSanitizer
 import org.slf4j.LoggerFactory
@@ -29,7 +30,8 @@ class WikiSyncEngine(
     private val frontmatterMetaService: FrontmatterMetaService,
     private val folderRepository: FolderRepository,
     private val wikiFileService: WikiFileService,
-    private val pageIndexer: DeferredPageIndexer
+    private val pageIndexer: DeferredPageIndexer,
+    private val sectionIndexService: SectionIndexService
 ) {
     private val log = LoggerFactory.getLogger(WikiSyncEngine::class.java)
     private companion object {
@@ -146,6 +148,7 @@ class WikiSyncEngine(
             pageMetadataService.syncLinksAndTags(saved, content)
             pageMetadataService.resolveIncomingLinks(saved)
             pageIndexer.indexAfterCommit(saved)
+            sectionIndexService.rebuild(saved, content)
             log.info("{}: added page '{}'", logPrefix, slug)
             return UpsertOutcome.ADDED
         }
@@ -167,6 +170,7 @@ class WikiSyncEngine(
                 pageMetadataService.resolveIncomingLinks(saved)
             }
             pageIndexer.indexAfterCommit(saved)
+            sectionIndexService.rebuild(saved, content)
             log.info(
                 if (wasDeleted) "{}: restored soft-deleted page '{}' from disk" else "{}: updated page '{}'",
                 logPrefix, slug

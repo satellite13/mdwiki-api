@@ -9,6 +9,7 @@ import com.mdwiki.model.Page
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.SectionIndexService
 import com.mdwiki.util.MarkdownFrontmatter
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -24,6 +25,7 @@ class BrokenLinkService(
     private val wikiFileService: WikiFileService,
     private val pageIndexer: DeferredPageIndexer,
     private val userRepository: UserRepository,
+    private val sectionIndexService: SectionIndexService,
 ) {
     @Transactional(readOnly = true)
     fun listBroken(): List<BrokenLinkResponse> {
@@ -169,6 +171,7 @@ class BrokenLinkService(
         val saved = pageRepository.save(page)
         pageMetadataService.syncLinksAndTags(saved, rewritten, cleanupOrphanedTags = false)
         pageIndexer.indexAfterCommit(saved)
+        sectionIndexService.rebuild(saved, rewritten)
         return true
     }
 }

@@ -25,7 +25,65 @@ data class UpdatePageRequest(
     val contentMd: String? = null,
     val slug: String? = null,
     val folderId: UUID? = null,
-    val clearFolder: Boolean? = null
+    val clearFolder: Boolean? = null,
+    val expectedUpdatedAt: Instant? = null
+)
+
+data class PatchPageRequest(
+    val oldText: String,
+    val newText: String,
+    val expectedUpdatedAt: Instant,
+    val replaceAll: Boolean = false,
+    val sectionKey: String? = null
+)
+
+enum class PatchSectionMode {
+    BODY,
+    SECTION
+}
+
+data class PatchSectionRequest(
+    val sectionKey: String,
+    val content: String,
+    val expectedUpdatedAt: Instant,
+    val mode: PatchSectionMode = PatchSectionMode.BODY,
+    val expectedHash: String? = null
+)
+
+data class PatchSectionResponse(
+    val slug: String,
+    val title: String,
+    val sectionKey: String,
+    val contentMd: String?,
+    val replacements: Int,
+    val previousUpdatedAt: Instant,
+    val updatedAt: Instant,
+    val contentHash: String
+)
+
+data class PageSectionMapItem(
+    val key: String,
+    val heading: String?,
+    val headingPath: String,
+    val level: Int,
+    val length: Int,
+    val hash: String,
+    val includesChildren: Boolean
+)
+
+data class PageSectionMapResponse(
+    val slug: String,
+    val updatedAt: Instant,
+    val sections: List<PageSectionMapItem>
+)
+
+data class PatchPageResponse(
+    val slug: String,
+    val title: String,
+    val contentMd: String?,
+    val replacements: Int,
+    val previousUpdatedAt: Instant,
+    val updatedAt: Instant
 )
 
 data class PageResponse(

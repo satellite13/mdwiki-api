@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-page-sections
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: false
+            sql: |
+              CREATE TABLE page_sections (
+                id            uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+                page_id       uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+                stable_key    text NOT NULL,
+                heading       text,
+                heading_level int NOT NULL,
+                heading_path  text NOT NULL,
+                sort_order    int NOT NULL,
+                start_offset  int NOT NULL,
+                end_offset    int NOT NULL,
+                content_hash  text NOT NULL,
+                updated_at    timestamptz NOT NULL DEFAULT now(),
+                UNIQUE (page_id, stable_key)
+              );
+              CREATE INDEX idx_page_sections_page_sort ON page_sections (page_id, sort_order);
+      rollback:
+        - sql:
+            sql: DROP TABLE IF EXISTS page_sections;

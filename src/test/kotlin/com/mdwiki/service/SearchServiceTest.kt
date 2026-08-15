@@ -74,7 +74,11 @@ class SearchServiceTest {
             )
         )
         val kotlinTag = Tag(name = "kotlin")
-        val page = Page(slug = "kotlin-guide", title = "Kotlin Guide").apply {
+        val page = Page(
+            slug = "kotlin-guide",
+            title = "Kotlin Guide",
+            contentMd = "# Intro\nKotlin is **great**\n"
+        ).apply {
             tags.add(kotlinTag)
         }
         whenever(pageRepository.findAllBySlugIn(listOf("kotlin-guide"))).thenReturn(listOf(page))
@@ -85,9 +89,38 @@ class SearchServiceTest {
         assertEquals("kotlin-guide", results[0].pageSlug)
         assertEquals("Kotlin Guide", results[0].pageTitle)
         assertEquals("Intro", results[0].sectionHeading)
+        assertEquals("intro", results[0].sectionKey)
         assertTrue(results[0].snippet.contains("Kotlin"))
         assertEquals(0.92, results[0].score)
         assertEquals(listOf("kotlin"), results[0].tags)
+    }
+
+    @Test
+    fun `ragSearch disambiguates duplicate headings via chunk text`() {
+        whenever(ragService.search("endpoint", 10)).thenReturn(
+            listOf(
+                RagService.SearchResult(
+                    chunkText = "second endpoint",
+                    sectionHeading = "API",
+                    pageTitle = "Guide",
+                    pageSlug = "guide",
+                    score = 0.8
+                )
+            )
+        )
+        whenever(pageRepository.findAllBySlugIn(listOf("guide"))).thenReturn(
+            listOf(
+                Page(
+                    slug = "guide",
+                    title = "Guide",
+                    contentMd = "# Intro\n\n## API\nfirst endpoint\n\n# Other\n\n## API\nsecond endpoint\n"
+                )
+            )
+        )
+
+        val results = searchService.ragSearch("endpoint")
+
+        assertEquals("other/api", results[0].sectionKey)
     }
 
     @Test

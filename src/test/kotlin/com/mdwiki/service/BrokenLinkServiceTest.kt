@@ -35,6 +35,7 @@ class BrokenLinkServiceTest {
     @Mock private lateinit var ragService: com.mdwiki.rag.RagService
     @Mock private lateinit var pageIndexer: DeferredPageIndexer
     @Mock private lateinit var userRepository: UserRepository
+    @Mock private lateinit var sectionIndexService: SectionIndexService
 
     @InjectMocks
     private lateinit var service: BrokenLinkService
