@@ -3,7 +3,7 @@
 Backend mdwiki: Spring Boot + Kotlin, PostgreSQL (pgvector), REST API, SSE,
 MCP-инструменты, RAG-поиск.
 
-Текущая версия: **v0.1.7** (см. git tag; runtime — `GET /api/version`).
+Текущая версия: **v0.1.8** (см. git tag; runtime — `GET /api/version`).
 
 ## Быстрый старт (локально)
 
@@ -32,8 +32,8 @@ GET /api/version
 ```json
 {
   "name": "mdwiki-api",
-  "version": "0.1.7",
-  "versionTag": "v0.1.7",
+  "version": "0.1.8",
+  "versionTag": "v0.1.8",
   "gitSha": "…"
 }
 ```
