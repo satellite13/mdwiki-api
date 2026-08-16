@@ -8,7 +8,7 @@ import com.mdwiki.model.Page
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
-import com.mdwiki.rag.RagService
+import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SectionIndexService
@@ -22,7 +22,7 @@ class CreatePageUseCase(
     private val userRepository: UserRepository,
     private val folderRepository: FolderRepository,
     private val pageMetadataService: PageMetadataService,
-    private val ragService: RagService,
+    private val pageIndexer: DeferredPageIndexer,
     private val wikiFileService: WikiFileService,
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikilinkService: WikilinkService,
@@ -60,7 +60,7 @@ class CreatePageUseCase(
 
         pageMetadataService.syncLinksAndTags(saved, request.contentMd, cleanupOrphanedTags = true)
         pageMetadataService.resolveIncomingLinks(saved)
-        ragService.indexPage(saved)
+        pageIndexer.indexAfterCommit(saved)
         sectionIndexService.rebuild(saved, request.contentMd)
 
         saved.toResponse()
