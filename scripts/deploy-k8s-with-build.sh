@@ -24,6 +24,8 @@ Environment:
                   Override base image tag (default: mdwiki-api-build-base:<fingerprint>).
   BUILD_BASE_IMAGE=true
                   Force rebuild of the Gradle base image before app build.
+  VALUES_FILE=<path>
+                  Helm values file (default: ./values-local.yaml when present).
 EOF
 }
 
@@ -62,6 +64,9 @@ CHART_DIR="${CHART_DIR:-${ROOT_DIR}/deploy/helm/mdwiki-api}"
 RELEASE_NAME="${RELEASE_NAME:-mdwiki-api}"
 NAMESPACE="${NAMESPACE:-mdwiki}"
 VALUES_FILE="${VALUES_FILE:-}"
+if [[ -z "${VALUES_FILE}" && -f "${ROOT_DIR}/values-local.yaml" ]]; then
+  VALUES_FILE="${ROOT_DIR}/values-local.yaml"
+fi
 TIMEOUT="${TIMEOUT:-5m}"
 RECREATE_DB="${RECREATE_DB:-false}"
 WAIT_FOR_POSTGRES_READY="${WAIT_FOR_POSTGRES_READY:-true}"
