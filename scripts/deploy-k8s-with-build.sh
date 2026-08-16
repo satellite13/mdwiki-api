@@ -59,6 +59,8 @@ resolve_embedding_provider_from_values_file() {
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=gradle-build-fingerprint.sh
+source "${ROOT_DIR}/scripts/gradle-build-fingerprint.sh"
 CHART_DIR="${CHART_DIR:-${ROOT_DIR}/deploy/helm/mdwiki-api}"
 
 RELEASE_NAME="${RELEASE_NAME:-mdwiki-api}"
@@ -140,16 +142,6 @@ if [[ "${BUILD_METHOD}" == "auto" ]]; then
     BUILD_METHOD="bootbuildimage"
   fi
 fi
-
-gradle_build_fingerprint() {
-  local files=(
-    "${ROOT_DIR}/gradle/wrapper/gradle-wrapper.properties"
-    "${ROOT_DIR}/build.gradle.kts"
-    "${ROOT_DIR}/settings.gradle.kts"
-    "${ROOT_DIR}/gradle.properties"
-  )
-  cat "${files[@]}" 2>/dev/null | shasum -a 256 | awk '{print substr($1, 1, 12)}'
-}
 
 ensure_build_base_image() {
   if [[ "${BUILD_BASE_IMAGE}" == "false" ]]; then

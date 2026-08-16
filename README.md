@@ -114,7 +114,7 @@ IMAGE_TAG=v0.1.0 \
 
 Сборка образа: `BUILD_METHOD=auto` (по умолчанию) — Docker, если есть
 `Dockerfile`, иначе `./gradlew bootBuildImage`. Base image кэшируется по
-fingerprint Gradle-файлов (`BUILD_BASE_IMAGE=auto`).
+fingerprint зависимостей Gradle (`BUILD_BASE_IMAGE=auto`; версия проекта не входит).
 
 ### Снятие с кластера
 

@@ -2,16 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-gradle_build_fingerprint() {
-  local files=(
-    "${ROOT_DIR}/gradle/wrapper/gradle-wrapper.properties"
-    "${ROOT_DIR}/build.gradle.kts"
-    "${ROOT_DIR}/settings.gradle.kts"
-    "${ROOT_DIR}/gradle.properties"
-  )
-  cat "${files[@]}" 2>/dev/null | shasum -a 256 | awk '{print substr($1, 1, 12)}'
-}
+# shellcheck source=gradle-build-fingerprint.sh
+source "${ROOT_DIR}/scripts/gradle-build-fingerprint.sh"
 
 FP="$(gradle_build_fingerprint)"
 IMAGE="${DOCKER_BUILD_BASE_IMAGE:-mdwiki-api-build-base:${FP}}"
