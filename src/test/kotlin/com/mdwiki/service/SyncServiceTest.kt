@@ -71,7 +71,7 @@ class SyncServiceTest {
             frontmatterMetaService,
             folderRepository,
             wikiFileService,
-            DeferredPageIndexer(ragService),
+            DeferredPageIndexer(ragService, platformTransactionManager),
             sectionIndexService
         )
         whenever(attachmentService.syncFromDisk()).thenReturn(AttachmentService.AttachmentSyncResult(0))

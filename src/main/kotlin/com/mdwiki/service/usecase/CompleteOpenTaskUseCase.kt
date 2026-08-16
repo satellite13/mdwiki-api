@@ -4,9 +4,9 @@ import com.mdwiki.dto.CompleteOpenTaskRequest
 import com.mdwiki.error.ConflictException
 import com.mdwiki.error.ForbiddenException
 import com.mdwiki.error.NotFoundException
-import com.mdwiki.rag.RagService
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SectionIndexService
@@ -23,7 +23,7 @@ class CompleteOpenTaskUseCase(
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikiFileService: WikiFileService,
     private val pageMetadataService: PageMetadataService,
-    private val ragService: RagService,
+    private val pageIndexer: DeferredPageIndexer,
     private val sectionIndexService: SectionIndexService
 ) {
     @Transactional
@@ -57,7 +57,7 @@ class CompleteOpenTaskUseCase(
 
         val saved = pageRepository.save(page)
         pageMetadataService.syncLinksAndTags(saved, updatedContent, cleanupOrphanedTags = true)
-        ragService.indexPage(saved)
+        pageIndexer.indexAfterCommit(saved)
         sectionIndexService.rebuild(saved, updatedContent)
     }
 

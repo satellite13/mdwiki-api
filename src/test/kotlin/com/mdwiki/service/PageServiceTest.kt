@@ -45,6 +45,7 @@ class PageServiceTest {
     @Mock private lateinit var folderRepository: FolderRepository
     @Mock private lateinit var pageMetadataService: PageMetadataService
     @Mock private lateinit var ragService: RagService
+    @Mock private lateinit var pageIndexer: DeferredPageIndexer
     private val frontmatterMetaService = FrontmatterMetaService()
     @Mock private lateinit var fileWatcherService: FileWatcherService
     @Mock private lateinit var treeEventsService: TreeEventsService
@@ -65,12 +66,12 @@ class PageServiceTest {
         val wikilinkService = WikilinkService()
         val createPageUseCase = CreatePageUseCase(
             pageRepository, userRepository, folderRepository,
-            pageMetadataService, ragService, wikiFileService, frontmatterMetaService, wikilinkService,
+            pageMetadataService, pageIndexer, wikiFileService, frontmatterMetaService, wikilinkService,
             sectionIndexService
         )
         val updatePageUseCase = UpdatePageUseCase(
             pageRepository, userRepository, folderRepository,
-            pageMetadataService, DeferredPageIndexer(ragService), wikiFileService, frontmatterMetaService,
+            pageMetadataService, pageIndexer, wikiFileService, frontmatterMetaService,
             wikilinkService, linkRepository, syncService, sectionIndexService
         )
         val deletePageUseCase = DeletePageUseCase(
