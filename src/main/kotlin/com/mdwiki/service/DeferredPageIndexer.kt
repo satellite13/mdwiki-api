@@ -31,15 +31,23 @@ class DeferredPageIndexer(
         propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
     }
 
+    // Сериализует DELETE+INSERT чанков: update-путь (afterCommit) и file-watcher
+    // (syncSingleFile) могут индексировать одну страницу параллельно, создавая дубли.
+    private val indexLock = Any()
+
     fun indexAfterCommit(page: Page) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            transactionTemplate.execute { ragService.indexPage(page) }
+            synchronized(indexLock) {
+                transactionTemplate.execute { ragService.indexPage(page) }
+            }
             return
         }
         TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
             override fun afterCommit() {
                 runCatching {
-                    transactionTemplate.execute { ragService.indexPage(page) }
+                    synchronized(indexLock) {
+                        transactionTemplate.execute { ragService.indexPage(page) }
+                    }
                 }.onFailure { e ->
                     log.error("Post-commit indexing failed for page '{}': {}", page.slug, e.message)
                 }
