@@ -1,29 +1,31 @@
 # mdwiki-api
 
-Backend mdwiki: Spring Boot + Kotlin, PostgreSQL (pgvector), REST API, SSE,
-MCP-инструменты, RAG-поиск.
+mdwiki backend: Spring Boot + Kotlin, PostgreSQL (pgvector), REST API, SSE,
+MCP tools, and RAG search.
 
-Текущая версия: **v0.1.8** (см. git tag; runtime — `GET /api/version`).
+Русская версия: `README.ru.md`
 
-## Быстрый старт (локально)
+Current version: **v0.1.8** (see the git tag; at runtime — `GET /api/version`).
+
+## Quick start (local)
 
 ```sh
-# JWT_SECRET обязателен (без него приложение не стартует)
+# JWT_SECRET is required (the app will not start without it)
 export JWT_SECRET='local-dev-secret-change-me'
 
 ./gradlew bootRun          # http://localhost:8080
 ./gradlew test             # unit/integration tests
 ```
 
-Фронтенд в dev-режиме проксирует `/api` на `:8080` (см.
+In dev mode the frontend proxies `/api` to `:8080` (see
 [mdwiki-frontend](../mdwiki-frontend)).
 
-Локальный Postgres: `docker-compose up -d` (порт `54328`, БД/user/password
+Local Postgres: `docker-compose up -d` (port `54328`, db/user/password
 `mdwiki`).
 
-## Версия API
+## API version
 
-Публичный endpoint (без auth):
+Public endpoint (no auth):
 
 ```http
 GET /api/version
@@ -38,148 +40,150 @@ GET /api/version
 }
 ```
 
-- `version` — из `build.gradle.kts` (Spring Boot `build-info`)
-- `versionTag` / `gitSha` — из `git describe` / `rev-parse` на сборке;
-  в Docker передаются как `APP_VERSION_TAG` / `APP_GIT_SHA` (`.git` в
-  образе нет)
+- `version` — from `build.gradle.kts` (Spring Boot `build-info`)
+- `versionTag` / `gitSha` — from `git describe` / `rev-parse` at build time;
+  passed into Docker as `APP_VERSION_TAG` / `APP_GIT_SHA` (there is no `.git`
+  in the image)
 
-## Вложения и `/api/uploads`
+## Attachments and `/api/uploads`
 
-| Метод | Путь | Назначение |
-|-------|------|------------|
-| `GET` | `/api/uploads/{storedName}` | Раздача файла (public, для картинок в markdown) |
-| `POST` | `/api/attachments` | Загрузка вложения (EDITOR/ADMIN, запись в БД) |
-| ~~`POST`~~ | ~~`/api/uploads`~~ | **Удалён** — не использовать |
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/uploads/{storedName}` | File serving (public, for images in markdown) |
+| `POST` | `/api/attachments` | Upload an attachment (EDITOR/ADMIN, persisted in DB) |
+| ~~`POST`~~ | ~~`/api/uploads`~~ | **Removed** — do not use |
 
-Загрузка только через `AttachmentService` (HTTP `POST /api/attachments`
-или MCP-инструменты ниже). URL в ответе по-прежнему вида
-`/api/uploads/{uuid}.png` — это ссылка на **GET**-раздачу, не на POST.
+Uploads go only through `AttachmentService` (HTTP `POST /api/attachments`
+or the MCP tools below). Response URLs are still
+`/api/uploads/{uuid}.png` — that is the **GET** serving path, not POST.
 
-## Деплой в Kubernetes
+## Kubernetes deploy
 
-Скрипты в `scripts/` оборачивают Helm chart
-`deploy/helm/mdwiki-api`. Требуются `kubectl`, `helm` и доступ к кластеру.
+Scripts in `scripts/` wrap the Helm chart
+`deploy/helm/mdwiki-api`. You need `kubectl`, `helm`, and cluster access.
 
-| Скрипт | Назначение |
-|--------|------------|
-| `scripts/deploy-k8s.sh` | `helm upgrade --install` без сборки образа (образ уже в registry или загружен вручную) |
-| `scripts/deploy-k8s-with-build.sh` | Сборка Docker-образа + деплой |
-| `scripts/build-base-image.sh` | Только Gradle base image (`Dockerfile.build-base`) для ускорения сборки app-образа |
-| `scripts/undeploy-k8s.sh` | `helm uninstall` релиза |
+| Script | Purpose |
+|--------|---------|
+| `scripts/deploy-k8s.sh` | `helm upgrade --install` without building an image (image already in a registry or loaded manually) |
+| `scripts/deploy-k8s-with-build.sh` | Docker image build + deploy |
+| `scripts/build-base-image.sh` | Gradle base image only (`Dockerfile.build-base`) to speed up app builds |
+| `scripts/undeploy-k8s.sh` | `helm uninstall` the release |
 
-### Типичный деплой
+### Typical deploy
 
 ```sh
-# Локальный OrbStack / k8s (JWT, embedding LM Studio и т.д. в values-local.yaml)
+# Local OrbStack / k8s (JWT, LM Studio embeddings, etc. in values-local.yaml)
 VALUES_FILE=./values-local.yaml ./scripts/deploy-k8s-with-build.sh
 
-# С кастомными values (JWT, postgres, embedding и т.д.)
+# Custom values (JWT, postgres, embeddings, etc.)
 VALUES_FILE=deploy/helm/mdwiki-api/values-prod.yaml ./scripts/deploy-k8s-with-build.sh
 
-# Только helm, если образ уже собран и запушен
+# Helm only, if the image is already built and pushed
 IMAGE_REPOSITORY=ghcr.io/your-org/mdwiki-api \
 IMAGE_TAG=v0.1.0 \
 ./scripts/deploy-k8s.sh
 ```
 
-Образ тегируется одним тегом — **`git describe --tags --always`**
-(например `mdwiki-api:v0.1.0` или `mdwiki-api:v0.1.0-3-g8d4bfd5`).
-В Docker-сборку передаются `APP_GIT_SHA` и `APP_VERSION_TAG` (для
-`/api/version`, не как второй docker-тег).
+The image gets a single tag — **`git describe --tags --always`**
+(for example `mdwiki-api:v0.1.0` or `mdwiki-api:v0.1.0-3-g8d4bfd5`).
+Docker builds receive `APP_GIT_SHA` and `APP_VERSION_TAG` (for
+`/api/version`, not as a second docker tag).
 
-### Полезные переменные окружения
+### Useful environment variables
 
-| Переменная | По умолчанию | Описание |
-|------------|--------------|----------|
-| `RELEASE_NAME` | `mdwiki-api` | Имя Helm-релиза |
-| `NAMESPACE` | `mdwiki` | Namespace в кластере |
-| `VALUES_FILE` | — | Дополнительный `-f` values-файл |
-| `IMAGE_REPOSITORY` | `mdwiki-api` | Репозиторий образа |
-| `IMAGE_TAG` | `git describe --tags --always` (+ `-dirty`) | Тег образа |
-| `TIMEOUT` | `5m` | Таймаут `helm --wait` и rollout |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RELEASE_NAME` | `mdwiki-api` | Helm release name |
+| `NAMESPACE` | `mdwiki` | Cluster namespace |
+| `VALUES_FILE` | — | Extra `-f` values file |
+| `IMAGE_REPOSITORY` | `mdwiki-api` | Image repository |
+| `IMAGE_TAG` | `git describe --tags --always` (+ `-dirty`) | Image tag |
+| `TIMEOUT` | `5m` | `helm --wait` and rollout timeout |
 
-### Опции `deploy-k8s-with-build.sh`
+### `deploy-k8s-with-build.sh` options
 
 ```sh
 ./scripts/deploy-k8s-with-build.sh --help
 
-# Чистая БД (удалить StatefulSet Postgres + PVC, перезапустить API / Liquibase)
+# Clean DB (delete Postgres StatefulSet + PVC, restart API / Liquibase)
 ./scripts/deploy-k8s-with-build.sh --recreate-db
 
-# Провайдер эмбеддингов и ключ OpenAI на время деплоя
+# Embedding provider and OpenAI key for this deploy
 ./scripts/deploy-k8s-with-build.sh \
   --embedding-provider openai \
   --openai-api-key "$OPENAI_API_KEY"
 ```
 
-Сборка образа: `BUILD_METHOD=auto` (по умолчанию) — Docker, если есть
-`Dockerfile`, иначе `./gradlew bootBuildImage`. Base image кэшируется по
-fingerprint зависимостей Gradle (`BUILD_BASE_IMAGE=auto`; версия проекта не входит).
+Image build: `BUILD_METHOD=auto` (default) — Docker if a
+`Dockerfile` exists, otherwise `./gradlew bootBuildImage`. The base image is
+cached by a Gradle dependency fingerprint (`BUILD_BASE_IMAGE=auto`; the
+project version is not part of it).
 
-### Снятие с кластера
+### Remove from the cluster
 
 ```sh
 ./scripts/undeploy-k8s.sh
 
-# Вместе с PVC (данные Postgres и wiki-content)
+# Also delete PVCs (Postgres data and wiki-content)
 PURGE_DATA=true ./scripts/undeploy-k8s.sh
 ```
 
-Подробнее по values chart — `deploy/helm/mdwiki-api/README.md`.
+Chart values details: `deploy/helm/mdwiki-api/README.md`.
 
-После API обычно деплоят фронтенд:
+After the API, deploy the frontend:
 [mdwiki-frontend/scripts/deploy-k8s-with-build.sh](../mdwiki-frontend/scripts/deploy-k8s-with-build.sh).
 
 ---
 
-## MCP: импорт markdown-страниц
+## MCP: import markdown pages
 
-Для **больших** файлов предпочтителен обход MCP-контента:
+For **large** files, prefer bypassing MCP content:
 
-1. `wiki_auth_token` → короткий Bearer JWT (`scope=pages:import`, ~10 мин)
-2. `POST /api/pages/import` с `Authorization: Bearer …` и multipart `files`
+1. `wiki_auth_token` → short-lived Bearer JWT (`scope=pages:import`, ~10 min)
+2. `POST /api/pages/import` with `Authorization: Bearer …` and multipart `files`
 
 ### `wiki_auth_token`
 
-Параметров нет. Требует EDITOR/ADMIN (через MCP API key владельца).
+No parameters. Requires EDITOR/ADMIN (via the owner's MCP API key).
 
-Ответ: `token`, `tokenType`, `scope`, `expiresAt`, `expiresInSeconds`, `usage`.
+Response: `token`, `tokenType`, `scope`, `expiresAt`, `expiresInSeconds`, `usage`.
 
-Scoped JWT на REST разрешён **только** для `POST /api/pages/import`; остальные пути → 403.
+A scoped REST JWT is allowed **only** for `POST /api/pages/import`; other paths → 403.
 
 ### `wiki_import`
 
-Создаёт wiki-страницу из markdown-файла (не attachment). Удобен для небольших текстов.
-Slug — из имени файла; title — frontmatter `title` → H1 → имя файла.
-При конфликте slug по умолчанию пропускает; `overwrite=true` перезаписывает.
+Creates a wiki page from a markdown file (not an attachment). Convenient for
+small texts. Slug comes from the filename; title from frontmatter `title` →
+H1 → filename. On a slug conflict the default is to skip; `overwrite=true`
+replaces the page.
 
-Параметры:
-- `filename` — например `my-note.md`
-- `contentMd` — полный markdown
-- `folderId` — опционально, UUID папки
-- `overwrite` — опционально, default `false`
+Parameters:
+- `filename` — e.g. `my-note.md`
+- `contentMd` — full markdown
+- `folderId` — optional folder UUID
+- `overwrite` — optional, default `false`
 
-Пример ответа: `status` = `created` | `updated` | `skipped` | `error`.
+Example response: `status` = `created` | `updated` | `skipped` | `error`.
 
-HTTP-аналог: `POST /api/pages/import` (multipart `files`, `folderId`, `overwrite`).
+HTTP equivalent: `POST /api/pages/import` (multipart `files`, `folderId`, `overwrite`).
 
 ---
 
-## MCP: загрузка attachments
+## MCP: upload attachments
 
-Инструменты пишут файл через `AttachmentService` (БД + `uploads/` на диске)
-и возвращают URL вида `/api/uploads/{storedName}` для **GET**-раздачи.
-HTTP `POST /api/uploads` не используется и удалён.
+These tools write the file through `AttachmentService` (DB + `uploads/` on disk)
+and return a URL like `/api/uploads/{storedName}` for **GET** serving.
+HTTP `POST /api/uploads` is unused and has been removed.
 
 ### `wiki_upload` (base64)
 
-Параметры:
-- `fileBase64` — содержимое файла в base64 (также поддерживается `data:...;base64,...`)
-- `filename` — исходное имя файла (например, `image.png`)
-- `contentType` — опционально, MIME-тип (например, `image/png`)
-- `pageId` — опционально, UUID страницы для привязки вложения
+Parameters:
+- `fileBase64` — file contents in base64 (also accepts `data:...;base64,...`)
+- `filename` — original file name (e.g. `image.png`)
+- `contentType` — optional MIME type (e.g. `image/png`)
+- `pageId` — optional page UUID to attach the file to
 
-Пример вызова:
+Example call:
 
 ```json
 {
@@ -194,7 +198,7 @@ HTTP `POST /api/uploads` не используется и удалён.
 }
 ```
 
-Пример ответа:
+Example response:
 
 ```json
 {
@@ -209,25 +213,25 @@ HTTP `POST /api/uploads` не используется и удалён.
 }
 ```
 
-### `wiki_attachment_upload` (путь на хосте API)
+### `wiki_attachment_upload` (path on the API host)
 
-Загружает файл с диска сервера. Путь должен быть внутри
+Uploads a file from the server disk. The path must be inside
 `mdwiki.attachments.allowed-import-dirs`
-(`MDWIKI_ATTACHMENTS_ALLOWED_IMPORT_DIRS`). По умолчанию список пуст —
-импорт с пути запрещён (осознанно, security).
+(`MDWIKI_ATTACHMENTS_ALLOWED_IMPORT_DIRS`). The list is empty by default —
+path import is disabled on purpose (security).
 
-Параметры: `filePath`, опционально `originalName`, `contentType`, `pageId`.
+Parameters: `filePath`, optional `originalName`, `contentType`, `pageId`.
 
-## MCP: список attachments
+## MCP: list attachments
 
-Инструмент `wiki_attachment_list` возвращает список вложений. Можно фильтровать по странице.
+`wiki_attachment_list` returns attachments. You can filter by page.
 
-Параметры:
-- `page` — опционально, номер страницы (0-based), по умолчанию `0`
-- `size` — опционально, размер страницы, по умолчанию `50`
-- `pageId` — опционально, UUID страницы для фильтрации
+Parameters:
+- `page` — optional page number (0-based), default `0`
+- `size` — optional page size, default `50`
+- `pageId` — optional page UUID to filter by
 
-Пример вызова:
+Example call:
 
 ```json
 {
@@ -241,7 +245,7 @@ HTTP `POST /api/uploads` не используется и удалён.
 }
 ```
 
-Пример ответа:
+Example response:
 
 ```json
 [
@@ -259,14 +263,14 @@ HTTP `POST /api/uploads` не используется и удалён.
 ]
 ```
 
-## MCP: удаление attachments
+## MCP: delete attachments
 
-Инструмент `wiki_attachment_delete` удаляет вложение по UUID (файл и запись в БД).
+`wiki_attachment_delete` deletes an attachment by UUID (file and DB row).
 
-Параметры:
-- `id` — UUID вложения
+Parameters:
+- `id` — attachment UUID
 
-Пример вызова:
+Example call:
 
 ```json
 {
@@ -278,7 +282,7 @@ HTTP `POST /api/uploads` не используется и удалён.
 }
 ```
 
-Пример ответа:
+Example response:
 
 ```json
 {

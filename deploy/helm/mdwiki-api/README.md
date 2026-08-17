@@ -1,17 +1,19 @@
 # mdwiki-api Helm chart
 
-Этот chart разворачивает:
+Русская версия: `README.ru.md`
+
+This chart deploys:
 
 - `mdwiki-api` (Deployment + Service)
-- PVC для `wiki-content` (опционально)
+- PVC for `wiki-content` (optional)
 - PostgreSQL `pgvector` (StatefulSet + Service)
-- Ingress (опционально)
+- Ingress (optional)
 
-## Быстрый старт
+## Quick start
 
 ```bash
-# Обычно деплоят через scripts/deploy-k8s-with-build.sh
-# (тег образа = git describe, например v0.1.0-3-g8d4bfd5).
+# Usually deployed via scripts/deploy-k8s-with-build.sh
+# (image tag = git describe, e.g. v0.1.0-3-g8d4bfd5).
 helm upgrade --install mdwiki-api ./deploy/helm/mdwiki-api \
   --namespace mdwiki \
   --create-namespace \
@@ -20,12 +22,12 @@ helm upgrade --install mdwiki-api ./deploy/helm/mdwiki-api \
   --set app.jwtSecret='replace-me'
 ```
 
-Локальный кластер: `VALUES_FILE=./values-local.yaml ./scripts/deploy-k8s-with-build.sh`
-из корня репозитория (`app.jwtSecret` и embedding задаются в values-local).
+Local cluster: `VALUES_FILE=./values-local.yaml ./scripts/deploy-k8s-with-build.sh`
+from the repo root (`app.jwtSecret` and embeddings are set in values-local).
 
-## Обязательные настройки для production
+## Required production settings
 
-- `image.repository` / `image.tag` (предпочтительно `git describe --tags --always`)
-- `app.jwtSecret` (обязателен; дефолта в приложении больше нет)
+- `image.repository` / `image.tag` (prefer `git describe --tags --always`)
+- `app.jwtSecret` (required; the app no longer has a default)
 - `postgres.password`
-- при `EMBEDDING_PROVIDER=openai`: `app.openaiApiKey`
+- when `EMBEDDING_PROVIDER=openai`: `app.openaiApiKey`
