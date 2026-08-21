@@ -138,16 +138,23 @@ PURGE_DATA=true ./scripts/undeploy-k8s.sh
 
 Для **больших** файлов предпочтителен обход MCP-контента:
 
-1. `wiki_auth_token` → короткий Bearer JWT (`scope=pages:import`, ~10 мин)
+1. `wiki_auth_token` → короткий Bearer JWT (`scope=pages:import` по умолчанию, ~10 мин)
 2. `POST /api/pages/import` с `Authorization: Bearer …` и multipart `files`
 
 ### `wiki_auth_token`
 
-Параметров нет. Требует EDITOR/ADMIN (через MCP API key владельца).
+Параметр `scope` опционален. Требует EDITOR/ADMIN (через MCP API key владельца).
+
+| `scope` | REST |
+|---|---|
+| `pages:import` (default) | только `POST /api/pages/import` |
+| `attachments:upload` | только `POST /api/attachments` |
 
 Ответ: `token`, `tokenType`, `scope`, `expiresAt`, `expiresInSeconds`, `usage`.
 
-Scoped JWT на REST разрешён **только** для `POST /api/pages/import`; остальные пути → 403.
+Scopes живут в реестре `JwtScopes` (scope → method+path). Чужой путь → 403.
+
+Для больших картинок: `wiki_auth_token(scope=attachments:upload)` → `POST /api/attachments` (multipart `file`, опционально `pageId`). Мелкие файлы по-прежнему через `wiki_upload` (base64).
 
 ### `wiki_import`
 
@@ -172,6 +179,9 @@ HTTP-аналог: `POST /api/pages/import` (multipart `files`, `folderId`, `ove
 Инструменты пишут файл через `AttachmentService` (БД + `uploads/` на диске)
 и возвращают URL вида `/api/uploads/{storedName}` для **GET**-раздачи.
 HTTP `POST /api/uploads` не используется и удалён.
+
+Крупные файлы: `wiki_auth_token(scope=attachments:upload)` → REST
+`POST /api/attachments` (см. выше). Мелкие — `wiki_upload` (base64).
 
 ### `wiki_upload` (base64)
 

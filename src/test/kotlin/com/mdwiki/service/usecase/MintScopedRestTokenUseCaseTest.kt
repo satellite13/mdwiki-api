@@ -48,6 +48,31 @@ class MintScopedRestTokenUseCaseTest {
     }
 
     @Test
+    fun `editor gets scoped attachments upload token`() {
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@e.com", passwordHash = "h", role = UserRole.EDITOR)
+        )
+
+        val minted = useCase().execute("editor", JwtScopes.ATTACHMENTS_UPLOAD)
+
+        assertEquals(JwtScopes.ATTACHMENTS_UPLOAD, minted.scope)
+        assertEquals(600, minted.expiresInSeconds)
+        assertTrue(jwtService.validateToken(minted.token))
+        assertEquals(JwtScopes.ATTACHMENTS_UPLOAD, jwtService.parseToken(minted.token).scope)
+    }
+
+    @Test
+    fun `unknown scope is rejected`() {
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@e.com", passwordHash = "h", role = UserRole.EDITOR)
+        )
+
+        assertThrows<ForbiddenException> {
+            useCase().execute("editor", "pages:delete")
+        }
+    }
+
+    @Test
     fun `reader cannot mint token`() {
         whenever(userRepository.findByUsername("reader")).thenReturn(
             User(id = UUID.randomUUID(), username = "reader", email = "r@r.com", passwordHash = "h", role = UserRole.READER)

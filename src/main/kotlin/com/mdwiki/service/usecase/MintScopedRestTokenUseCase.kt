@@ -29,7 +29,7 @@ class MintScopedRestTokenUseCase(
         if (user.role != UserRole.EDITOR && user.role != UserRole.ADMIN) {
             throw ForbiddenException("EDITOR or ADMIN role required to mint REST tokens")
         }
-        if (scope != JwtScopes.PAGES_IMPORT) {
+        if (!JwtScopes.isKnown(scope)) {
             throw ForbiddenException("Unsupported token scope: $scope")
         }
         val expiresInMs = jwtProperties.scopedExpirationMs

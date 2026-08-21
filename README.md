@@ -139,16 +139,23 @@ After the API, deploy the frontend:
 
 For **large** files, prefer bypassing MCP content:
 
-1. `wiki_auth_token` → short-lived Bearer JWT (`scope=pages:import`, ~10 min)
+1. `wiki_auth_token` → short-lived Bearer JWT (`scope=pages:import` by default, ~10 min)
 2. `POST /api/pages/import` with `Authorization: Bearer …` and multipart `files`
 
 ### `wiki_auth_token`
 
-No parameters. Requires EDITOR/ADMIN (via the owner's MCP API key).
+Optional `scope`. Requires EDITOR/ADMIN (via the owner's MCP API key).
+
+| `scope` | REST |
+|---|---|
+| `pages:import` (default) | `POST /api/pages/import` only |
+| `attachments:upload` | `POST /api/attachments` only |
 
 Response: `token`, `tokenType`, `scope`, `expiresAt`, `expiresInSeconds`, `usage`.
 
-A scoped REST JWT is allowed **only** for `POST /api/pages/import`; other paths → 403.
+Scopes live in the `JwtScopes` registry (scope → method+path). Any other path → 403.
+
+For large images: `wiki_auth_token(scope=attachments:upload)` → `POST /api/attachments` (multipart `file`, optional `pageId`). Small files still go through `wiki_upload` (base64).
 
 ### `wiki_import`
 
@@ -174,6 +181,9 @@ HTTP equivalent: `POST /api/pages/import` (multipart `files`, `folderId`, `overw
 These tools write the file through `AttachmentService` (DB + `uploads/` on disk)
 and return a URL like `/api/uploads/{storedName}` for **GET** serving.
 HTTP `POST /api/uploads` is unused and has been removed.
+
+Large files: `wiki_auth_token(scope=attachments:upload)` → REST
+`POST /api/attachments` (see above). Small files still use `wiki_upload` (base64).
 
 ### `wiki_upload` (base64)
 

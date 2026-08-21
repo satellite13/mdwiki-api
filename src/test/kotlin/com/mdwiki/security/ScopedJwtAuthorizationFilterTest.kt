@@ -37,6 +37,39 @@ class ScopedJwtAuthorizationFilterTest {
     }
 
     @Test
+    fun `scoped token allows attachments upload`() {
+        setAuth(JwtScopes.ATTACHMENTS_UPLOAD)
+        val request = MockHttpServletRequest("POST", "/api/attachments")
+        request.servletPath = "/api/attachments"
+        val response = MockHttpServletResponse()
+        filter.doFilter(request, response, MockFilterChain())
+        assertEquals(200, response.status)
+        SecurityContextHolder.clearContext()
+    }
+
+    @Test
+    fun `attachments upload token forbids pages import`() {
+        setAuth(JwtScopes.ATTACHMENTS_UPLOAD)
+        val request = MockHttpServletRequest("POST", "/api/pages/import")
+        request.servletPath = "/api/pages/import"
+        val response = MockHttpServletResponse()
+        filter.doFilter(request, response, MockFilterChain())
+        assertEquals(403, response.status)
+        SecurityContextHolder.clearContext()
+    }
+
+    @Test
+    fun `pages import token forbids attachments upload`() {
+        setAuth(JwtScopes.PAGES_IMPORT)
+        val request = MockHttpServletRequest("POST", "/api/attachments")
+        request.servletPath = "/api/attachments"
+        val response = MockHttpServletResponse()
+        filter.doFilter(request, response, MockFilterChain())
+        assertEquals(403, response.status)
+        SecurityContextHolder.clearContext()
+    }
+
+    @Test
     fun `unscoped token is not restricted`() {
         setAuth(scope = null)
         val request = MockHttpServletRequest("GET", "/api/pages")

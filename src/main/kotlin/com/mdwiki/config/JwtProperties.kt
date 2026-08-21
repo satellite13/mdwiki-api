@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 data class JwtProperties(
     val secret: String,
     val expirationMs: Long = 86400000,
-    /** TTL for MCP-minted scoped REST tokens (e.g. pages:import). Default 10 minutes. */
+    /** TTL for MCP-minted scoped REST tokens (JwtScopes registry). Default 10 minutes. */
     val scopedExpirationMs: Long = 600_000
 ) {
     init {
