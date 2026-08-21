@@ -5,7 +5,7 @@ MCP-инструменты, RAG-поиск.
 
 English version: `README.md`
 
-Текущая версия: **v0.1.8** (см. git tag; runtime — `GET /api/version`).
+Текущая версия: **v0.1.9** (см. git tag; runtime — `GET /api/version`).
 
 ## Быстрый старт (локально)
 
@@ -34,8 +34,8 @@ GET /api/version
 ```json
 {
   "name": "mdwiki-api",
-  "version": "0.1.8",
-  "versionTag": "v0.1.8",
+  "version": "0.1.9",
+  "versionTag": "v0.1.9",
   "gitSha": "…"
 }
 ```
