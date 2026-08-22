@@ -70,6 +70,45 @@ class ScopedJwtAuthorizationFilterTest {
     }
 
     @Test
+    fun `scoped token allows bundles export and preview`() {
+        setAuth(JwtScopes.BUNDLES_EXPORT)
+        val export = MockHttpServletRequest("POST", "/api/bundles/export")
+        export.servletPath = "/api/bundles/export"
+        val exportResponse = MockHttpServletResponse()
+        filter.doFilter(export, exportResponse, MockFilterChain())
+        assertEquals(200, exportResponse.status)
+
+        val preview = MockHttpServletRequest("POST", "/api/bundles/preview")
+        preview.servletPath = "/api/bundles/preview"
+        val previewResponse = MockHttpServletResponse()
+        filter.doFilter(preview, previewResponse, MockFilterChain())
+        assertEquals(200, previewResponse.status)
+        SecurityContextHolder.clearContext()
+    }
+
+    @Test
+    fun `bundles export token forbids bundle import`() {
+        setAuth(JwtScopes.BUNDLES_EXPORT)
+        val request = MockHttpServletRequest("POST", "/api/bundles/import")
+        request.servletPath = "/api/bundles/import"
+        val response = MockHttpServletResponse()
+        filter.doFilter(request, response, MockFilterChain())
+        assertEquals(403, response.status)
+        SecurityContextHolder.clearContext()
+    }
+
+    @Test
+    fun `scoped token allows bundles import`() {
+        setAuth(JwtScopes.BUNDLES_IMPORT)
+        val request = MockHttpServletRequest("POST", "/api/bundles/import")
+        request.servletPath = "/api/bundles/import"
+        val response = MockHttpServletResponse()
+        filter.doFilter(request, response, MockFilterChain())
+        assertEquals(200, response.status)
+        SecurityContextHolder.clearContext()
+    }
+
+    @Test
     fun `unscoped token is not restricted`() {
         setAuth(scope = null)
         val request = MockHttpServletRequest("GET", "/api/pages")

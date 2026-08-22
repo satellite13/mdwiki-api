@@ -135,7 +135,8 @@ class AttachmentService(
             contentType = contentType,
             sizeBytes = file.size,
             username = username,
-            pageId = pageId
+            pageId = pageId,
+            enforceMaxSize = true
         ) { destination ->
             file.inputStream.use { input ->
                 Files.copy(input, destination, StandardCopyOption.REPLACE_EXISTING)
@@ -163,7 +164,8 @@ class AttachmentService(
             contentType = contentType ?: Files.probeContentType(normalizedPath) ?: "application/octet-stream",
             sizeBytes = Files.size(normalizedPath),
             username = username,
-            pageId = pageId
+            pageId = pageId,
+            enforceMaxSize = true
         ) { destination ->
             Files.copy(normalizedPath, destination, StandardCopyOption.REPLACE_EXISTING)
         }
@@ -207,9 +209,38 @@ class AttachmentService(
             contentType = contentType ?: "application/octet-stream",
             sizeBytes = bytes.size.toLong(),
             username = username,
-            pageId = pageId
+            pageId = pageId,
+            enforceMaxSize = true
         ) { destination ->
             Files.write(destination, bytes)
+        }
+    }
+
+    /**
+     * Upload from a path that the server already trusts (unpacked bundle, not user-supplied host path).
+     * Skips allowed-import-dirs and the regular 20MB attachment cap — bundle size is checked separately.
+     */
+    @Transactional
+    fun uploadFromTrustedPath(
+        filePath: Path,
+        username: String,
+        pageId: UUID?,
+        originalName: String,
+        contentType: String
+    ): AttachmentResponse {
+        val normalizedPath = filePath.toAbsolutePath().normalize()
+        if (!Files.exists(normalizedPath) || !Files.isRegularFile(normalizedPath)) {
+            throw IllegalArgumentException("File does not exist: $normalizedPath")
+        }
+        return persistUpload(
+            originalName = originalName.ifBlank { normalizedPath.fileName.toString() },
+            contentType = contentType.ifBlank { Files.probeContentType(normalizedPath) ?: "application/octet-stream" },
+            sizeBytes = Files.size(normalizedPath),
+            username = username,
+            pageId = pageId,
+            enforceMaxSize = false
+        ) { destination ->
+            Files.copy(normalizedPath, destination, StandardCopyOption.REPLACE_EXISTING)
         }
     }
 
@@ -219,8 +250,12 @@ class AttachmentService(
         sizeBytes: Long,
         username: String,
         pageId: UUID?,
+        enforceMaxSize: Boolean = true,
         writeToDestination: (Path) -> Unit
     ): AttachmentResponse {
+        if (enforceMaxSize && sizeBytes > MAX_ATTACHMENT_BYTES) {
+            throw IllegalArgumentException("File exceeds max attachment size of 20MB")
+        }
         val normalizedContentType = contentType.substringBefore(';').trim().lowercase()
         if (normalizedContentType in blockedContentTypes) {
             throw IllegalArgumentException("Files of type '$contentType' are not allowed")
@@ -258,5 +293,9 @@ class AttachmentService(
             Files.deleteIfExists(filePath)
         }
         attachmentRepository.delete(attachment)
+    }
+
+    companion object {
+        const val MAX_ATTACHMENT_BYTES = 20L * 1024 * 1024
     }
 }

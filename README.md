@@ -150,6 +150,8 @@ Optional `scope`. Requires EDITOR/ADMIN (via the owner's MCP API key).
 |---|---|
 | `pages:import` (default) | `POST /api/pages/import` only |
 | `attachments:upload` | `POST /api/attachments` only |
+| `bundles:export` | `POST /api/bundles/preview` and `POST /api/bundles/export` |
+| `bundles:import` | `POST /api/bundles/import` only |
 
 Response: `token`, `tokenType`, `scope`, `expiresAt`, `expiresInSeconds`, `usage`.
 

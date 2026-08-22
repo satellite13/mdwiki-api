@@ -105,6 +105,23 @@ class AttachmentServiceTest {
     }
 
     @Test
+    fun `upload rejects files larger than 20MB`() {
+        val huge = MockMultipartFile(
+            "file",
+            "huge.bin",
+            "application/octet-stream",
+            ByteArray(1)
+        )
+        val oversized = object : MockMultipartFile("file", "huge.bin", "application/octet-stream", ByteArray(1)) {
+            override fun getSize(): Long = AttachmentService.MAX_ATTACHMENT_BYTES + 1
+        }
+        org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+            service.upload(oversized, "alice", null)
+        }
+        assertTrue(huge.size < AttachmentService.MAX_ATTACHMENT_BYTES)
+    }
+
+    @Test
     fun `upload links attachment to page when pageId provided`() {
         whenever(userRepository.findByUsername("alice")).thenReturn(uploader)
         val pageId = UUID.randomUUID()

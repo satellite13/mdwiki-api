@@ -8,4 +8,6 @@ import java.util.UUID
 
 interface AttachmentRepository : JpaRepository<Attachment, UUID> {
     fun findByPageId(pageId: UUID, pageable: Pageable): Page<Attachment>
+    fun findByPageIdIn(pageIds: Collection<UUID>): List<Attachment>
+    fun findByStoredName(storedName: String): Attachment?
 }

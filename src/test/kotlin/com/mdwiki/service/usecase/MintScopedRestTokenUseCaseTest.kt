@@ -62,6 +62,18 @@ class MintScopedRestTokenUseCaseTest {
     }
 
     @Test
+    fun `editor gets scoped bundles export token`() {
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@e.com", passwordHash = "h", role = UserRole.EDITOR)
+        )
+
+        val minted = useCase().execute("editor", JwtScopes.BUNDLES_EXPORT)
+
+        assertEquals(JwtScopes.BUNDLES_EXPORT, minted.scope)
+        assertEquals(JwtScopes.BUNDLES_EXPORT, jwtService.parseToken(minted.token).scope)
+    }
+
+    @Test
     fun `unknown scope is rejected`() {
         whenever(userRepository.findByUsername("editor")).thenReturn(
             User(id = UUID.randomUUID(), username = "editor", email = "e@e.com", passwordHash = "h", role = UserRole.EDITOR)

@@ -21,8 +21,8 @@ spring:
       embeddingDim: ${EMBEDDING_DIMENSION:1536}
   servlet:
     multipart:
-      max-file-size: ${MDWIKI_UPLOAD_MAX_FILE_SIZE:20MB}
-      max-request-size: ${MDWIKI_UPLOAD_MAX_REQUEST_SIZE:25MB}
+      max-file-size: ${MDWIKI_UPLOAD_MAX_FILE_SIZE:200MB}
+      max-request-size: ${MDWIKI_UPLOAD_MAX_REQUEST_SIZE:200MB}
   ai:
     mcp:
       server:
@@ -47,6 +47,8 @@ mdwiki:
     # Директории хоста, из которых разрешён импорт вложений по пути (MCP wiki_attachment_upload).
     # Пустой список = импорт по пути запрещён (защита от LFI).
     allowed-import-dirs: ${MDWIKI_ATTACHMENTS_ALLOWED_IMPORT_DIRS:}
+  bundle:
+    max-size: ${MDWIKI_BUNDLE_MAX_SIZE:200MB}
   # Размерность вектора в БД задаётся тем же EMBEDDING_DIMENSION (см. spring.liquibase.parameters).
   # Ollama nomic-embed-text → обычно 768; OpenAI text-embedding-3-small → 1536.
   embedding:

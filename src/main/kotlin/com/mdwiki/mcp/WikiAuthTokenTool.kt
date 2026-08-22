@@ -17,11 +17,13 @@ class WikiAuthTokenTool(
         description = "Mint a short-lived scoped Bearer JWT for REST uploads that do not fit MCP. " +
             "scope=pages:import (default) → POST /api/pages/import (multipart files). " +
             "scope=attachments:upload → POST /api/attachments (multipart file). " +
+            "scope=bundles:export → POST /api/bundles/preview or /api/bundles/export. " +
+            "scope=bundles:import → POST /api/bundles/import (multipart zip). " +
             "TTL ~10 minutes. Requires EDITOR or ADMIN."
     )
     fun mint(
         @McpToolParam(
-            description = "REST scope: pages:import (default) or attachments:upload",
+            description = "REST scope: pages:import (default), attachments:upload, bundles:export, bundles:import",
             required = false
         )
         scope: String?

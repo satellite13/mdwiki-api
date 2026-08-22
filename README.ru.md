@@ -149,6 +149,8 @@ PURGE_DATA=true ./scripts/undeploy-k8s.sh
 |---|---|
 | `pages:import` (default) | только `POST /api/pages/import` |
 | `attachments:upload` | только `POST /api/attachments` |
+| `bundles:export` | `POST /api/bundles/preview` и `POST /api/bundles/export` |
+| `bundles:import` | только `POST /api/bundles/import` |
 
 Ответ: `token`, `tokenType`, `scope`, `expiresAt`, `expiresInSeconds`, `usage`.
 
