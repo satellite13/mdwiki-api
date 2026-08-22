@@ -1,22 +1,28 @@
 package com.mdwiki.controller
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.mdwiki.dto.ApiErrorResponse
 import com.mdwiki.error.AppException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.web.ErrorResponseException
+import org.springframework.web.HttpMediaTypeNotAcceptableException
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 
 @RestControllerAdvice(basePackages = ["com.mdwiki.controller"])
-class GlobalExceptionHandler {
+class GlobalExceptionHandler(
+    private val objectMapper: ObjectMapper
+) {
     private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
     @ExceptionHandler(AppException::class)
     fun handleAppException(e: AppException, request: HttpServletRequest): ResponseEntity<ApiErrorResponse> {
@@ -157,6 +163,40 @@ class GlobalExceptionHandler {
                     path = request.requestURI
                 )
             )
+    }
+
+    /**
+     * When Accept is event-stream or an image type, a JSON error body fails
+     * content negotiation and Spring nests another 406. Write JSON directly.
+     */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException::class)
+    fun handleNotAcceptable(
+        e: HttpMediaTypeNotAcceptableException,
+        request: HttpServletRequest,
+        response: HttpServletResponse
+    ) {
+        log.warn(
+            "Not acceptable at {} {}: Accept={}",
+            request.method,
+            request.requestURI,
+            request.getHeader("Accept")
+        )
+        writeJson(
+            response,
+            HttpStatus.NOT_ACCEPTABLE,
+            ApiErrorResponse(
+                error = "NOT_ACCEPTABLE",
+                message = e.message ?: "No acceptable representation",
+                path = request.requestURI
+            )
+        )
+    }
+
+    private fun writeJson(response: HttpServletResponse, status: HttpStatus, body: ApiErrorResponse) {
+        if (response.isCommitted) return
+        response.status = status.value()
+        response.contentType = MediaType.APPLICATION_JSON_VALUE
+        objectMapper.writeValue(response.outputStream, body)
     }
 
     @ExceptionHandler(Exception::class)

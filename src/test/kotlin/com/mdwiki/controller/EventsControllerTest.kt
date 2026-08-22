@@ -41,6 +41,15 @@ class EventsControllerTest {
     }
 
     @Test
+    fun `tree events without token and sse Accept stays 401 not 406`() {
+        mockMvc.get("/api/events/tree") {
+            accept = MediaType.TEXT_EVENT_STREAM
+        }.andExpect {
+            status { isUnauthorized() }
+        }
+    }
+
+    @Test
     fun `tree events with blank token returns 401`() {
         mockMvc.get("/api/events/tree") {
             param("token", "   ")
