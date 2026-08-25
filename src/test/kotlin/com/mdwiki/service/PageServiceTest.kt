@@ -326,6 +326,33 @@ class PageServiceTest {
     }
 
     @Test
+    fun `update accepts expectedUpdatedAt that differs only below postgres microsecond precision`() {
+        val stored = Instant.parse("2026-08-15T10:00:00.123456Z")
+        val fromPreviousResponse = stored.plusNanos(789)
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "my-page",
+            title = "Old",
+            contentMd = "old content",
+            updatedAt = stored
+        )
+        page.filePath = tempDir.resolve("my-page.md").toString()
+        tempDir.resolve("my-page.md").toFile().writeText("old content")
+        val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(user)
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageService.update(
+            "my-page",
+            UpdatePageRequest(contentMd = "new content", expectedUpdatedAt = fromPreviousResponse),
+            "editor"
+        )
+
+        verify(pageRepository).save(argThat<Page> { contentMd == "new content" })
+    }
+
+    @Test
     fun `findBySlug pulls from disk when markdown exists but db has no active row`() {
         val slug = "from-disk"
         tempDir.resolve("$slug.md").toFile().writeText("# T\nbody")

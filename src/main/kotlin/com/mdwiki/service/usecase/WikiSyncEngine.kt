@@ -13,13 +13,13 @@ import com.mdwiki.service.SyncService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.util.PathSanitizer
+import com.mdwiki.util.PersistentInstant
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
-import java.time.Instant
 
 @Component
 class WikiSyncEngine(
@@ -162,7 +162,7 @@ class WikiSyncEngine(
             existing.title = extractTitle(content, slug)
             existing.filePath = file.absolutePath
             existing.folder = folder
-            existing.updatedAt = Instant.now()
+            existing.updatedAt = PersistentInstant.now()
             frontmatterMetaService.refreshFromContent(existing, content)
             val saved = pageRepository.save(existing)
             pageMetadataService.syncLinksAndTags(saved, content)

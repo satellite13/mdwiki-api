@@ -12,9 +12,9 @@ import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.util.MarkdownTaskScanner
+import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
-import java.time.Instant
 
 @Component
 class CompleteOpenTaskUseCase(
@@ -33,7 +33,7 @@ class CompleteOpenTaskUseCase(
         if (frontmatterMetaService.isLocked(page)) {
             throw ForbiddenException("Page '${page.slug}' is locked and cannot be edited")
         }
-        if (page.updatedAt != request.updatedAt) {
+        if (!PersistentInstant.same(page.updatedAt, request.updatedAt)) {
             throw ConflictException("Page '${page.slug}' has changed; refresh open tasks")
         }
 
@@ -53,7 +53,7 @@ class CompleteOpenTaskUseCase(
         frontmatterMetaService.refreshFromContent(page, updatedContent)
         wikiFileService.createOrRewritePageFile(page, updatedContent)
         page.updatedBy = user
-        page.updatedAt = Instant.now()
+        page.updatedAt = PersistentInstant.now()
 
         val saved = pageRepository.save(page)
         pageMetadataService.syncLinksAndTags(saved, updatedContent, cleanupOrphanedTags = true)

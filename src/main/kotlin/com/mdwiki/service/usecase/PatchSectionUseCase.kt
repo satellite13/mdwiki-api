@@ -11,6 +11,7 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.util.MarkdownSectionParser
+import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
 
 @Component
@@ -28,7 +29,7 @@ class PatchSectionUseCase(
         if (frontmatterMetaService.isLocked(page)) {
             throw ForbiddenException("Page '$slug' is locked and cannot be edited")
         }
-        if (page.updatedAt != request.expectedUpdatedAt) {
+        if (!PersistentInstant.same(page.updatedAt, request.expectedUpdatedAt)) {
             throw ConflictException("Page '$slug' has changed; refresh and retry with current updatedAt")
         }
         val content = page.contentMd ?: ""

@@ -16,8 +16,8 @@ import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
+import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
-import java.time.Instant
 import java.util.UUID
 
 @Component
@@ -43,7 +43,7 @@ class UpdatePageUseCase(
         if (frontmatterMetaService.isLocked(page)) {
             throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be edited")
         }
-        if (request.expectedUpdatedAt != null && page.updatedAt != request.expectedUpdatedAt) {
+        if (request.expectedUpdatedAt != null && !PersistentInstant.same(page.updatedAt, request.expectedUpdatedAt)) {
             throw ConflictException("Page '$slug' has changed; refresh and retry with current updatedAt")
         }
 
@@ -95,7 +95,7 @@ class UpdatePageUseCase(
                     )
                     if (rewritten != md) {
                         other.contentMd = rewritten
-                        other.updatedAt = Instant.now()
+                        other.updatedAt = PersistentInstant.now()
                         frontmatterMetaService.refreshFromContent(other, rewritten)
                         wikiFileService.createOrRewritePageFile(other, rewritten)
                         pageRepository.save(other)
@@ -117,7 +117,7 @@ class UpdatePageUseCase(
         }
 
         page.updatedBy = user
-        page.updatedAt = Instant.now()
+        page.updatedAt = PersistentInstant.now()
 
         val saved = pageRepository.save(page)
 

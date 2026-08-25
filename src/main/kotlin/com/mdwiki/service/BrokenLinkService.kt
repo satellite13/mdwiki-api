@@ -11,9 +11,9 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.util.MarkdownFrontmatter
+import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.Instant
 
 @Service
 class BrokenLinkService(
@@ -165,7 +165,7 @@ class BrokenLinkService(
         if (rewritten == md) return false
 
         page.contentMd = rewritten
-        page.updatedAt = Instant.now()
+        page.updatedAt = PersistentInstant.now()
         frontmatterMetaService.refreshFromContent(page, rewritten)
         wikiFileService.createOrRewritePageFile(page, rewritten)
         val saved = pageRepository.save(page)

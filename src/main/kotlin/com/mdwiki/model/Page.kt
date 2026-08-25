@@ -2,6 +2,7 @@ package com.mdwiki.model
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.mdwiki.util.PageSlugNormalizer
+import com.mdwiki.util.PersistentInstant
 import jakarta.persistence.*
 import org.hibernate.annotations.BatchSize
 import org.hibernate.annotations.JdbcTypeCode
@@ -62,10 +63,10 @@ class Page(
     var deletedAt: Instant? = null,
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    val createdAt: Instant = Instant.now(),
+    val createdAt: Instant = PersistentInstant.now(),
 
     @Column(name = "updated_at", nullable = false)
-    var updatedAt: Instant = Instant.now()
+    var updatedAt: Instant = PersistentInstant.now()
 ) {
     /** Держит normalized_title синхронным с title при любом INSERT/UPDATE через JPA. */
     @PrePersist
