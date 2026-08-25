@@ -19,7 +19,7 @@ class VersionControllerTest {
         mockMvc.get("/api/version").andExpect {
             status { isOk() }
             jsonPath("$.name") { value("mdwiki-api") }
-            jsonPath("$.version") { value("0.1.11") }
+            jsonPath("$.version") { value("0.1.12") }
             jsonPath("$.versionTag") { exists() }
             jsonPath("$.gitSha") { exists() }
         }
