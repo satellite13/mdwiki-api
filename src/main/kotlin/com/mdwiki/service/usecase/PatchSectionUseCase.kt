@@ -33,14 +33,25 @@ class PatchSectionUseCase(
             throw ConflictException("Page '$slug' has changed; refresh and retry with current updatedAt")
         }
         val content = page.contentMd ?: ""
-        val section = MarkdownSectionParser.parse(content).find { it.stableKey == request.sectionKey }
+        val parsed = MarkdownSectionParser.parse(content)
+        val section = parsed.find { it.stableKey == request.sectionKey }
             ?: throw NotFoundException("Section '${request.sectionKey}' not found on page '$slug'")
         val currentHash = SectionIndexService.hashOf(content, section.startOffset, section.endOffset)
         if (request.expectedHash != null && request.expectedHash != currentHash) {
             throw ConflictException("Section '${request.sectionKey}' has changed; refresh wiki_map")
         }
         val from = if (request.mode == PatchSectionMode.BODY) section.bodyStartOffset else section.startOffset
-        val spliced = content.substring(0, from) + request.content + content.substring(section.endOffset)
+        val suffix = content.substring(section.endOffset)
+        val keysAfter = parsed.filter { it.startOffset >= section.endOffset }.map { it.stableKey }
+        val incoming = protectFollowingHeading(request.content, suffix)
+        val spliced = content.substring(0, from) + incoming + suffix
+        val surviving = MarkdownSectionParser.parse(spliced).map { it.stableKey }.toSet()
+        val swallowed = keysAfter.filter { it !in surviving }
+        if (swallowed.isNotEmpty()) {
+            throw IllegalArgumentException(
+                "Patch would swallow following section(s): ${swallowed.joinToString()}. End content with a newline and close fences so the next heading stays on its own line."
+            )
+        }
         val saved = updatePageUseCase.execute(
             slug,
             UpdatePageRequest(contentMd = spliced, expectedUpdatedAt = request.expectedUpdatedAt),
@@ -60,5 +71,12 @@ class PatchSectionUseCase(
             updatedAt = saved.updatedAt,
             contentHash = newHash
         )
+    }
+
+    private fun protectFollowingHeading(incoming: String, suffix: String): String {
+        if (suffix.isEmpty() || !suffix.startsWith('#') || incoming.endsWith('\n')) {
+            return incoming
+        }
+        return incoming + "\n"
     }
 }

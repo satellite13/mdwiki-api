@@ -14,7 +14,7 @@ class WikiPatchSectionTool(private val pageService: PageService) {
 
     @McpTool(
         name = "wiki_patch_section",
-        description = "Replace one section by stable key from wiki_map. Parent keys (includesChildren=true) replace the heading and all nested subsections — use a leaf key to change only one block. mode=body keeps the heading line (default); mode=section replaces the heading too. expectedUpdatedAt is required. Optional expectedHash from wiki_map rejects stale section content."
+        description = "Replace one section by stable key from wiki_map. Parent keys (includesChildren=true) replace the heading and all nested subsections — use a leaf key to change only one block. mode=body keeps the heading line (default); mode=section replaces the heading too. expectedUpdatedAt is required. Optional expectedHash from wiki_map rejects stale section content. If content has no trailing newline and the next heading would be glued onto the last line, a newline is inserted; an unclosed fence or other splice that swallows a following section is rejected."
     )
     fun patch(
         @McpToolParam(description = "Page slug") slug: String,

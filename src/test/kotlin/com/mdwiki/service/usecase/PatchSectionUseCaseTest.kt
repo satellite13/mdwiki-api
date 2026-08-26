@@ -136,6 +136,97 @@ class PatchSectionUseCaseTest {
         )
     }
 
+    @Test
+    fun `inserts newline so following heading is not glued`() {
+        val md = "# Intro\nbefore\n\n## API\nold\n\n## Other\nkeep"
+        val page = page(md)
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("note")).thenReturn(page)
+        whenever(updatePageUseCase.execute(eq("note"), any(), eq("editor"))).thenAnswer {
+            val req = it.arguments[1] as UpdatePageRequest
+            pageResponse(page, req.contentMd!!)
+        }
+
+        useCase().execute(
+            "note",
+            PatchSectionRequest(
+                sectionKey = "intro/api",
+                content = "new",
+                expectedUpdatedAt = page.updatedAt,
+                mode = PatchSectionMode.BODY
+            ),
+            "editor"
+        )
+
+        verify(updatePageUseCase).execute(
+            eq("note"),
+            eq(
+                UpdatePageRequest(
+                    contentMd = "# Intro\nbefore\n\n## API\nnew\n## Other\nkeep",
+                    expectedUpdatedAt = page.updatedAt
+                )
+            ),
+            eq("editor")
+        )
+    }
+
+    @Test
+    fun `keeps last section without trailing newline`() {
+        val md = "## API\nold"
+        val page = page(md)
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("note")).thenReturn(page)
+        whenever(updatePageUseCase.execute(eq("note"), any(), eq("editor"))).thenAnswer {
+            val req = it.arguments[1] as UpdatePageRequest
+            pageResponse(page, req.contentMd!!)
+        }
+
+        useCase().execute(
+            "note",
+            PatchSectionRequest(
+                sectionKey = "api",
+                content = "new",
+                expectedUpdatedAt = page.updatedAt,
+                mode = PatchSectionMode.BODY
+            ),
+            "editor"
+        )
+
+        verify(updatePageUseCase).execute(
+            eq("note"),
+            eq(
+                UpdatePageRequest(
+                    contentMd = "## API\nnew",
+                    expectedUpdatedAt = page.updatedAt
+                )
+            ),
+            eq("editor")
+        )
+    }
+
+    @Test
+    fun `rejects patch that swallows a following heading`() {
+        val md = "## API\nold\n\n## Other\nkeep"
+        val page = page(md)
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("note")).thenReturn(page)
+
+        val error = assertThrows<IllegalArgumentException> {
+            useCase().execute(
+                "note",
+                PatchSectionRequest(
+                    sectionKey = "api",
+                    content = "```\nunterminated",
+                    expectedUpdatedAt = page.updatedAt,
+                    mode = PatchSectionMode.BODY
+                ),
+                "editor"
+            )
+        }
+
+        assertEquals(
+            "Patch would swallow following section(s): other. End content with a newline and close fences so the next heading stays on its own line.",
+            error.message
+        )
+    }
+
     private fun useCase() = PatchSectionUseCase(pageRepository, frontmatterMetaService, updatePageUseCase)
 
     private fun page(content: String) = Page(
