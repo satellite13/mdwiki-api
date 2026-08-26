@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.mdwiki"
-version = "0.1.12"
+version = "0.1.13"
 
 java {
     toolchain {
