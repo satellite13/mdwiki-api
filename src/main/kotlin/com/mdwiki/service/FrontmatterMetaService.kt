@@ -33,13 +33,20 @@ class FrontmatterMetaService {
 
     /**
      * Проверяет, заблокирована ли страница для редактирования (read-only).
-     * Проверка идёт по frontmatter — если в нём есть `locked: true`, страница locked.
-     * Если frontmatterMeta ещё не сохранена в БД, парсит из переданного содержимого.
+     * Источник истины — `contentMd` (как в файле); `frontmatterMeta` — запасной кеш.
      */
     fun isLocked(page: com.mdwiki.model.Page): Boolean {
-        val meta = page.frontmatterMeta
-            ?: parseToJson(page.contentMd)
-            ?: return false
+        parseToJson(page.contentMd)?.let { return isLockedMeta(it) }
+        return page.frontmatterMeta?.let { isLockedMeta(it) } ?: false
+    }
+
+    /** `locked: true` в YAML frontmatter переданного markdown (без сущности Page). */
+    fun isLockedContent(contentMd: String?): Boolean {
+        val meta = parseToJson(contentMd) ?: return false
+        return isLockedMeta(meta)
+    }
+
+    private fun isLockedMeta(meta: JsonNode): Boolean {
         val lockedNode = meta.get("locked")
         return lockedNode != null && lockedNode.isBoolean && lockedNode.booleanValue()
     }

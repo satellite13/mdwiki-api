@@ -47,4 +47,25 @@ class FrontmatterMetaServiceTest {
         service.refreshFromContent(page, broken)
         assertNull(page.frontmatterMeta)
     }
+
+    @Test
+    fun `isLockedContent reads locked flag from markdown`() {
+        assertTrue(service.isLockedContent("---\nlocked: true\n---\nbody"))
+        assertFalse(service.isLockedContent("---\nlocked: false\n---\nbody"))
+        assertFalse(service.isLockedContent("---\ntitle: Doc\n---\nbody"))
+        assertFalse(service.isLockedContent("# no frontmatter"))
+    }
+
+    @Test
+    fun `isLocked prefers contentMd over stale frontmatterMeta`() {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "x",
+            title = "X",
+            contentMd = "---\nlocked: true\n---\nbody"
+        )
+        // Кеш без locked — раньше из‑за этого API отдавал locked=false
+        page.frontmatterMeta = service.parseToJson("---\ntitle: X\n---\n")
+        assertTrue(service.isLocked(page))
+    }
 }

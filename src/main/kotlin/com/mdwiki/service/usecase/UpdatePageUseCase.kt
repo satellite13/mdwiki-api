@@ -41,7 +41,13 @@ class UpdatePageUseCase(
             ?: throw NotFoundException("User not found: $username")
 
         if (frontmatterMetaService.isLocked(page)) {
-            throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be edited")
+            // Разрешаем только снятие лока: новый contentMd без locked: true.
+            // Иначе залоченную страницу нельзя разблокировать через тот же PUT.
+            val unlocking = request.contentMd != null &&
+                !frontmatterMetaService.isLockedContent(request.contentMd)
+            if (!unlocking) {
+                throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be edited")
+            }
         }
         if (request.expectedUpdatedAt != null && !PersistentInstant.same(page.updatedAt, request.expectedUpdatedAt)) {
             throw ConflictException("Page '$slug' has changed; refresh and retry with current updatedAt")

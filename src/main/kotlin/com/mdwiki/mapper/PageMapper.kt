@@ -30,10 +30,7 @@ fun Page.toResponse(): PageResponse = PageResponse(
     title = displayTitle(),
     contentMd = contentMd,
     frontmatterMeta = frontmatterMeta,
-    locked = frontmatterMeta?.let { meta ->
-        val lockedNode = meta.get("locked")
-        lockedNode != null && lockedNode.isBoolean && lockedNode.booleanValue()
-    } ?: false,
+    locked = pageIsLocked(),
     tags = tags.map { it.name },
     createdBy = createdBy?.username,
     updatedBy = updatedBy?.username,
@@ -74,6 +71,33 @@ fun Page.displayTitle(): String {
         return contentFrontmatterTitle
     }
     return title.trim().ifBlank { slug }
+}
+
+/**
+ * `locked: true` из contentMd (источник истины), иначе из кеша frontmatterMeta.
+ * Раньше смотрели только на meta — при null/устаревшем кеше API отдавал locked=false,
+ * хотя в тексте уже было locked: true.
+ */
+private fun Page.pageIsLocked(): Boolean {
+    lockedFlagFromMeta(parseFrontmatterJson(contentMd))?.let { return it }
+    lockedFlagFromMeta(frontmatterMeta)?.let { return it }
+    return false
+}
+
+private fun lockedFlagFromMeta(meta: com.fasterxml.jackson.databind.JsonNode?): Boolean? {
+    if (meta == null) return null
+    val lockedNode = meta.get("locked") ?: return null
+    if (!lockedNode.isBoolean) return null
+    return lockedNode.booleanValue()
+}
+
+private fun parseFrontmatterJson(contentMd: String?): com.fasterxml.jackson.databind.JsonNode? {
+    if (contentMd.isNullOrBlank()) return null
+    val yaml = MarkdownFrontmatter.extractYamlInner(contentMd) ?: return null
+    if (yaml.isBlank()) return null
+    return runCatching {
+        frontmatterYamlMapper.readTree(yaml.byteInputStream(Charsets.UTF_8))
+    }.getOrNull()
 }
 
 /** Title from YAML frontmatter `title`, or null if absent / unparseable. */

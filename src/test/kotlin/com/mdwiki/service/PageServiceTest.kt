@@ -475,6 +475,52 @@ class PageServiceTest {
     }
 
     @Test
+    fun `update rejects content change on locked page`() {
+        val lockedMd = "---\nlocked: true\n---\nbody"
+        val page = Page(id = UUID.randomUUID(), slug = "locked-page", title = "Locked", contentMd = lockedMd)
+        page.filePath = tempDir.resolve("locked-page.md").toString()
+        tempDir.resolve("locked-page.md").toFile().writeText(lockedMd)
+        frontmatterMetaService.refreshFromContent(page, lockedMd)
+
+        val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("locked-page")).thenReturn(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(user)
+
+        assertThrows<com.mdwiki.error.ForbiddenException> {
+            pageService.update(
+                "locked-page",
+                UpdatePageRequest(contentMd = "---\nlocked: true\n---\nchanged"),
+                "editor"
+            )
+        }
+    }
+
+    @Test
+    fun `update allows unlocking locked page`() {
+        val lockedMd = "---\nlocked: true\n---\nbody"
+        val unlockedMd = "body"
+        val page = Page(id = UUID.randomUUID(), slug = "locked-page", title = "Locked", contentMd = lockedMd)
+        page.filePath = tempDir.resolve("locked-page.md").toString()
+        tempDir.resolve("locked-page.md").toFile().writeText(lockedMd)
+        frontmatterMetaService.refreshFromContent(page, lockedMd)
+
+        val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("locked-page")).thenReturn(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(user)
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        val result = pageService.update(
+            "locked-page",
+            UpdatePageRequest(contentMd = unlockedMd),
+            "editor"
+        )
+
+        assertEquals(unlockedMd, result.contentMd)
+        assertFalse(result.locked)
+        assertEquals(unlockedMd, tempDir.resolve("locked-page.md").toFile().readText())
+    }
+
+    @Test
     fun `update preserves slug when title changes`() {
         val pageId = UUID.randomUUID()
         val page = Page(id = pageId, slug = "schema", title = "Schema", contentMd = "content")
