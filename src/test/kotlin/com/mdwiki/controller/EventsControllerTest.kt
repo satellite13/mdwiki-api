@@ -4,7 +4,9 @@ import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.JwtService
+import com.mdwiki.service.ParsedJwt
 import com.mdwiki.service.TreeEventsService
+import java.time.Instant
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
@@ -72,7 +74,9 @@ class EventsControllerTest {
     @Test
     fun `tree events with valid bearer but missing user returns 401`() {
         whenever(jwtService.validateToken("t")).thenReturn(true)
-        whenever(jwtService.extractUsername("t")).thenReturn("ghost")
+        whenever(jwtService.parseToken("t")).thenReturn(
+            ParsedJwt(username = "ghost", scope = null, expiresAt = Instant.now().plusSeconds(60))
+        )
         whenever(userRepository.findByUsername("ghost")).thenReturn(null)
 
         mockMvc.get("/api/events/tree") {
@@ -98,7 +102,9 @@ class EventsControllerTest {
     @Test
     fun `tree events with valid bearer token returns event stream`() {
         whenever(jwtService.validateToken("ok")).thenReturn(true)
-        whenever(jwtService.extractUsername("ok")).thenReturn("alice")
+        whenever(jwtService.parseToken("ok")).thenReturn(
+            ParsedJwt(username = "alice", scope = null, expiresAt = Instant.now().plusSeconds(60))
+        )
         whenever(userRepository.findByUsername("alice")).thenReturn(
             User(username = "alice", email = "a@b", passwordHash = "x", role = UserRole.READER)
         )
