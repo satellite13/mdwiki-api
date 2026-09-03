@@ -7,6 +7,8 @@ English version: `README.md`
 
 Текущая версия: **v0.1.14** (см. git tag; runtime — `GET /api/version`).
 
+[![CI](https://github.com/satellite13/mdwiki-api/actions/workflows/ci.yml/badge.svg)](https://github.com/satellite13/mdwiki-api/actions/workflows/ci.yml)
+
 ## Быстрый старт (локально)
 
 ```sh

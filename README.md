@@ -7,6 +7,8 @@ MCP tools, and RAG search.
 
 Current version: **v0.1.14** (see the git tag; at runtime — `GET /api/version`).
 
+[![CI](https://github.com/satellite13/mdwiki-api/actions/workflows/ci.yml/badge.svg)](https://github.com/satellite13/mdwiki-api/actions/workflows/ci.yml)
+
 ## Quick start (local)
 
 ```sh
