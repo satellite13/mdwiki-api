@@ -19,6 +19,8 @@ import com.mdwiki.service.SearchService
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.DynamicPropertyRegistry
@@ -228,6 +230,11 @@ class Wave2PipelineIntegrationTest {
 
     @Test
     fun `text and rag search apply all requested tags before limit`() {
+        whenever(embeddingProvider.embed(any<List<String>>()))
+            .thenAnswer { invocation ->
+                @Suppress("UNCHECKED_CAST")
+                (invocation.arguments[0] as List<String>).map { FloatArray(1536) { 0.01f } }
+            }
         val actor = editor("tag-search")
         val suffix = UUID.randomUUID().toString().replace("-", "")
         val one = "one$suffix"

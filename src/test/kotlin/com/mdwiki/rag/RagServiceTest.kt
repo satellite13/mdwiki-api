@@ -8,6 +8,7 @@ import com.mdwiki.service.GraphService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
@@ -107,7 +108,7 @@ class RagServiceTest {
         )
         whenever(embeddingProvider.embed(listOf("Body"))).thenThrow(RuntimeException("always-fail"))
 
-        ragService.indexPage(page)
+        assertThrows<IllegalStateException> { ragService.indexPage(page) }
 
         verify(embeddingProvider, times(3)).embed(listOf("Body"))
         verify(pageChunkRepository, never()).updateEmbedding(any(), any())

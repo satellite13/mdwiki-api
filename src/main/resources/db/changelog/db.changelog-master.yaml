@@ -17,3 +17,5 @@ databaseChangeLog:
       file: db/changelog/008-pkm-wave2.yaml
   - include:
       file: db/changelog/009-wave2-revision-trash.yaml
+  - include:
+      file: db/changelog/010-page-index-queue.yaml

@@ -53,7 +53,8 @@ class RagService(
         )
 
         val texts = savedChunks.map { it.chunkText }
-        val embeddings = embedForIndexWithRetry(texts, page.slug) ?: return
+        val embeddings = embedForIndexWithRetry(texts, page.slug)
+            ?: throw IllegalStateException("Embedding failed for page '${page.slug}'")
         if (embeddings.size != savedChunks.size) {
             log.error(
                 "Embedding size mismatch for page '{}': chunks={}, embeddings={}, elapsedMs={}",
@@ -62,7 +63,7 @@ class RagService(
                 embeddings.size,
                 elapsedMs(startedAt)
             )
-            return
+            throw IllegalStateException("Embedding count mismatch for page '${page.slug}'")
         }
 
         for (i in savedChunks.indices) {
