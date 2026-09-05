@@ -108,6 +108,7 @@ class FolderService(
 
     @Transactional
     fun rename(id: UUID, request: UpdateFolderRequest): FolderResponse {
+        MultiPageMutationLock.acquire(pageRepository)
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
 
@@ -133,6 +134,7 @@ class FolderService(
 
     @Transactional
     fun move(id: UUID, request: MoveFolderRequest): FolderResponse {
+        MultiPageMutationLock.acquire(pageRepository)
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
 
@@ -176,6 +178,7 @@ class FolderService(
 
     @Transactional
     fun delete(id: UUID, pageAction: FolderDeletePageAction = FolderDeletePageAction.DELETE) {
+        MultiPageMutationLock.acquire(pageRepository)
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
         val folderDir = wikiFileService.resolveFolderDirectory(folder)

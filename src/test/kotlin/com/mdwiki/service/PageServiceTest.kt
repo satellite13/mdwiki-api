@@ -598,6 +598,40 @@ class PageServiceTest {
         verify(pageRepository, never()).save(argThat<Page> {
             contentMd?.startsWith("stale") == true
         })
+        inOrder(pageRepository) {
+            verify(pageRepository).acquireTransactionAdvisoryLock(MultiPageMutationLock.KEY)
+            verify(pageRepository).findActiveIdBySlug("old-slug")
+            verify(pageRepository).findAllActiveByIdInForUpdate(lockIds)
+        }
+    }
+
+    @Test
+    fun `combined title and slug rewrite uses the old title identity`() {
+        val page = renameablePage().apply { title = "Old Title" }
+        val incoming = Page(
+            id = UUID.randomUUID(),
+            slug = "incoming",
+            title = "Incoming",
+            contentMd = "[[old-title]] and [[old-slug]]"
+        )
+        stubRenameLocks(page, listOf(incoming))
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+        whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
+        whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageService.update(
+            "old-slug",
+            UpdatePageRequest(title = "New Title", slug = "new-slug"),
+            "editor"
+        )
+
+        verify(pageRepository).save(argThat<Page> {
+            id == incoming.id && contentMd == "[[new-slug]] and [[new-slug]]"
+        })
+        verify(linkRepository, times(1)).updateAllTargetSlugs("old-slug", "new-slug")
     }
 
     @Test

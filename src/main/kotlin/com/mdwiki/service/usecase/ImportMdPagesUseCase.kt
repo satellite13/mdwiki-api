@@ -8,9 +8,11 @@ import com.mdwiki.dto.ImportMdPagesResponse
 import com.mdwiki.dto.UpdatePageRequest
 import com.mdwiki.error.AppException
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.service.MultiPageMutationLock
 import com.mdwiki.service.WikilinkService
 import com.mdwiki.util.MdImportTitleResolver
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
 @Component
@@ -20,12 +22,14 @@ class ImportMdPagesUseCase(
     private val updatePageUseCase: UpdatePageUseCase,
     private val wikilinkService: WikilinkService
 ) {
+    @Transactional
     fun execute(
         files: List<ImportMdFileInput>,
         folderId: UUID?,
         overwrite: Boolean,
         username: String
     ): ImportMdPagesResponse {
+        MultiPageMutationLock.acquire(pageRepository)
         val results = files.map { file -> importOne(file, folderId, overwrite, username) }
         return ImportMdPagesResponse(
             results = results,

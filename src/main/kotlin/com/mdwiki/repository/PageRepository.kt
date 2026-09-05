@@ -11,6 +11,12 @@ import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 interface PageRepository : JpaRepository<Page, UUID> {
+    @Query(
+        value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(:lockKey)) AS acquired",
+        nativeQuery = true
+    )
+    fun acquireTransactionAdvisoryLock(@Param("lockKey") lockKey: Long): Int
+
     fun findBySlug(slug: String): Page?
     fun findBySlugAndDeletedAtIsNull(slug: String): Page?
 

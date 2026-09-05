@@ -97,6 +97,10 @@ class SyncServiceTest {
         val result = syncService.fullSync()
 
         assertEquals(1, result.added)
+        inOrder(pageRepository) {
+            verify(pageRepository).acquireTransactionAdvisoryLock(MultiPageMutationLock.KEY)
+            verify(pageRepository).findAll(any<Pageable>())
+        }
         verify(pageRepository, atLeast(1)).save(argThat<Page> { slug == "new-page" && folder == null })
     }
 

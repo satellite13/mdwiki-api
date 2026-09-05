@@ -76,6 +76,9 @@ class BrokenLinkService(
         sourceSlug: String?,
         username: String,
     ): RewriteBrokenLinksResponse {
+        if (sourceSlug == null) {
+            MultiPageMutationLock.acquire(pageRepository)
+        }
         val targetPage = pageRepository.findBySlugAndDeletedAtIsNull(toSlug)
             ?: throw NotFoundException("Page not found: $toSlug")
         userRepository.findByUsername(username)

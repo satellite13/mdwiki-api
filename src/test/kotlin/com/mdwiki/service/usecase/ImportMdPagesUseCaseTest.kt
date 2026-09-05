@@ -8,6 +8,7 @@ import com.mdwiki.dto.UpdatePageRequest
 import com.mdwiki.error.ForbiddenException
 import com.mdwiki.model.Page
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.service.MultiPageMutationLock
 import com.mdwiki.service.WikilinkService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -17,6 +18,7 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -68,6 +70,11 @@ class ImportMdPagesUseCaseTest {
             eq(CreatePageRequest(slug = "my-note", title = "My Note", contentMd = "# My Note\nhello", folderId = null)),
             eq("editor")
         )
+        inOrder(pageRepository, createPageUseCase) {
+            verify(pageRepository).acquireTransactionAdvisoryLock(MultiPageMutationLock.KEY)
+            verify(pageRepository).findBySlugAndDeletedAtIsNull("my-note")
+            verify(createPageUseCase).execute(any(), eq("editor"))
+        }
     }
 
     @Test

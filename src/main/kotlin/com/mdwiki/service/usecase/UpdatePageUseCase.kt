@@ -13,6 +13,7 @@ import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
+import com.mdwiki.service.MultiPageMutationLock
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.SyncService
@@ -20,6 +21,7 @@ import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
 @Component
@@ -36,14 +38,19 @@ class UpdatePageUseCase(
     private val syncService: SyncService,
     private val sectionIndexService: SectionIndexService
 ) {
+    @Transactional
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
         request.slug?.let { explicitSlug ->
             if (!Regex(PageSlugConstraints.PATTERN).matches(explicitSlug)) {
                 throw BadRequestException(PageSlugConstraints.MESSAGE)
             }
         }
+        val multiPageRename = request.slug != null && request.slug != slug
+        if (multiPageRename) {
+            MultiPageMutationLock.acquire(pageRepository)
+        }
         val lockedRenamePages: List<Page>
-        val page = if (request.slug != null) {
+        val page = if (multiPageRename) {
             val sourceId = pageRepository.findActiveIdBySlug(slug)
                 ?: throw NotFoundException("Page not found: $slug")
             val lockIds = (pageRepository.findAllActiveIds() + sourceId)
@@ -75,6 +82,8 @@ class UpdatePageUseCase(
         }
 
         val oldSlug = page.slug
+        val oldTitle = page.title
+        val oldNormalizedTitle = wikilinkService.normalizePageSlug(oldTitle)
 
         request.title?.let { page.title = it }
 
@@ -106,9 +115,6 @@ class UpdatePageUseCase(
         }
         val slugChanged = newSlug != oldSlug
         val folderChanged = previousFolderId != page.folder?.id
-
-        // Сохраняем нормализованный title ДО изменения title страницы
-        val oldNormalizedTitle = wikilinkService.normalizePageSlug(page.title)
 
         if (slugChanged) {
             contentForSave = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(
