@@ -37,3 +37,9 @@ data class SavedViewResponse(
     val sort: JsonNode, val grouping: JsonNode?, val layout: JsonNode,
     val version: Long, val createdAt: Instant, val updatedAt: Instant
 )
+
+/** One database-filtered view row. `groupKey` is present only for grouped views. */
+data class ViewRunItem(
+    val page: PageListItem,
+    val groupKey: String? = null
+)

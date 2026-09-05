@@ -112,11 +112,12 @@ class PropertyService(
             val v = runCatching { validateValue(definition, raw) }.getOrNull() ?: return@forEach
             val row = PagePropertyValue(PagePropertyValueId(requireNotNull(page.id), requireNotNull(definition.id)), page, definition, hash, v)
             when (definition.type) {
-                PropertyType.TEXT, PropertyType.URL -> row.textValue = v.asText()
+                PropertyType.TEXT, PropertyType.URL, PropertyType.SELECT -> row.textValue = v.asText()
                 PropertyType.NUMBER -> row.numberValue = v.decimalValue()
                 PropertyType.BOOLEAN -> row.boolValue = v.booleanValue()
                 PropertyType.DATE -> row.dateValue = LocalDate.parse(v.asText())
                 PropertyType.DATETIME -> row.datetimeValue = Instant.parse(v.asText())
+                PropertyType.PAGE_REF -> row.pageRef = pages.findBySlugAndDeletedAtIsNull(v.asText())
                 else -> Unit
             }
             values.save(row)

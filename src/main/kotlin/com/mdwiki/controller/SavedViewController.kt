@@ -14,6 +14,6 @@ class SavedViewController(private val views: SavedViewService) {
     @GetMapping("/{id}") fun get(@PathVariable id: UUID, auth: Authentication) = views.get(id, auth.name)
     @PatchMapping("/{id}") fun update(@PathVariable id: UUID, @RequestBody request: SavedViewWriteRequest, auth: Authentication) = views.update(id, request, auth.name)
     @DeleteMapping("/{id}") fun delete(@PathVariable id: UUID, auth: Authentication) = views.delete(id, auth.name)
-    @PostMapping("/{id}/run") fun run(@PathVariable id: UUID, @RequestParam(defaultValue = "0") cursor: Int, @RequestParam(defaultValue = "50") limit: Int, auth: Authentication) =
+    @PostMapping("/{id}/run") fun run(@PathVariable id: UUID, @RequestParam(required = false) cursor: String?, @RequestParam(defaultValue = "50") limit: Int, auth: Authentication) =
         views.run(id, auth.name, cursor, limit)
 }

@@ -32,9 +32,9 @@ class PropertyController(
     @PreAuthorize("hasRole('ADMIN')")
     fun delete(@PathVariable id: UUID) = properties.delete(id)
 
-    @PostMapping("/admin/properties/reproject")
+    @PostMapping("/admin/properties/reindex")
     @PreAuthorize("hasRole('ADMIN')")
-    fun reproject() = properties.reprojectAll()
+    fun reindex() = properties.reprojectAll()
 
     @GetMapping("/pages/{slug}/properties")
     fun getPage(@PathVariable slug: String) = properties.pageProperties(slug)
