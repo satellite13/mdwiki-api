@@ -162,6 +162,7 @@ class UpdatePageUseCase(
                     pageMetadataService.syncLinksAndTags(other, rewritten, cleanupOrphanedTags = false)
                     pageIndexer.indexAfterCommit(other)
                     sectionIndexService.rebuild(other, rewritten)
+                    pageRevisionService?.record(other, username, RevisionOperation.RENAME)
                 }
             }
         }

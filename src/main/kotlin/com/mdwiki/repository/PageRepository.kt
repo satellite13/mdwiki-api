@@ -66,7 +66,8 @@ interface PageRepository : JpaRepository<Page, UUID> {
     @Query(
         value = """
             SELECT p.* FROM pages p
-            WHERE p.content_tsv @@ plainto_tsquery('russian', :query)
+            WHERE p.deleted_at IS NULL
+              AND p.content_tsv @@ plainto_tsquery('russian', :query)
             ORDER BY ts_rank(p.content_tsv, plainto_tsquery('russian', :query)) DESC
             LIMIT :limit
         """,
@@ -87,7 +88,8 @@ interface PageRepository : JpaRepository<Page, UUID> {
                     'StartSel=【, StopSel=】, MaxWords=55, MinWords=18, MaxFragments=2, ShortWord=3, FragmentDelimiter= … '
                 ) AS headline
             FROM pages p
-            WHERE p.content_tsv @@ plainto_tsquery('russian', :query)
+            WHERE p.deleted_at IS NULL
+              AND p.content_tsv @@ plainto_tsquery('russian', :query)
             ORDER BY ts_rank(p.content_tsv, plainto_tsquery('russian', :query)) DESC
             LIMIT :limit
         """,

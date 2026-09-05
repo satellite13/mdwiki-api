@@ -14,6 +14,7 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.*
 import java.util.UUID
+import java.time.Instant
 
 @ExtendWith(MockitoExtension::class)
 class RagServiceTest {
@@ -131,6 +132,22 @@ class RagServiceTest {
         assertEquals(1, results.size)
         assertEquals("vector-page", results.first().pageSlug)
         assertEquals(0.91, results.first().score, 0.0001)
+    }
+
+    @Test
+    fun `search excludes deleted vector candidates`() {
+        val pageId = UUID.randomUUID()
+        val chunkId = UUID.randomUUID()
+        val deleted = Page(id = pageId, slug = "deleted", title = "Deleted", contentMd = "secret",
+            deletedAt = Instant.now())
+        whenever(embeddingProvider.embed("secret")).thenReturn(floatArrayOf(0.2f))
+        whenever(pageChunkRepository.findByVectorSimilarity(any(), any())).thenReturn(
+            listOf(arrayOf(chunkId as Any, pageId as Any, 0 as Any, "secret" as Any, "" as Any, 0.9 as Any))
+        )
+        whenever(pageRepository.findAllById(any<Iterable<UUID>>())).thenReturn(listOf(deleted))
+        whenever(pageRepository.fullTextSearch(eq("secret"), any())).thenReturn(emptyList())
+
+        assertTrue(ragService.search("secret", 5).isEmpty())
     }
 
     @Test

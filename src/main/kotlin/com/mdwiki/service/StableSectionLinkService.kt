@@ -37,6 +37,11 @@ class StableSectionLinkService(
             throw BadRequestException("Preamble and frontmatter cannot have stable links")
         }
         val stableId = section.explicitId ?: newStableId()
+        if (section.explicitId != null &&
+            MarkdownSectionParser.parse(page.contentMd ?: "").count { it.explicitId == stableId } > 1
+        ) {
+            throw ConflictException("Duplicate explicit section id '$stableId'")
+        }
         anchors.findByStableId(stableId)?.takeIf { it.page.id != page.id }?.let {
             throw ConflictException("Stable section id already exists")
         }

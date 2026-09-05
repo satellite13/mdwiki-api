@@ -29,7 +29,8 @@ interface PageChunkRepository : JpaRepository<PageChunk, UUID> {
             SELECT pc.id, pc.page_id, pc.chunk_index, pc.chunk_text, pc.section_heading,
                    1 - (pc.embedding <=> cast(:queryEmbedding AS vector)) AS score
             FROM page_chunks pc
-            WHERE pc.embedding IS NOT NULL
+            JOIN pages p ON p.id = pc.page_id
+            WHERE pc.embedding IS NOT NULL AND p.deleted_at IS NULL
             ORDER BY pc.embedding <=> cast(:queryEmbedding AS vector)
             LIMIT :limit
         """,

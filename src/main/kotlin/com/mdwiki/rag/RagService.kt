@@ -247,7 +247,7 @@ class RagService(
             val chunkText = row[3] as String
             val sectionHeading = row[4] as? String
             val score = (row[5] as Number).toDouble()
-            val page = pagesMap[pageId] ?: return null
+            val page = pagesMap[pageId]?.takeIf { it.deletedAt == null } ?: return null
             ChunkCandidate(chunkId = chunkId, pageId = pageId, chunkText = chunkText,
                 sectionHeading = sectionHeading, pageTitle = page.title, pageSlug = page.slug, score = score)
         } catch (e: Exception) {

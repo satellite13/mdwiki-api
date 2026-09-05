@@ -50,7 +50,8 @@ class SavedSearchService(
     @Transactional
     fun update(username: String, id: UUID, request: SavedSearchWriteRequest): SavedSearchResponse {
         validate(request)
-        val search = owned(username, id)
+        val search = searches.findByIdAndUserIdForUpdate(id, userId(username))
+            ?: throw NotFoundException("Saved search not found")
         if (request.expectedVersion == null || request.expectedVersion != search.version) {
             throw ConflictException("Saved search has changed")
         }
