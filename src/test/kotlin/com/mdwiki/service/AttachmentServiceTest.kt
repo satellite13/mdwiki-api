@@ -59,7 +59,8 @@ class AttachmentServiceTest {
             attachmentRepository,
             userRepository,
             pageRepository,
-            WikiProperties(contentDir = contentRoot.toString())
+            WikiProperties(contentDir = contentRoot.toString()),
+            FolderAccessPolicy(userRepository)
         )
     }
 
@@ -67,7 +68,7 @@ class AttachmentServiceTest {
     fun `list without pageId uses findAll`() {
         whenever(attachmentRepository.findAll(any<Pageable>())).thenReturn(PageImpl(emptyList()))
 
-        service.list(0, 50, null)
+        service.list(0, 50, null, "reader")
 
         verify(attachmentRepository).findAll(any<Pageable>())
     }
@@ -77,7 +78,7 @@ class AttachmentServiceTest {
         val pid = UUID.randomUUID()
         whenever(attachmentRepository.findByPageId(any<UUID>(), any<Pageable>())).thenReturn(PageImpl(emptyList()))
 
-        service.list(0, 50, pid)
+        service.list(0, 50, pid, "reader")
 
         verify(attachmentRepository).findByPageId(any<UUID>(), any<Pageable>())
     }
@@ -105,6 +106,26 @@ class AttachmentServiceTest {
         assertTrue(Files.exists(uploads.resolve(response.storedName)))
         verify(attachmentRepository).save(any<Attachment>())
         assertEquals("/api/uploads/${response.storedName}", response.url)
+    }
+
+    @Test
+    fun `foreign editor cannot upload attachment to owned page`() {
+        val alice = User(UUID.randomUUID(), "alice-owner", "owner@test", "x", UserRole.EDITOR)
+        val bob = User(UUID.randomUUID(), "bob", "bob@test", "x", UserRole.EDITOR)
+        val page = Page(
+            UUID.randomUUID(), "owned", "Owned",
+            folder = com.mdwiki.model.Folder(UUID.randomUUID(), "Inbox", owner = alice)
+        )
+        whenever(userRepository.findByUsername("bob")).thenReturn(bob)
+        whenever(pageRepository.findById(page.id!!)).thenReturn(Optional.of(page))
+
+        assertThrows<com.mdwiki.error.ForbiddenException> {
+            service.upload(
+                MockMultipartFile("file", "a.png", "image/png", byteArrayOf(1)),
+                "bob",
+                page.id
+            )
+        }
     }
 
     @Test
@@ -243,7 +264,7 @@ class AttachmentServiceTest {
         )
         whenever(attachmentRepository.findById(id)).thenReturn(Optional.of(att))
 
-        service.delete(id)
+        service.delete(id, "alice")
 
         assertTrue(!Files.exists(path))
         verify(attachmentRepository).delete(att)
@@ -255,7 +276,7 @@ class AttachmentServiceTest {
         whenever(attachmentRepository.findById(id)).thenReturn(Optional.empty())
 
         assertThrows<NotFoundException> {
-            service.delete(id)
+            service.delete(id, "alice")
         }
     }
 

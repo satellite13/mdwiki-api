@@ -13,7 +13,8 @@ class OpenTaskService(
     private val frontmatterMetaService: FrontmatterMetaService
 ) {
     @Transactional(readOnly = true)
-    fun listOpenTasks(): List<OpenTaskResponse> =
+    fun listOpenTasks(requestingUsername: String): List<OpenTaskResponse> =
+        // Shared-wiki reads intentionally remain global.
         pageRepository.findAllByDeletedAtIsNull().flatMap { page ->
             val pageId = page.id ?: return@flatMap emptyList()
             val locked = frontmatterMetaService.isLocked(page)

@@ -15,9 +15,10 @@ class AttachmentController(private val attachmentService: AttachmentService) {
     fun list(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
-        @RequestParam(required = false) pageId: UUID?
+        @RequestParam(required = false) pageId: UUID?,
+        auth: Authentication
     ): List<AttachmentResponse> {
-        return attachmentService.list(page, size, pageId)
+        return attachmentService.list(page, size, pageId, auth.name)
     }
 
     @PostMapping
@@ -30,7 +31,7 @@ class AttachmentController(private val attachmentService: AttachmentService) {
     }
 
     @DeleteMapping("/{id}")
-    fun delete(@PathVariable id: UUID) {
-        attachmentService.delete(id)
+    fun delete(@PathVariable id: UUID, auth: Authentication) {
+        attachmentService.delete(id, auth.name)
     }
 }

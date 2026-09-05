@@ -40,7 +40,7 @@ class OpenTaskServiceTest {
         )
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
 
-        val tasks = OpenTaskService(pageRepository, frontmatterMetaService).listOpenTasks()
+        val tasks = OpenTaskService(pageRepository, frontmatterMetaService).listOpenTasks("reader")
 
         assertEquals(2, tasks.size)
         assertEquals(page.id, tasks[0].documentId)
@@ -71,7 +71,7 @@ class OpenTaskServiceTest {
         )
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
 
-        val tasks = OpenTaskService(pageRepository, frontmatterMetaService).listOpenTasks()
+        val tasks = OpenTaskService(pageRepository, frontmatterMetaService).listOpenTasks("reader")
 
         assertEquals(listOf("Real task"), tasks.map { it.text })
     }
@@ -86,7 +86,7 @@ class OpenTaskServiceTest {
         )
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
 
-        val tasks = OpenTaskService(pageRepository, frontmatterMetaService).listOpenTasks()
+        val tasks = OpenTaskService(pageRepository, frontmatterMetaService).listOpenTasks("reader")
 
         assertEquals(listOf("Real task"), tasks.map { it.text })
     }

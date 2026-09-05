@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
+import org.springframework.test.web.servlet.get
 import java.time.Instant
 import java.util.UUID
 
@@ -45,6 +46,14 @@ class AnnotationControllerTest {
     )
 
     @Test
+    @WithMockUser(username = "reader", roles = ["READER"])
+    fun `annotation list propagates reader actor without private filtering`() {
+        whenever(annotationService.listBySlug("note", "reader")).thenReturn(listOf(annotation))
+
+        mockMvc.get("/api/pages/note/annotations").andExpect { status { isOk() } }
+    }
+
+    @Test
     @WithMockUser(roles = ["READER"])
     fun `READER cannot create update or delete annotations`() {
         val createBody = mapOf(
@@ -68,7 +77,7 @@ class AnnotationControllerTest {
     @Test
     @WithMockUser(username = "editor", roles = ["EDITOR"])
     fun `EDITOR can update annotations`() {
-        whenever(annotationService.update(any(), any())).thenReturn(annotation.copy(comment = "changed"))
+        whenever(annotationService.update(any(), any(), eq("editor"))).thenReturn(annotation.copy(comment = "changed"))
 
         mockMvc.put("/api/annotations/${annotation.id}") {
             contentType = MediaType.APPLICATION_JSON
@@ -82,7 +91,7 @@ class AnnotationControllerTest {
     @Test
     @WithMockUser(username = "editor", roles = ["EDITOR"])
     fun `update deserializes explicit annotation clear flags`() {
-        whenever(annotationService.update(any(), any())).thenReturn(annotation.copy(comment = null, color = null))
+        whenever(annotationService.update(any(), any(), eq("editor"))).thenReturn(annotation.copy(comment = null, color = null))
 
         mockMvc.put("/api/annotations/${annotation.id}") {
             contentType = MediaType.APPLICATION_JSON
@@ -95,7 +104,15 @@ class AnnotationControllerTest {
 
         verify(annotationService).update(
             eq(annotation.id),
-            argThat { clearComment == true && clearColor == true && comment == null && color == null }
+            argThat { clearComment == true && clearColor == true && comment == null && color == null },
+            eq("editor")
         )
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = ["ADMIN"])
+    fun `admin delete propagates actor`() {
+        mockMvc.delete("/api/annotations/${annotation.id}").andExpect { status { isOk() } }
+        verify(annotationService).delete(annotation.id, "admin")
     }
 }

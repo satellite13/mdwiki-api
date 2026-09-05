@@ -1,6 +1,7 @@
 package com.mdwiki.mcp
 
 import com.mdwiki.service.AnnotationService
+import com.mdwiki.mcp.McpSupport.currentUsername
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
 import org.springframework.stereotype.Component
@@ -15,7 +16,7 @@ class WikiAnnotationListTool(private val annotationService: AnnotationService) {
     fun list(
         @McpToolParam(description = "Page slug") slug: String
     ): List<Map<String, Any?>> {
-        return annotationService.listBySlug(slug).map { annotation ->
+        return annotationService.listBySlug(slug, currentUsername()).map { annotation ->
             mapOf(
                 "id" to annotation.id.toString(),
                 "pageId" to annotation.pageId.toString(),

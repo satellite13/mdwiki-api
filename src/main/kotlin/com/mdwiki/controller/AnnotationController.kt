@@ -13,8 +13,8 @@ import java.util.UUID
 class AnnotationController(private val annotationService: AnnotationService) {
 
     @GetMapping("/api/pages/{slug}/annotations")
-    fun listBySlug(@PathVariable slug: String): List<AnnotationResponse> {
-        return annotationService.listBySlug(slug)
+    fun listBySlug(@PathVariable slug: String, auth: Authentication): List<AnnotationResponse> {
+        return annotationService.listBySlug(slug, auth.name)
     }
 
     @PostMapping("/api/pages/{slug}/annotations")
@@ -29,13 +29,14 @@ class AnnotationController(private val annotationService: AnnotationService) {
     @PutMapping("/api/annotations/{id}")
     fun update(
         @PathVariable id: UUID,
-        @Valid @RequestBody request: UpdateAnnotationRequest
+        @Valid @RequestBody request: UpdateAnnotationRequest,
+        auth: Authentication
     ): AnnotationResponse {
-        return annotationService.update(id, request)
+        return annotationService.update(id, request, auth.name)
     }
 
     @DeleteMapping("/api/annotations/{id}")
-    fun delete(@PathVariable id: UUID) {
-        annotationService.delete(id)
+    fun delete(@PathVariable id: UUID, auth: Authentication) {
+        annotationService.delete(id, auth.name)
     }
 }

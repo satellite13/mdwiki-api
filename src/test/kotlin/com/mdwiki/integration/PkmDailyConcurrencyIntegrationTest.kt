@@ -3,10 +3,15 @@ package com.mdwiki.integration
 import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.PkmService
+import com.mdwiki.service.PageService
+import com.mdwiki.service.usecase.DeletePageUseCase
+import com.mdwiki.error.NotFoundException
 import com.mdwiki.dto.DailyNoteResponse
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import java.time.LocalDate
@@ -21,6 +26,8 @@ import java.util.concurrent.Future
 class PkmDailyConcurrencyIntegrationTest {
     @Autowired lateinit var users: UserRepository
     @Autowired lateinit var service: PkmService
+    @Autowired lateinit var pageService: PageService
+    @Autowired lateinit var pages: PageRepository
 
     @Test
     fun `concurrent daily PUT creates one page`() {
@@ -60,5 +67,25 @@ class PkmDailyConcurrencyIntegrationTest {
         assertThat(firstNote.page.slug).isNotEqualTo(secondNote.page.slug)
         assertThat(firstNote.page.slug).contains(first.id.toString())
         assertThat(secondNote.page.slug).contains(second.id.toString())
+    }
+
+    @Test
+    fun `PUT restores a soft deleted mapped daily note while GET treats it missing`() {
+        val suffix = UUID.randomUUID().toString().take(8)
+        val user = users.saveAndFlush(User(
+            username = "daily-recover-$suffix",
+            email = "recover-$suffix@test",
+            passwordHash = "x",
+            role = UserRole.EDITOR
+        ))
+        val date = LocalDate.of(2026, 9, 8)
+        val created = service.putDaily(date, user.username)
+        pageService.delete(created.page.slug, DeletePageUseCase.DeleteMode.SOFT, user.username)
+
+        assertThrows<NotFoundException> { service.getDaily(date, user.username) }
+
+        val restored = service.putDaily(date, user.username)
+        assertThat(restored.page.id).isEqualTo(created.page.id)
+        assertThat(pages.findById(restored.page.id).orElseThrow().deletedAt).isNull()
     }
 }

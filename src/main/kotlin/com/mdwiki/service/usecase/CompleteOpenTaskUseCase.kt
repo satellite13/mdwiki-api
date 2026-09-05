@@ -11,6 +11,7 @@ import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
+import com.mdwiki.service.FolderAccessPolicy
 import com.mdwiki.util.MarkdownTaskScanner
 import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
@@ -24,7 +25,8 @@ class CompleteOpenTaskUseCase(
     private val wikiFileService: WikiFileService,
     private val pageMetadataService: PageMetadataService,
     private val pageIndexer: DeferredPageIndexer,
-    private val sectionIndexService: SectionIndexService
+    private val sectionIndexService: SectionIndexService,
+    private val folderAccessPolicy: FolderAccessPolicy
 ) {
     @Transactional
     fun execute(request: CompleteOpenTaskRequest, username: String) {
@@ -33,6 +35,7 @@ class CompleteOpenTaskUseCase(
         if (frontmatterMetaService.isLocked(page)) {
             throw ForbiddenException("Page '${page.slug}' is locked and cannot be edited")
         }
+        page.folder?.let { folderAccessPolicy.requireAccess(it, username) }
         if (!PersistentInstant.same(page.updatedAt, request.updatedAt)) {
             throw ConflictException("Page '${page.slug}' has changed; refresh open tasks")
         }

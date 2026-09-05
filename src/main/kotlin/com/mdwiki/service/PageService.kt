@@ -180,6 +180,9 @@ class PageService(
         return saved.toResponse()
     }
 
+    @Transactional
+    internal fun restorePreAuthorized(slug: String): PageResponse = restore(slug)
+
     @Transactional(readOnly = true)
     fun findDeleted(): List<PageListItem> {
         return pageRepository.findByDeletedAtIsNotNullOrderByDeletedAtDesc().map { it.toListItem() }

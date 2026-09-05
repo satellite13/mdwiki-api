@@ -9,7 +9,6 @@ import com.mdwiki.mapper.toListItem
 import com.mdwiki.mapper.toResponse
 import com.mdwiki.model.*
 import com.mdwiki.repository.*
-import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.util.UnlinkedMentionScanner
 import com.mdwiki.util.RasterImageValidator
 import org.springframework.stereotype.Service
@@ -103,28 +102,22 @@ class PkmService(
         require((caption?.length ?: 0) <= 2000) { "Caption exceeds 2000 characters" }
         require((title?.length ?: 0) <= 500) { "Title exceeds 500 characters" }
         RasterImageValidator.validate(file)
-        val page = pageService.create(
-            CreatePageRequest(
-                slug("capture"),
-                title?.trim().takeUnless { it.isNullOrBlank() } ?: safeImageTitle(file.originalFilename),
-                "",
-                folder(username, true).id
-            ),
-            username
-        )
-        var attachment: AttachmentResponse? = null
+        val attachment = attachmentService.upload(file, username, null)
         try {
-            attachment = attachmentService.upload(file, username, page.id)
             val alt = caption?.trim().takeUnless { it.isNullOrBlank() } ?: attachment.originalName
-            val updated = pageService.update(
-                page.slug,
-                UpdatePageRequest(contentMd = "![$alt](${attachment.url})", expectedUpdatedAt = page.updatedAt),
+            val page = pageService.create(
+                CreatePageRequest(
+                    slug("capture"),
+                    title?.trim().takeUnless { it.isNullOrBlank() } ?: safeImageTitle(file.originalFilename),
+                    "![$alt](${attachment.url})",
+                    folder(username, true).id
+                ),
                 username
             )
-            return CaptureResponse("image", updated, attachment)
+            val linked = attachmentService.linkPreAuthorized(attachment.id, page.id)
+            return CaptureResponse("image", page, linked)
         } catch (error: Exception) {
-            attachment?.let { runCatching { attachmentService.delete(it.id) } }
-            runCatching { pageService.deletePreAuthorized(page.slug, DeletePageUseCase.DeleteMode.HARD) }
+            runCatching { attachmentService.deletePreAuthorized(attachment.id) }
             throw error
         }
     }
@@ -133,6 +126,7 @@ class PkmService(
     fun getDaily(date: LocalDate, username: String): DailyNoteResponse {
         val note = dailyNotes.findByUserIdAndNoteDate(user(username).id!!, date)
             ?: throw NotFoundException("Daily note not found: $date")
+        if (note.page.deletedAt != null) throw NotFoundException("Daily note not found: $date")
         return DailyNoteResponse(date.toString(), note.page.toResponse(), false)
     }
 
@@ -141,6 +135,10 @@ class PkmService(
         MultiPageMutationLock.acquire(pages)
         val owner = user(username)
         dailyNotes.findByUserIdAndNoteDate(owner.id!!, date)?.let {
+            if (it.page.deletedAt != null) {
+                val restored = pageService.restorePreAuthorized(it.page.slug)
+                return DailyNoteResponse(date.toString(), restored, false)
+            }
             return DailyNoteResponse(date.toString(), it.page.toResponse(), false)
         }
         val page = pageService.create(
@@ -188,13 +186,16 @@ class PkmService(
     fun mentions(targetSlug: String): List<UnlinkedMentionResponse> {
         val target = pages.findBySlugAndDeletedAtIsNull(targetSlug)
             ?: throw NotFoundException("Page not found: $targetSlug")
-        return pages.findAllByDeletedAtIsNull()
+        val sources = pages.findAllByDeletedAtIsNull().filter { it.id != target.id }
+        val sectionsByPage = sections.findByPageIdInOrderByPageIdAscSortOrderAsc(
+            sources.mapNotNull { it.id }
+        ).groupBy { it.page.id!! }
+        return sources
             .asSequence()
-            .filter { it.id != target.id }
             .flatMap { source ->
                 val content = source.contentMd.orEmpty()
                 UnlinkedMentionScanner.scan(content, target.displayTitle()).asSequence().map { match ->
-                    val sectionKey = sections.findByPageIdOrderBySortOrder(source.id!!)
+                    val sectionKey = sectionsByPage[source.id].orEmpty()
                         .lastOrNull { it.startOffset <= match.startOffset }?.stableKey
                     val from = (match.startOffset - 60).coerceAtLeast(0)
                     val to = (match.endOffset + 60).coerceAtMost(content.length)
@@ -237,12 +238,22 @@ class PkmService(
     fun orphans(definition: OrphanDefinition): List<OrphanPageResponse> {
         val active = pages.findAllByDeletedAtIsNull()
         val allLinks = links.findAllWithPages().filter { it.sourcePage.deletedAt == null }
+        val activeIds = active.mapNotNull { it.id }.toSet()
+        val incomingByPage = mutableMapOf<UUID, Long>()
+        val outgoingByPage = mutableMapOf<UUID, Long>()
+        for (link in allLinks) {
+            val sourceId = link.sourcePage.id ?: continue
+            val targetId = link.targetPage?.id
+            if (targetId == null || targetId in activeIds) {
+                outgoingByPage[sourceId] = outgoingByPage.getOrDefault(sourceId, 0L) + 1
+            }
+            if (targetId != null && targetId in activeIds) {
+                incomingByPage[targetId] = incomingByPage.getOrDefault(targetId, 0L) + 1
+            }
+        }
         return active.mapNotNull { page ->
-            val incoming = allLinks.count { it.targetPage?.deletedAt == null && it.targetPage?.id == page.id }.toLong()
-            // Unresolved links are intentional outgoing links; links resolved to deleted pages are ignored.
-            val outgoing = allLinks.count {
-                it.sourcePage.id == page.id && (it.targetPage == null || it.targetPage?.deletedAt == null)
-            }.toLong()
+            val incoming = incomingByPage[page.id] ?: 0L
+            val outgoing = outgoingByPage[page.id] ?: 0L
             val include = when (definition) {
                 OrphanDefinition.NO_INCOMING -> incoming == 0L
                 OrphanDefinition.NO_OUTGOING -> outgoing == 0L

@@ -46,7 +46,7 @@ class AttachmentControllerTest {
     @Test
     @WithMockUser(roles = ["READER"])
     fun `GET attachments delegates to service`() {
-        whenever(attachmentService.list(0, 50, null)).thenReturn(listOf(sample))
+        whenever(attachmentService.list(0, 50, null, "user")).thenReturn(listOf(sample))
 
         mockMvc.get("/api/attachments").andExpect {
             status { isOk() }
@@ -73,7 +73,7 @@ class AttachmentControllerTest {
         mockMvc.delete("/api/attachments/${sample.id}").andExpect {
             status { isOk() }
         }
-        verify(attachmentService).delete(sample.id)
+        verify(attachmentService).delete(sample.id, "ed")
     }
 
     @Test

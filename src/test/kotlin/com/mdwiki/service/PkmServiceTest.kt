@@ -25,6 +25,8 @@ import org.mockito.kotlin.whenever
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
+import org.mockito.kotlin.argThat
 import org.springframework.mock.web.MockMultipartFile
 import java.util.Optional
 import java.util.concurrent.atomic.AtomicReference
@@ -91,26 +93,23 @@ class PkmServiceTest {
     }
 
     @Test
-    fun `image capture compensates attachment and page after later update failure`() {
+    fun `image capture deletes attachment when single page create fails`() {
         val userId = UUID.randomUUID()
         val owner = User(userId, "alice", "alice@test", "x", UserRole.EDITOR)
         val inbox = Folder(UUID.randomUUID(), "Inbox", createdBy = owner, owner = owner)
         whenever(users.findByUsername("alice")).thenReturn(owner)
         whenever(settings.findById(userId)).thenReturn(Optional.of(UserPkmSettings(userId, owner, inboxFolder = inbox)))
-        val created = PageResponse(UUID.randomUUID(), "capture-x", "Image", "", tags = emptyList(),
-            createdBy = "alice", updatedBy = "alice", createdAt = Instant.now(), updatedAt = Instant.now())
         val attachment = AttachmentResponse(UUID.randomUUID(), "x.png", "stored.png", "image/png", 8L,
-            "alice", created.id, "/api/uploads/stored.png", Instant.now())
-        whenever(pageService.create(any(), eq("alice"))).thenReturn(created)
-        whenever(attachments.upload(any(), eq("alice"), eq(created.id))).thenReturn(attachment)
-        whenever(pageService.update(eq(created.slug), any(), eq("alice"))).thenThrow(IllegalStateException("update failed"))
+            "alice", null, "/api/uploads/stored.png", Instant.now())
+        whenever(attachments.upload(any(), eq("alice"), isNull())).thenReturn(attachment)
+        whenever(pageService.create(any(), eq("alice"))).thenThrow(IllegalStateException("create failed"))
         val png = MockMultipartFile("file", "x.png", "image/png",
             byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))
 
         assertThrows<IllegalStateException> { service.captureImage(png, null, null, "alice") }
 
-        verify(attachments).delete(attachment.id)
-        verify(pageService).deletePreAuthorized(eq(created.slug), any())
+        verify(attachments).deletePreAuthorized(attachment.id)
+        verify(pageService, org.mockito.kotlin.never()).update(any(), any(), any())
     }
 
     @Test
@@ -124,12 +123,41 @@ class PkmServiceTest {
     }
 
     @Test
+    fun `image capture writes final markdown in one page create`() {
+        val owner = User(UUID.randomUUID(), "alice", "alice@test", "x", UserRole.EDITOR)
+        val inbox = Folder(UUID.randomUUID(), "Inbox", owner = owner)
+        whenever(users.findByUsername("alice")).thenReturn(owner)
+        whenever(settings.findById(owner.id!!)).thenReturn(Optional.of(UserPkmSettings(owner.id!!, owner, inboxFolder = inbox)))
+        val attachment = AttachmentResponse(UUID.randomUUID(), "x.png", "stored.png", "image/png", 8L,
+            "alice", null, "/api/uploads/stored.png", Instant.now())
+        val page = PageResponse(
+            id = UUID.randomUUID(), slug = "capture-x", title = "Image",
+            contentMd = "![caption](/api/uploads/stored.png)", tags = emptyList(),
+            createdBy = "alice", updatedBy = "alice", folderId = inbox.id,
+            createdAt = Instant.now(), updatedAt = Instant.now()
+        )
+        whenever(attachments.upload(any(), eq("alice"), isNull())).thenReturn(attachment)
+        whenever(pageService.create(any(), eq("alice"))).thenReturn(page)
+        whenever(attachments.linkPreAuthorized(attachment.id, page.id)).thenReturn(attachment.copy(pageId = page.id))
+        val png = MockMultipartFile("file", "x.png", "image/png",
+            byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))
+
+        service.captureImage(png, "caption", null, "alice")
+
+        verify(pageService).create(argThat { contentMd == "![caption](/api/uploads/stored.png)" }, eq("alice"))
+        verify(pageService, org.mockito.kotlin.never()).update(any(), any(), any())
+    }
+
+    @Test
     fun `image filename fallback is sanitized and bounded before page creation`() {
         val userId = UUID.randomUUID()
         val owner = User(userId, "alice", "alice@test", "x", UserRole.EDITOR)
         val inbox = Folder(UUID.randomUUID(), "Inbox", createdBy = owner, owner = owner)
         whenever(users.findByUsername("alice")).thenReturn(owner)
         whenever(settings.findById(userId)).thenReturn(Optional.of(UserPkmSettings(userId, owner, inboxFolder = inbox)))
+        val attachment = AttachmentResponse(UUID.randomUUID(), "x.png", "stored.png", "image/png", 8L,
+            "alice", null, "/api/uploads/stored.png", Instant.now())
+        whenever(attachments.upload(any(), eq("alice"), isNull())).thenReturn(attachment)
         val capturedTitle = AtomicReference<String>()
         whenever(pageService.create(any(), eq("alice"))).thenAnswer { invocation ->
             capturedTitle.set(invocation.getArgument<com.mdwiki.dto.CreatePageRequest>(0).title)
@@ -163,6 +191,21 @@ class PkmServiceTest {
             .containsExactly("b")
         assertThat(service.orphans(OrphanDefinition.NO_INCOMING).first { it.page.slug == "a" }.outgoingCount)
             .isEqualTo(1)
+    }
+
+    @Test
+    fun `mention discovery batch loads sections once`() {
+        val target = page("target", "Target", "")
+        val first = page("first", "First", "Target one")
+        val second = page("second", "Second", "Target two")
+        whenever(pages.findBySlugAndDeletedAtIsNull("target")).thenReturn(target)
+        whenever(pages.findAllByDeletedAtIsNull()).thenReturn(listOf(target, first, second))
+        whenever(sections.findByPageIdInOrderByPageIdAscSortOrderAsc(any())).thenReturn(emptyList())
+
+        service.mentions("target")
+
+        verify(sections).findByPageIdInOrderByPageIdAscSortOrderAsc(any())
+        verify(sections, org.mockito.kotlin.never()).findByPageIdOrderBySortOrder(any())
     }
 
     private fun page(slug: String, title: String, content: String) = Page(

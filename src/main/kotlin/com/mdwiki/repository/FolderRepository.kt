@@ -11,6 +11,7 @@ interface FolderRepository : JpaRepository<Folder, UUID> {
     fun findByOwnerIdAndParentIdIsNullAndName(ownerId: UUID, name: String): Folder?
     fun existsByOwnerIdAndParentIdAndName(ownerId: UUID, parentId: UUID?, name: String): Boolean
     fun existsByOwnerIsNullAndParentIdIsNullAndName(name: String): Boolean
+    fun findAllByOwnerId(ownerId: UUID): List<Folder>
 
     @EntityGraph(attributePaths = ["parent", "owner"])
     override fun findAll(): List<Folder>

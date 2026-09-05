@@ -35,7 +35,7 @@ class TaskControllerTest {
     @Test
     @WithMockUser(roles = ["READER"])
     fun `GET open tasks returns tasks for READER`() {
-        whenever(openTaskService.listOpenTasks()).thenReturn(
+        whenever(openTaskService.listOpenTasks("user")).thenReturn(
             listOf(
                 OpenTaskResponse(
                     documentId = documentId,
@@ -55,31 +55,31 @@ class TaskControllerTest {
             jsonPath("$[0].documentTitle") { value("Roadmap") }
             jsonPath("$[0].text") { value("Finish controller") }
         }
-        verify(openTaskService).listOpenTasks()
+        verify(openTaskService).listOpenTasks("user")
     }
 
     @Test
     @WithMockUser(roles = ["EDITOR"])
     fun `GET open tasks returns tasks for EDITOR`() {
-        whenever(openTaskService.listOpenTasks()).thenReturn(emptyList())
+        whenever(openTaskService.listOpenTasks("user")).thenReturn(emptyList())
 
         mockMvc.get("/api/tasks/open").andExpect {
             status { isOk() }
         }
 
-        verify(openTaskService).listOpenTasks()
+        verify(openTaskService).listOpenTasks("user")
     }
 
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `GET open tasks returns tasks for ADMIN`() {
-        whenever(openTaskService.listOpenTasks()).thenReturn(emptyList())
+        whenever(openTaskService.listOpenTasks("user")).thenReturn(emptyList())
 
         mockMvc.get("/api/tasks/open").andExpect {
             status { isOk() }
         }
 
-        verify(openTaskService).listOpenTasks()
+        verify(openTaskService).listOpenTasks("user")
     }
 
     @Test

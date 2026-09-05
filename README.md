@@ -17,6 +17,9 @@ export JWT_SECRET='local-dev-secret-change-me'
 
 ./gradlew bootRun          # http://localhost:8080
 ./gradlew test             # unit/integration tests
+
+# Use a dedicated disposable database for the full integration suite:
+DB_URL=jdbc:postgresql://localhost:54328/mdwiki_test_pkm ./gradlew test
 ```
 
 In dev mode the frontend proxies `/api` to `:8080` (see
@@ -261,10 +264,16 @@ PKM root folders are owned and stored below `.pkm/{userId}/Inbox` and
 Legacy folders (`owner_id IS NULL`) remain shared. The existing global page/search ACL model
 still allows discovery of page metadata outside the tree, so complete content-level tenant
 isolation is not claimed.
+Owned PKM pages remain readable through global page, search, backlinks, and graph APIs under
+the shared-wiki read model. They are not a private vault: ownership protects mutations,
+filesystem storage, and folder-tree visibility only.
 Owned-folder mutations and page folder assignment require the owner or an Admin, including
 REST and MCP entry points; folder moves must preserve the ownership scope. Daily slugs contain
 the immutable full user UUID plus the date. If an image title is omitted, its original filename
 is reduced to a basename, stripped of control characters, and safely limited to 500 characters.
+Image capture uploads first and creates the page once with final Markdown; a failed page create
+removes the attachment. Database/filesystem after-commit failures still use the existing
+reconciliation behavior and are not claimed to be fully atomic.
 The legacy global disk reconciler and watcher intentionally skip `.pkm`; owned PKM Markdown
 must be mutated through authenticated page/capture APIs so it cannot be re-imported as shared content.
 

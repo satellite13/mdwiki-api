@@ -27,7 +27,8 @@ class AttachmentService(
     private val attachmentRepository: AttachmentRepository,
     private val userRepository: UserRepository,
     private val pageRepository: PageRepository,
-    private val wikiProperties: WikiProperties
+    private val wikiProperties: WikiProperties,
+    private val folderAccessPolicy: FolderAccessPolicy
 ) {
 
     private val log = LoggerFactory.getLogger(AttachmentService::class.java)
@@ -115,7 +116,8 @@ class AttachmentService(
     }
 
     @Transactional(readOnly = true)
-    fun list(page: Int, size: Int, pageId: UUID?): List<AttachmentResponse> {
+    fun list(page: Int, size: Int, pageId: UUID?, requestingUsername: String): List<AttachmentResponse> {
+        // Shared-wiki reads intentionally remain global; actor is propagated for a stable contract.
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
         val results = if (pageId != null) {
             attachmentRepository.findByPageId(pageId, pageable)
@@ -265,6 +267,7 @@ class AttachmentService(
         val user = userRepository.findByUsername(username)
         val linkedPage = pageId?.let {
             pageRepository.findById(it).orElseThrow { NotFoundException("Page not found: $it") }
+                .also { page -> page.folder?.let { folderAccessPolicy.requireAccess(it, username) } }
         }
         val ext = originalName.substringAfterLast('.', "")
         val storedName = "${UUID.randomUUID()}${if (ext.isNotBlank()) ".$ext" else ""}"
@@ -300,9 +303,30 @@ class AttachmentService(
     }
 
     @Transactional
-    fun delete(id: UUID) {
+    fun delete(id: UUID, username: String) {
         val attachment = attachmentRepository.findById(id)
             .orElseThrow { NotFoundException("Attachment not found") }
+        attachment.page?.folder?.let { folderAccessPolicy.requireAccess(it, username) }
+        deletePreAuthorized(attachment)
+    }
+
+    @Transactional
+    internal fun deletePreAuthorized(id: UUID) {
+        val attachment = attachmentRepository.findById(id)
+            .orElseThrow { NotFoundException("Attachment not found") }
+        deletePreAuthorized(attachment)
+    }
+
+    @Transactional
+    internal fun linkPreAuthorized(id: UUID, pageId: UUID): AttachmentResponse {
+        val attachment = attachmentRepository.findById(id)
+            .orElseThrow { NotFoundException("Attachment not found") }
+        attachment.page = pageRepository.findById(pageId)
+            .orElseThrow { NotFoundException("Page not found: $pageId") }
+        return attachmentRepository.save(attachment).toResponse()
+    }
+
+    private fun deletePreAuthorized(attachment: Attachment) {
         val filePath = uploadsDir.resolve(attachment.storedName).normalize()
         if (filePath.startsWith(uploadsDir)) {
             Files.deleteIfExists(filePath)
