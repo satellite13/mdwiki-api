@@ -8,7 +8,7 @@ import java.time.Instant
 import java.util.UUID
 
 enum class RevisionOperation {
-    CREATE, EDIT, PATCH, RESTORE, IMPORT, FILESYSTEM, RENAME
+    CREATE, EDIT, PATCH, RESTORE, IMPORT, FILESYSTEM, RENAME, DELETE, RESTORE_TRASH
 }
 
 @Entity
@@ -42,6 +42,9 @@ class PageRevision(
 
     @Column(name = "folder_id_snapshot")
     val folderIdSnapshot: UUID?,
+
+    @Column(name = "deleted_at_snapshot")
+    val deletedAtSnapshot: Instant?,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

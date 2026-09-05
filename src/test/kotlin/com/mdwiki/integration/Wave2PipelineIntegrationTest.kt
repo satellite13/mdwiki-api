@@ -179,4 +179,33 @@ class Wave2PipelineIntegrationTest {
             stableLinks.materialize(slug, StableLinkRequest(key, edited.updatedAt), intruder.username)
         }.isInstanceOf(ForbiddenException::class.java)
     }
+
+    @Test
+    fun `soft delete and trash restore append exactly one deleted-state revision and enforce ownership`() {
+        val owner = editor("trash-owner")
+        val intruder = editor("trash-intruder")
+        val folder = folders.saveAndFlush(Folder(name = "Trash-${UUID.randomUUID()}", owner = owner, createdBy = owner))
+        val slug = "trash-${UUID.randomUUID()}"
+        pageService.create(CreatePageRequest(slug, "Trash", "kept", folder.id), owner.username)
+
+        assertThatThrownBy {
+            pageService.delete(slug, com.mdwiki.service.usecase.DeletePageUseCase.DeleteMode.SOFT, intruder.username)
+        }.isInstanceOf(ForbiddenException::class.java)
+        pageService.delete(slug, com.mdwiki.service.usecase.DeletePageUseCase.DeleteMode.SOFT, owner.username)
+        pageService.delete(slug, com.mdwiki.service.usecase.DeletePageUseCase.DeleteMode.SOFT, owner.username)
+        val deleted = pages.findBySlug(slug)!!
+        var history = revisions.list(deleted, 10, null)
+        assertThat(history.map { it.operation }).containsExactly(
+            RevisionOperation.DELETE, RevisionOperation.CREATE
+        )
+        assertThat(revisions.get(deleted, history.first().revisionNo).deletedAt).isNotNull()
+
+        pageService.restore(slug, owner.username)
+        history = revisions.list(pages.findBySlugAndDeletedAtIsNull(slug)!!, 10, null)
+        assertThat(history.map { it.operation }).containsExactly(
+            RevisionOperation.RESTORE_TRASH, RevisionOperation.DELETE, RevisionOperation.CREATE
+        )
+        assertThat(revisions.get(pages.findBySlugAndDeletedAtIsNull(slug)!!,
+            history.first().revisionNo).deletedAt).isNull()
+    }
 }

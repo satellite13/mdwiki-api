@@ -112,7 +112,7 @@ class PageController(
         if (auth.authorities.none { it.authority == "ROLE_ADMIN" }) {
             throw ForbiddenException("Only administrators can restore deleted pages")
         }
-        pageService.restore(slug)
+        pageService.restore(slug, auth.name)
     } else pageService.restoreRevision(slug, request, auth.name)
 
     @GetMapping("/deleted")

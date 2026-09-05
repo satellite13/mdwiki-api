@@ -66,7 +66,11 @@ class SavedSearchService(
         search.sort = request.sort
         search.version++
         search.updatedAt = PersistentInstant.now()
-        return response(searches.saveAndFlush(search))
+        return try {
+            response(searches.saveAndFlush(search))
+        } catch (_: DataIntegrityViolationException) {
+            throw ConflictException("Saved search name already exists")
+        }
     }
 
     @Transactional

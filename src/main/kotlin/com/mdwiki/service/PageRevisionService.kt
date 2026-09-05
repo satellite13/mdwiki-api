@@ -24,6 +24,7 @@ data class RevisionSummary(
     val title: String,
     val slug: String,
     val folderId: UUID?,
+    val deletedAt: Instant?,
     val operation: RevisionOperation,
     val createdByName: String?,
     val createdAt: Instant,
@@ -38,6 +39,7 @@ data class RevisionSnapshot(
     val title: String,
     val slug: String,
     val folderId: UUID?,
+    val deletedAt: Instant?,
     val operation: RevisionOperation,
     val createdByName: String?,
     val createdAt: Instant,
@@ -72,6 +74,7 @@ class PageRevisionService(
                 titleSnapshot = page.title,
                 slugSnapshot = page.slug,
                 folderIdSnapshot = page.folder?.id,
+                deletedAtSnapshot = page.deletedAt,
                 operation = operation,
                 createdByUserId = actor?.id,
                 createdByName = username,
@@ -97,13 +100,13 @@ class PageRevisionService(
             ?: throw NotFoundException("Revision $revisionNo not found")
 
     private fun summary(r: PageRevision) = RevisionSummary(
-        r.revisionNo, r.contentHash, r.titleSnapshot, r.slugSnapshot, r.folderIdSnapshot,
+        r.revisionNo, r.contentHash, r.titleSnapshot, r.slugSnapshot, r.folderIdSnapshot, r.deletedAtSnapshot,
         r.operation, r.createdByName, r.createdAt, r.restoredFrom?.revisionNo
     )
 
     private fun snapshot(r: PageRevision) = RevisionSnapshot(
         requireNotNull(r.id), r.revisionNo, r.contentMd, r.contentHash, r.titleSnapshot,
-        r.slugSnapshot, r.folderIdSnapshot, r.operation, r.createdByName, r.createdAt,
+        r.slugSnapshot, r.folderIdSnapshot, r.deletedAtSnapshot, r.operation, r.createdByName, r.createdAt,
         r.restoredFrom?.revisionNo
     )
 

@@ -23,7 +23,8 @@ class SearchService(
                 pageId = hit.getId(),
                 slug = hit.getSlug(),
                 title = hit.getTitle(),
-                snippet = headlineToSearchSnippet(hit.getHeadline())
+                snippet = headlineToSearchSnippet(hit.getHeadline()),
+                updatedAt = hit.getUpdatedAt()
             )
         }
     }
@@ -51,7 +52,8 @@ class SearchService(
                 tags = page?.tags?.map { it.name }?.sorted().orEmpty(),
                 sectionKey = page?.contentMd?.let { content ->
                     SectionAnchorResolver.resolveKey(content, hit.sectionHeading, hit.chunkText)
-                }
+                },
+                updatedAt = page?.updatedAt
             )
         }
     }

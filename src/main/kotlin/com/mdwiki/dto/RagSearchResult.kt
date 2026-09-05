@@ -1,4 +1,5 @@
 package com.mdwiki.dto
+import java.time.Instant
 
 data class RagSearchResult(
     val chunkText: String,
@@ -8,5 +9,6 @@ data class RagSearchResult(
     val score: Double,
     val snippet: String,
     val tags: List<String> = emptyList(),
-    val sectionKey: String? = null
+    val sectionKey: String? = null,
+    val updatedAt: Instant? = null
 )

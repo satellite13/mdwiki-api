@@ -136,7 +136,7 @@ class PkmService(
         val owner = user(username)
         dailyNotes.findByUserIdAndNoteDate(owner.id!!, date)?.let {
             if (it.page.deletedAt != null) {
-                val restored = pageService.restorePreAuthorized(it.page.slug)
+                val restored = pageService.restorePreAuthorized(it.page.slug, username)
                 return DailyNoteResponse(date.toString(), restored, false)
             }
             return DailyNoteResponse(date.toString(), it.page.toResponse(), false)

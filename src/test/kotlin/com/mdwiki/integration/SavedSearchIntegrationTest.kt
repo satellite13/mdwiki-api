@@ -13,11 +13,12 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @SpringBootTest
-@Transactional
 class SavedSearchIntegrationTest {
     @Autowired lateinit var users: UserRepository
     @Autowired lateinit var service: SavedSearchService
@@ -44,5 +45,34 @@ class SavedSearchIntegrationTest {
         assertThatThrownBy { service.update(owner.username, created.id,
             request.copy(expectedVersion = created.version)) }
             .isInstanceOf(ConflictException::class.java)
+    }
+
+    @Test
+    fun `concurrent updates with one expected version yield one conflict`() {
+        val suffix = UUID.randomUUID().toString()
+        val owner = users.saveAndFlush(User(username = "race-$suffix", email = "race-$suffix@test",
+            passwordHash = "x", role = UserRole.READER))
+        val request = SavedSearchWriteRequest("Race", "q", SavedSearchMode.HYBRID)
+        val created = service.create(owner.username, request)
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+        val futures = listOf("A", "B").map { name ->
+            executor.submit<Boolean> {
+                start.await()
+                try {
+                    service.update(owner.username, created.id,
+                        request.copy(name = name, expectedVersion = created.version))
+                    true
+                } catch (_: ConflictException) {
+                    false
+                }
+            }
+        }
+        start.countDown()
+        val outcomes = futures.map { it.get(20, TimeUnit.SECONDS) }
+        executor.shutdown()
+
+        assertThat(outcomes).containsExactlyInAnyOrder(true, false)
+        assertThat(service.get(owner.username, created.id).version).isEqualTo(2)
     }
 }

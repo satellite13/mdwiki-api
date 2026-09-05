@@ -204,7 +204,7 @@ class PageService(
     }
 
     @Transactional
-    fun restore(slug: String): PageResponse {
+    fun restore(slug: String, username: String? = null): PageResponse {
         val page = pageRepository.findBySlugForUpdate(slug)
             ?: throw NotFoundException("Page not found: $slug")
         if (page.deletedAt == null) {
@@ -214,6 +214,8 @@ class PageService(
         // Возвращаем файл из корзины на место (если он там был).
         wikiFileService.restorePageFileFromTrash(page)
         val saved = pageRepository.save(page)
+        pageRepository.flush()
+        pageRevisionService?.record(saved, username, RevisionOperation.RESTORE_TRASH)
         sectionIndexService.rebuild(saved)
         folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
@@ -221,7 +223,8 @@ class PageService(
     }
 
     @Transactional
-    internal fun restorePreAuthorized(slug: String): PageResponse = restore(slug)
+    internal fun restorePreAuthorized(slug: String, username: String? = null): PageResponse =
+        restore(slug, username)
 
     @Transactional(readOnly = true)
     fun findDeleted(): List<PageListItem> {

@@ -322,12 +322,12 @@ class PageControllerTest {
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `POST restore allowed for ADMIN`() {
-        whenever(pageService.restore("gone")).thenReturn(samplePage)
+        whenever(pageService.restore("gone", "user")).thenReturn(samplePage)
 
         mockMvc.post("/api/pages/gone/restore").andExpect {
             status { isOk() }
             jsonPath("$.slug") { value("test-page") }
         }
-        verify(pageService).restore("gone")
+        verify(pageService).restore("gone", "user")
     }
 }

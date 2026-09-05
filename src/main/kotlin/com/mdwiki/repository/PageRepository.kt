@@ -81,6 +81,7 @@ interface PageRepository : JpaRepository<Page, UUID> {
                 p.id AS id,
                 p.slug AS slug,
                 p.title AS title,
+                p.updated_at AS "updatedAt",
                 ts_headline(
                     'russian',
                     coalesce(p.title, '') || E'\n\n' || coalesce(p.content_md, ''),

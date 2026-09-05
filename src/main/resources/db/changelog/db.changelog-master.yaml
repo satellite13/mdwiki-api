@@ -15,3 +15,5 @@ databaseChangeLog:
       file: db/changelog/007-attachment-uploader-null.yaml
   - include:
       file: db/changelog/008-pkm-wave2.yaml
+  - include:
+      file: db/changelog/009-wave2-revision-trash.yaml

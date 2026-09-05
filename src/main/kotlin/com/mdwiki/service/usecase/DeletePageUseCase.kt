@@ -7,6 +7,8 @@ import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.FolderAccessPolicy
+import com.mdwiki.service.PageRevisionService
+import com.mdwiki.model.RevisionOperation
 import org.springframework.stereotype.Component
 import java.time.Instant
 
@@ -18,7 +20,8 @@ class DeletePageUseCase(
     private val wikiFileService: WikiFileService,
     private val syncService: SyncService,
     private val frontmatterMetaService: com.mdwiki.service.FrontmatterMetaService,
-    private val folderAccessPolicy: FolderAccessPolicy
+    private val folderAccessPolicy: FolderAccessPolicy,
+    private val pageRevisionService: PageRevisionService? = null
 ) {
     enum class DeleteMode {
         SOFT,
@@ -29,7 +32,7 @@ class DeletePageUseCase(
         slug: String,
         mode: DeleteMode,
         username: String
-    ) = executeInternal(slug, mode, scheduleReconcile = true, ignoreLocked = false) { page ->
+    ) = executeInternal(slug, mode, scheduleReconcile = true, ignoreLocked = false, username = username) { page ->
         page.folder?.let { folderAccessPolicy.requireAccess(it, username) }
     }
 
@@ -38,13 +41,14 @@ class DeletePageUseCase(
         mode: DeleteMode,
         scheduleReconcile: Boolean = true,
         ignoreLocked: Boolean = false
-    ) = executeInternal(slug, mode, scheduleReconcile, ignoreLocked) { }
+    ) = executeInternal(slug, mode, scheduleReconcile, ignoreLocked, null) { }
 
     private fun executeInternal(
         slug: String,
         mode: DeleteMode,
         scheduleReconcile: Boolean,
         ignoreLocked: Boolean,
+        username: String?,
         authorize: (com.mdwiki.model.Page) -> Unit
     ) {
         val page = pageRepository.findBySlugForUpdate(slug)
@@ -58,7 +62,9 @@ class DeletePageUseCase(
                     page.deletedAt = Instant.now()
                     // Файл уезжает в корзину — sync/watcher его не видят и страницу не воскрешают.
                     wikiFileService.movePageFileToTrash(page)
-                    pageRepository.save(page)
+                    val saved = pageRepository.save(page)
+                    pageRepository.flush()
+                    pageRevisionService?.record(saved, username, RevisionOperation.DELETE)
                 }
                 return
             }
