@@ -25,6 +25,10 @@ object UnlinkedMentionScanner {
             .forEach { protect(it.range.first, it.range.last + 1) }
         Regex("""!?\[[^\]\n]*]\([^)]+\)""").findAll(markdown)
             .forEach { protect(it.range.first, it.range.last + 1) }
+        Regex("""!?\[[^\]\n]+]\[[^\]\n]*]""").findAll(markdown)
+            .forEach { protect(it.range.first, it.range.last + 1) }
+        Regex("""(?m)^[ \t]{0,3}\[[^\]\n]+]:[ \t]*\S+.*$""").findAll(markdown)
+            .forEach { protect(it.range.first, it.range.last + 1) }
 
         val result = mutableListOf<Match>()
         var from = 0

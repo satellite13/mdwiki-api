@@ -27,6 +27,8 @@ class UnlinkedMentionScannerTest {
             [[target|Target]]
             [Target](/page/target)
             Plain Target.
+            [Target][reference]
+            [reference]: /page/target
         """.trimIndent()
 
         val matches = UnlinkedMentionScanner.scan(markdown, "Target")
