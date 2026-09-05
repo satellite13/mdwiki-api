@@ -71,9 +71,18 @@ class PropertyService(
         val page = pages.findBySlugAndDeletedAtIsNull(slug) ?: throw NotFoundException("Page not found: $slug")
         page.folder?.let { folderAccess.requireAccess(it, username) } ?: folderAccess.actor(username)
         val defs = definitions.findAllByDeletedAtIsNullOrderByDisplayNameAsc()
+        val defKeys = defs.map(PropertyDefinition::key).toSet()
         val parsed = parsedFrontmatter(page.contentMd)
-        val known = defs.associate { it.key to (parsed.get(it.key) ?: mapper.nullNode()) }.filterValues { !it.isNull }
-        val unknown = parsed.fields().asSequence().filter { it.key !in defs.map(PropertyDefinition::key).toSet() }.associate { it.key to it.value }
+        val known = defs.mapNotNull { definition ->
+            val raw = parsed.get(definition.key) ?: return@mapNotNull null
+            if (raw.isNull) return@mapNotNull null
+            definition.key to PropertyJsonValues.toWire(raw)
+        }.toMap()
+        // Skip page title — it already has its own editor field; avoid noisy unknown dump.
+        val reservedUnknown = setOf("title")
+        val unknown = parsed.fields().asSequence()
+            .filter { it.key !in defKeys && it.key !in reservedUnknown }
+            .associate { it.key to PropertyJsonValues.toWire(it.value) }
         return PagePropertiesResponse(defs.map(::response), known, unknown)
     }
 

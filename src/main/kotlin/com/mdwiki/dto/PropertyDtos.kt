@@ -23,8 +23,9 @@ enum class PropertyOperationType { SET, REMOVE }
 data class PatchPagePropertiesRequest(val expectedUpdatedAt: Instant, val operations: List<PropertyOperation>)
 data class PagePropertiesResponse(
     val definitions: List<PropertyDefinitionResponse>,
-    val values: Map<String, JsonNode>,
-    val unknown: Map<String, JsonNode>,
+    /** Plain JSON values (string/number/bool/list/object), never raw Jackson node beans. */
+    val values: Map<String, Any?>,
+    val unknown: Map<String, Any?>,
     val warnings: List<String> = emptyList()
 )
 data class SavedViewWriteRequest(
