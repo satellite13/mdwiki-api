@@ -22,9 +22,19 @@ interface PageRepository : JpaRepository<Page, UUID> {
     @Query("select p from Page p where p.slug = :slug and p.deletedAt is null")
     fun findActiveBySlugForUpdate(@Param("slug") slug: String): Page?
 
+    @Query("select p.id from Page p where p.slug = :slug and p.deletedAt is null")
+    fun findActiveIdBySlug(@Param("slug") slug: String): UUID?
+
+    @Query("select p.id from Page p where p.deletedAt is null")
+    fun findAllActiveIds(): List<UUID>
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Page p where p.slug = :slug")
     fun findBySlugForUpdate(@Param("slug") slug: String): Page?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Page p where p.id in :ids and p.deletedAt is null order by p.id")
+    fun findAllActiveByIdInForUpdate(@Param("ids") ids: Collection<UUID>): List<Page>
 
     @EntityGraph(attributePaths = ["tags"])
     fun findByDeletedAtIsNotNullOrderByDeletedAtDesc(): List<Page>

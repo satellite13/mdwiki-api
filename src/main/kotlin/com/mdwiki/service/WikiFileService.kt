@@ -58,6 +58,38 @@ class WikiFileService(
         }
     }
 
+    /**
+     * Планирует одну итоговую файловую операцию после commit, учитывая одновременно новый slug и folder.
+     * До commit меняется только persisted filePath; содержимое файлов и каталоги не затрагиваются.
+     */
+    fun schedulePageFileUpdate(
+        page: Page,
+        previousSlug: String,
+        previousFolder: Folder?,
+        previousFilePath: String?,
+        content: String
+    ) {
+        val sourceFile = previousFilePath
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?: File(resolveFolderDirectory(previousFolder), "$previousSlug.md")
+        val targetFile = File(resolveFolderDirectory(page.folder), "${page.slug}.md")
+        val samePath = sourceFile.absoluteFile.normalize() == targetFile.absoluteFile.normalize()
+        if (!samePath && targetFile.exists()) {
+            throw IllegalStateException("Cannot update page file: target already exists: ${targetFile.absolutePath}")
+        }
+        page.filePath = targetFile.absolutePath
+        runAfterCommit {
+            if (samePath) {
+                targetFile.parentFile?.mkdirs()
+                fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+                targetFile.writeText(content)
+            } else {
+                writeRenamedFile(sourceFile, targetFile, content)
+            }
+        }
+    }
+
     fun relocatePageFile(page: Page, targetFolder: Folder?) {
         val resolvedTarget = resolveFolderForFileOps(targetFolder)
         if (resolvedTarget != null) {

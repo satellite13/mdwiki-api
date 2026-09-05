@@ -34,8 +34,11 @@ import org.mockito.kotlin.*
 import java.io.File
 import java.nio.file.Path
 import java.time.Instant
+import java.util.Optional
 import java.util.UUID
 import org.springframework.http.HttpStatus
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @ExtendWith(MockitoExtension::class)
 class PageServiceTest {
@@ -551,9 +554,8 @@ class PageServiceTest {
         tempDir.resolve("old-slug.md").toFile().writeText("content")
 
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
-        whenever(pageRepository.findActiveBySlugForUpdate("old-slug")).thenReturn(page)
+        stubRenameLocks(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
-        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(emptyList())
         whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
         whenever(linkRepository.updateAllTargetSlugs(any(), any())).thenReturn(0)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
@@ -569,12 +571,154 @@ class PageServiceTest {
     }
 
     @Test
-    fun `explicit slug rename rejects blank or invalid slug`() {
+    fun `slug rename locks incoming candidates in UUID order and rewrites fresh state`() {
         val page = renameablePage()
-        whenever(pageRepository.findActiveBySlugForUpdate("old-slug")).thenReturn(page)
+        val lowId = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        val highId = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
+        val freshLow = Page(id = lowId, slug = "low", title = "Low", contentMd = "fresh low [[old-slug]]")
+        val freshHigh = Page(id = highId, slug = "high", title = "High", contentMd = "fresh high [[old-slug]]")
+        val lockIds = listOf(page.id!!, lowId, highId).sortedBy(UUID::toString)
+        stubRenameLocks(page, listOf(freshHigh, freshLow))
         whenever(userRepository.findByUsername("editor")).thenReturn(
             User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
         )
+        whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
+        whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageService.update("old-slug", UpdatePageRequest(slug = "new-slug"), "editor")
+
+        verify(pageRepository).findAllActiveByIdInForUpdate(lockIds)
+        verify(pageRepository).save(argThat<Page> {
+            id == lowId && contentMd == "fresh low [[new-slug]]"
+        })
+        verify(pageRepository).save(argThat<Page> {
+            id == highId && contentMd == "fresh high [[new-slug]]"
+        })
+        verify(pageRepository, never()).save(argThat<Page> {
+            contentMd?.startsWith("stale") == true
+        })
+    }
+
+    @Test
+    fun `combined slug and folder update publishes exactly one final file after commit`() {
+        val folderId = UUID.randomUUID()
+        val folder = com.mdwiki.model.Folder(id = folderId, name = "Archive")
+        val page = renameablePage().apply {
+            contentMd = "old"
+        }
+        val source = tempDir.resolve("old-slug.md").toFile().apply { writeText("old") }
+        page.filePath = source.absolutePath
+        stubCombinedFileUpdate(page, folder)
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            pageService.update(
+                "old-slug",
+                UpdatePageRequest(slug = "new-slug", folderId = folderId, contentMd = "new"),
+                "editor"
+            )
+
+            val target = tempDir.resolve("Archive/new-slug.md").toFile()
+            assertTrue(source.exists())
+            assertFalse(target.exists())
+            val synchronizations = TransactionSynchronizationManager.getSynchronizations()
+            assertEquals(1, synchronizations.size)
+            synchronizations.forEach { it.afterCommit() }
+            synchronizations.forEach { it.afterCompletion(TransactionSynchronization.STATUS_COMMITTED) }
+
+            assertFalse(source.exists())
+            assertTrue(target.exists())
+            assertEquals("new", target.readText())
+            assertFalse(tempDir.resolve("new-slug.md").toFile().exists())
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+    }
+
+    @Test
+    fun `combined slug and folder rollback leaves filesystem untouched`() {
+        val folderId = UUID.randomUUID()
+        val folder = com.mdwiki.model.Folder(id = folderId, name = "Archive")
+        val page = renameablePage()
+        val source = tempDir.resolve("old-slug.md").toFile().apply { writeText("old") }
+        page.filePath = source.absolutePath
+        stubCombinedFileUpdate(page, folder)
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            pageService.update(
+                "old-slug",
+                UpdatePageRequest(slug = "new-slug", folderId = folderId, contentMd = "new"),
+                "editor"
+            )
+            TransactionSynchronizationManager.getSynchronizations().forEach {
+                it.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+            }
+
+            assertTrue(source.exists())
+            assertEquals("old", source.readText())
+            assertFalse(tempDir.resolve("Archive").toFile().exists())
+            assertFalse(tempDir.resolve("new-slug.md").toFile().exists())
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+    }
+
+    @Test
+    fun `combined slug and folder update never overwrites final destination`() {
+        val folderId = UUID.randomUUID()
+        val folder = com.mdwiki.model.Folder(id = folderId, name = "Archive")
+        val page = renameablePage()
+        val source = tempDir.resolve("old-slug.md").toFile().apply { writeText("old") }
+        val target = tempDir.resolve("Archive/new-slug.md").toFile().apply {
+            parentFile.mkdirs()
+            writeText("occupied")
+        }
+        page.filePath = source.absolutePath
+        stubCombinedFileUpdate(page, folder, persist = false)
+
+        assertThrows<IllegalStateException> {
+            pageService.update(
+                "old-slug",
+                UpdatePageRequest(slug = "new-slug", folderId = folderId, contentMd = "new"),
+                "editor"
+            )
+        }
+
+        assertEquals("old", source.readText())
+        assertEquals("occupied", target.readText())
+        verify(pageRepository, never()).saveAndFlush(any<Page>())
+    }
+
+    private fun stubRenameLocks(page: Page, others: List<Page> = emptyList()) {
+        val sourceId = page.id!!
+        val allPages = others + page
+        val lockIds = allPages.mapNotNull { it.id }.distinct().sortedBy(UUID::toString)
+        whenever(pageRepository.findActiveIdBySlug(page.slug)).thenReturn(sourceId)
+        whenever(pageRepository.findAllActiveIds()).thenReturn(lockIds)
+        whenever(pageRepository.findAllActiveByIdInForUpdate(lockIds))
+            .thenReturn(allPages.sortedBy { it.id.toString() })
+    }
+
+    private fun stubCombinedFileUpdate(
+        page: Page,
+        folder: com.mdwiki.model.Folder,
+        persist: Boolean = true
+    ) {
+        stubRenameLocks(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+        whenever(folderRepository.findById(folder.id!!)).thenReturn(Optional.of(folder))
+        whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
+        if (persist) {
+            whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
+            whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+        }
+    }
+
+    @Test
+    fun `explicit slug rename rejects blank or invalid slug`() {
+        val page = renameablePage()
 
         for (invalidSlug in listOf("", "   ", "Invalid Slug", "bad_slug", "-bad")) {
             val error = assertThrows<AppException> {
@@ -599,7 +743,7 @@ class PageServiceTest {
                 title = "Taken",
                 contentMd = ""
             ).apply { this.deletedAt = deletedAt }
-            whenever(pageRepository.findActiveBySlugForUpdate("old-slug")).thenReturn(page)
+            stubRenameLocks(page)
             whenever(pageRepository.findBySlug("taken")).thenReturn(collision)
 
             assertThrows<ConflictException> {

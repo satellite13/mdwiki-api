@@ -20,6 +20,7 @@ import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
+import java.util.UUID
 
 @Component
 class UpdatePageUseCase(
@@ -36,8 +37,27 @@ class UpdatePageUseCase(
     private val sectionIndexService: SectionIndexService
 ) {
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
-        val page = pageRepository.findActiveBySlugForUpdate(slug)
-            ?: throw NotFoundException("Page not found: $slug")
+        request.slug?.let { explicitSlug ->
+            if (!Regex(PageSlugConstraints.PATTERN).matches(explicitSlug)) {
+                throw BadRequestException(PageSlugConstraints.MESSAGE)
+            }
+        }
+        val lockedRenamePages: List<Page>
+        val page = if (request.slug != null) {
+            val sourceId = pageRepository.findActiveIdBySlug(slug)
+                ?: throw NotFoundException("Page not found: $slug")
+            val lockIds = (pageRepository.findAllActiveIds() + sourceId)
+                .distinct()
+                .sortedBy(UUID::toString)
+            lockedRenamePages = pageRepository.findAllActiveByIdInForUpdate(lockIds)
+                .sortedBy { it.id.toString() }
+            lockedRenamePages.find { it.id == sourceId }
+                ?: throw NotFoundException("Page not found: $slug")
+        } else {
+            lockedRenamePages = emptyList()
+            pageRepository.findActiveBySlugForUpdate(slug)
+                ?: throw NotFoundException("Page not found: $slug")
+        }
         val user = userRepository.findByUsername(username)
             ?: throw NotFoundException("User not found: $username")
 
@@ -58,7 +78,9 @@ class UpdatePageUseCase(
 
         request.title?.let { page.title = it }
 
-        val previousFolderId = page.folder?.id
+        val previousFolder = page.folder
+        val previousFolderId = previousFolder?.id
+        val previousFilePath = page.filePath
         if (request.clearFolder == true) {
             page.folder = null
         } else {
@@ -72,12 +94,7 @@ class UpdatePageUseCase(
         var contentForSave = mergedContent ?: ""
 
         // Slug is immutable unless explicitly requested to change
-        val desiredSlug = request.slug?.let { explicitSlug ->
-            if (!Regex(PageSlugConstraints.PATTERN).matches(explicitSlug)) {
-                throw BadRequestException(PageSlugConstraints.MESSAGE)
-            }
-            explicitSlug
-        } ?: oldSlug
+        val desiredSlug = request.slug ?: oldSlug
         val newSlug = if (desiredSlug == oldSlug) {
             oldSlug
         } else {
@@ -88,6 +105,7 @@ class UpdatePageUseCase(
             desiredSlug
         }
         val slugChanged = newSlug != oldSlug
+        val folderChanged = previousFolderId != page.folder?.id
 
         // Сохраняем нормализованный title ДО изменения title страницы
         val oldNormalizedTitle = wikilinkService.normalizePageSlug(page.title)
@@ -96,41 +114,41 @@ class UpdatePageUseCase(
             contentForSave = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(
                 contentForSave, oldSlug, newSlug, oldNormalizedTitle
             )
-            wikiFileService.renamePageFileToSlug(page, newSlug, contentForSave)
+        }
+        page.slug = newSlug
+
+        val fileUpdateNeeded = request.contentMd != null || slugChanged || folderChanged
+        if (fileUpdateNeeded) {
             page.contentMd = contentForSave
             frontmatterMetaService.refreshFromContent(page, contentForSave)
+            wikiFileService.schedulePageFileUpdate(
+                page = page,
+                previousSlug = oldSlug,
+                previousFolder = previousFolder,
+                previousFilePath = previousFilePath,
+                content = contentForSave
+            )
+        }
+
+        if (slugChanged) {
             pageRepository.saveAndFlush(page)
             linkRepository.updateAllTargetSlugs(oldSlug, newSlug)
-            pageRepository.findAllByDeletedAtIsNull()
-                .asSequence()
-                .filter { it.id != page.id }
-                .forEach { other ->
-                    val md = other.contentMd ?: ""
-                    val rewritten = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(
-                        md, oldSlug, newSlug, oldNormalizedTitle
-                    )
-                    if (rewritten != md) {
-                        other.contentMd = rewritten
-                        other.updatedAt = PersistentInstant.now()
-                        frontmatterMetaService.refreshFromContent(other, rewritten)
-                        wikiFileService.createOrRewritePageFile(other, rewritten)
-                        pageRepository.save(other)
-                        pageMetadataService.syncLinksAndTags(other, rewritten, cleanupOrphanedTags = false)
-                        pageIndexer.indexAfterCommit(other)
-                        sectionIndexService.rebuild(other, rewritten)
-                    }
+            for (other in lockedRenamePages) {
+                if (other.id == page.id) continue
+                val md = other.contentMd ?: ""
+                val rewritten = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(
+                    md, oldSlug, newSlug, oldNormalizedTitle
+                )
+                if (rewritten != md) {
+                    other.contentMd = rewritten
+                    other.updatedAt = PersistentInstant.now()
+                    frontmatterMetaService.refreshFromContent(other, rewritten)
+                    wikiFileService.createOrRewritePageFile(other, rewritten)
+                    pageRepository.save(other)
+                    pageMetadataService.syncLinksAndTags(other, rewritten, cleanupOrphanedTags = false)
+                    pageIndexer.indexAfterCommit(other)
+                    sectionIndexService.rebuild(other, rewritten)
                 }
-        }
-
-        if (previousFolderId != page.folder?.id) {
-            wikiFileService.relocatePageFile(page, page.folder)
-        }
-
-        if (request.contentMd != null || slugChanged) {
-            page.contentMd = contentForSave
-            frontmatterMetaService.refreshFromContent(page, contentForSave)
-            if (!slugChanged) {
-                wikiFileService.createOrRewritePageFile(page, contentForSave)
             }
         }
 
@@ -146,7 +164,7 @@ class UpdatePageUseCase(
         }
 
         // Синхронизируем БД с ФС после операций переименования/перемещения
-        if (slugChanged || previousFolderId != page.folder?.id) {
+        if (slugChanged || folderChanged) {
             syncService.scheduleReconcileFromDisk()
         }
 
