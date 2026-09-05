@@ -22,6 +22,7 @@ import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import com.mdwiki.service.FolderAccessPolicy
 import com.mdwiki.service.PageRevisionService
+import com.mdwiki.service.PropertyService
 import com.mdwiki.service.RevisionMutationContext
 import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
@@ -42,7 +43,8 @@ class UpdatePageUseCase(
     private val syncService: SyncService,
     private val sectionIndexService: SectionIndexService,
     private val folderAccessPolicy: FolderAccessPolicy,
-    private val pageRevisionService: PageRevisionService? = null
+    private val pageRevisionService: PageRevisionService? = null,
+    private val propertyService: PropertyService? = null
 ) {
     @Transactional
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
@@ -176,6 +178,7 @@ class UpdatePageUseCase(
             pageMetadataService.syncLinksAndTags(saved, saved.contentMd ?: "", cleanupOrphanedTags = true)
             pageIndexer.indexAfterCommit(saved)
             sectionIndexService.rebuild(saved, saved.contentMd ?: "")
+            propertyService?.project(saved)
         }
 
         // Синхронизируем БД с ФС после операций переименования/перемещения

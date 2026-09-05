@@ -1,0 +1,61 @@
+databaseChangeLog:
+  - changeSet:
+      id: 011-pkm-wave3-properties-views
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              CREATE TABLE property_definitions (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                key varchar(100) NOT NULL,
+                display_name varchar(120) NOT NULL,
+                type varchar(16) NOT NULL CHECK (type IN ('TEXT','NUMBER','BOOLEAN','DATE','DATETIME','URL','SELECT','MULTI_SELECT','PAGE_REF')),
+                config jsonb NOT NULL DEFAULT '{}'::jsonb,
+                required boolean NOT NULL DEFAULT false,
+                version bigint NOT NULL DEFAULT 1,
+                created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                deleted_at timestamptz
+              );
+              CREATE UNIQUE INDEX uq_property_definitions_active_key_ci
+                ON property_definitions(lower(key)) WHERE deleted_at IS NULL;
+              CREATE TABLE page_property_values (
+                page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+                property_id uuid NOT NULL REFERENCES property_definitions(id) ON DELETE CASCADE,
+                source_content_hash varchar(64) NOT NULL,
+                value_json jsonb NOT NULL,
+                text_value text,
+                number_value numeric,
+                bool_value boolean,
+                date_value date,
+                datetime_value timestamptz,
+                page_ref_id uuid REFERENCES pages(id) ON DELETE SET NULL,
+                PRIMARY KEY(page_id, property_id)
+              );
+              CREATE INDEX idx_page_property_values_property_text ON page_property_values(property_id, text_value);
+              CREATE INDEX idx_page_property_values_property_number ON page_property_values(property_id, number_value);
+              CREATE INDEX idx_page_property_values_property_bool ON page_property_values(property_id, bool_value);
+              CREATE INDEX idx_page_property_values_property_date ON page_property_values(property_id, date_value);
+              CREATE INDEX idx_page_property_values_property_datetime ON page_property_values(property_id, datetime_value);
+              CREATE INDEX idx_page_property_values_property_page_ref ON page_property_values(property_id, page_ref_id);
+              CREATE INDEX idx_page_property_values_page ON page_property_values(page_id);
+              CREATE TABLE saved_views (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name varchar(120) NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
+                type varchar(8) NOT NULL CHECK (type IN ('TABLE','LIST','CARDS')),
+                filters jsonb NOT NULL DEFAULT '[]'::jsonb,
+                sort jsonb NOT NULL DEFAULT '[]'::jsonb,
+                grouping jsonb,
+                layout jsonb NOT NULL DEFAULT '{}'::jsonb,
+                version bigint NOT NULL DEFAULT 1,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE UNIQUE INDEX uq_saved_views_user_lower_name ON saved_views(user_id, lower(name));
+              CREATE INDEX idx_saved_views_user_updated ON saved_views(user_id, updated_at DESC);
+      rollback:
+        - sql:
+            sql: DROP TABLE IF EXISTS saved_views, page_property_values, property_definitions;

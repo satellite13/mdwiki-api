@@ -30,6 +30,17 @@ export JWT_SECRET='local-dev-secret-change-me'
 Фронтенд в dev-режиме проксирует `/api` на `:8080` (см.
 [mdwiki-frontend](../mdwiki-frontend)).
 
+## API PKM Wave 3
+
+- Типизированные определения свойств читаются через `GET /api/property-definitions`;
+  администратор управляет ими и синхронно перепроецирует старые страницы через
+  `POST /api/admin/properties/reproject`.
+- Свойства страницы доступны через `GET`/`PATCH /api/pages/{slug}/properties`.
+  PATCH требует `expectedUpdatedAt`, сохраняет прочий YAML и тело Markdown, а также
+  использует обычный путь ревизий и индексации.
+- Приватные представления пользователя — CRUD в `/api/me/views`; запуск:
+  `POST /api/me/views/{id}/run?cursor=0&limit=50`.
+
 Локальный Postgres: `docker-compose up -d` (порт `54328`, БД/user/password
 `mdwiki`).
 

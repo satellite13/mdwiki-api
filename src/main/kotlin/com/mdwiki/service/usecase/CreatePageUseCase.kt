@@ -17,6 +17,7 @@ import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import com.mdwiki.service.FolderAccessPolicy
 import com.mdwiki.service.PageRevisionService
+import com.mdwiki.service.PropertyService
 import com.mdwiki.service.RevisionMutationContext
 import org.springframework.stereotype.Component
 
@@ -32,7 +33,8 @@ class CreatePageUseCase(
     private val wikilinkService: WikilinkService,
     private val sectionIndexService: SectionIndexService,
     private val folderAccessPolicy: FolderAccessPolicy,
-    private val pageRevisionService: PageRevisionService? = null
+    private val pageRevisionService: PageRevisionService? = null,
+    private val propertyService: PropertyService? = null
 ) {
     fun execute(request: CreatePageRequest, username: String) = run {
         // Явно заданный `slug` имеет приоритет (после нормализации); fallback — slug из title.
@@ -68,6 +70,7 @@ class CreatePageUseCase(
         pageMetadataService.resolveIncomingLinks(saved)
         pageIndexer.indexAfterCommit(saved)
         sectionIndexService.rebuild(saved, request.contentMd)
+        propertyService?.project(saved)
         pageRevisionService?.record(
             saved, username, RevisionMutationContext.get()?.operation ?: RevisionOperation.CREATE
         )

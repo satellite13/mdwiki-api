@@ -33,6 +33,17 @@ DB_URL=jdbc:postgresql://localhost:54328/mdwiki_test_pkm ./gradlew test
 In dev mode the frontend proxies `/api` to `:8080` (see
 [mdwiki-frontend](../mdwiki-frontend)).
 
+## PKM Wave 3 API
+
+- Typed frontmatter property definitions are readable at `GET /api/property-definitions`;
+  administrators create, update, soft-delete and synchronously reproject them through
+  `/api/property-definitions` and `POST /api/admin/properties/reproject`.
+- Page properties use `GET`/`PATCH /api/pages/{slug}/properties`. PATCH requires the
+  page `expectedUpdatedAt`, preserves unrelated YAML and Markdown content, and follows
+  the normal page revision/indexing pipeline.
+- Per-user views are private CRUD resources at `/api/me/views`; execute one with
+  `POST /api/me/views/{id}/run?cursor=0&limit=50`.
+
 Local Postgres: `docker-compose up -d` (port `54328`, db/user/password
 `mdwiki`).
 

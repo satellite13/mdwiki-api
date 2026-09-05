@@ -60,4 +60,17 @@ class MarkdownFrontmatterTest {
         val md = "---\nx: 1\n---\n\nz"
         assertEquals("x: 1", MarkdownFrontmatter.extractYamlInner(md))
     }
+
+    @Test
+    fun `updates only requested frontmatter field preserving unknown lines and body bytes`() {
+        val body = "# Body\r\n\r\nA paragraph.\r\n"
+        val markdown = "---\r\n# keep this comment\r\nstatus: draft\r\nunknown: untouched\r\n---\r\n$body"
+
+        val updated = MarkdownFrontmatter.updateFields(markdown, mapOf("status" to "published"))
+
+        assertEquals(
+            "---\r\n# keep this comment\r\nstatus: published\r\nunknown: untouched\r\n---\r\n$body",
+            updated
+        )
+    }
 }
