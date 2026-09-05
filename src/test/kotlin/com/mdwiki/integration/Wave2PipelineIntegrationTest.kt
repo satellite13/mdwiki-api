@@ -14,6 +14,7 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.service.PageRevisionService
 import com.mdwiki.service.PageService
 import com.mdwiki.service.StableSectionLinkService
+import com.mdwiki.service.DeferredPageIndexer
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.nio.file.Files
@@ -28,8 +30,9 @@ import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import com.mdwiki.rag.EmbeddingProvider
 
-@SpringBootTest
+@SpringBootTest(properties = ["spring.datasource.hikari.maximum-pool-size=1"])
 class Wave2PipelineIntegrationTest {
     companion object {
         private val contentDir: Path = Files.createTempDirectory("mdwiki-wave2-")
@@ -48,6 +51,8 @@ class Wave2PipelineIntegrationTest {
     @Autowired lateinit var stableLinks: StableSectionLinkService
     @Autowired lateinit var transactionManager: PlatformTransactionManager
     @Autowired lateinit var folders: FolderRepository
+    @Autowired lateinit var deferredPageIndexer: DeferredPageIndexer
+    @MockitoBean lateinit var embeddingProvider: EmbeddingProvider
 
     private fun editor(prefix: String): User {
         val suffix = UUID.randomUUID().toString()
@@ -207,5 +212,15 @@ class Wave2PipelineIntegrationTest {
         )
         assertThat(revisions.get(pages.findBySlugAndDeletedAtIsNull(slug)!!,
             history.first().revisionNo).deletedAt).isNull()
+    }
+
+    @Test
+    fun `after commit indexing does not retain the only pool connection`() {
+        val actor = editor("pool-one")
+        val slug = "pool-one-${UUID.randomUUID()}"
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(10)) {
+            pageService.create(CreatePageRequest(slug, "Pool one", ""), actor.username)
+            assertThat(deferredPageIndexer.awaitIdle(java.time.Duration.ofSeconds(5))).isTrue()
+        }
     }
 }
