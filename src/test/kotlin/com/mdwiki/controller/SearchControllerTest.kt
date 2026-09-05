@@ -5,6 +5,7 @@ import com.mdwiki.dto.SearchResult
 import com.mdwiki.service.SearchService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
@@ -57,5 +58,15 @@ class SearchControllerTest {
             jsonPath("$[0].score") { value(0.91) }
             jsonPath("$[0].tags[0]") { value("kotlin") }
         }
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
+    fun `GET search forwards every requested tag`() {
+        whenever(searchService.search("kotlin", tags = listOf("one", "two"))).thenReturn(emptyList())
+
+        mockMvc.get("/api/search?q=kotlin&tags=one,two").andExpect { status { isOk() } }
+
+        verify(searchService).search("kotlin", tags = listOf("one", "two"))
     }
 }

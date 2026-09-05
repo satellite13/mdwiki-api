@@ -12,7 +12,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Duration
 import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -39,6 +40,13 @@ class DeferredPageIndexer(
         { task -> Thread(task, "deferred-page-indexer").apply { isDaemon = true } },
         ThreadPoolExecutor.AbortPolicy()
     )
+    private val retryExecutor = Executors.newSingleThreadScheduledExecutor { task ->
+        Thread(task, "deferred-page-indexer-retry").apply { isDaemon = true }
+    }
+    private val pending = ConcurrentHashMap<String, Page>()
+    private val scheduled = ConcurrentHashMap.newKeySet<String>()
+    private val needsReindex = ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var shuttingDown = false
 
     // Сериализует DELETE+INSERT чанков с синхронным file-watcher path.
     private val indexLock = Any()
@@ -56,16 +64,61 @@ class DeferredPageIndexer(
     }
 
     private fun submit(page: Page) {
+        val key = page.id?.toString() ?: page.slug
+        pending[key] = page
+        if (!scheduled.add(key)) return
+        dispatch(key, 0)
+    }
+
+    private fun dispatch(key: String, attempt: Int) {
+        if (shuttingDown) {
+            markNeedsReindex(key)
+            return
+        }
         try {
             executor.execute {
+                val page = pending.remove(key)
+                if (page == null) {
+                    scheduled.remove(key)
+                    return@execute
+                }
                 runCatching { executeIndex(page) }
-                    .onFailure { error ->
-                        log.error("Post-commit indexing failed for page '{}'", page.slug, error)
-                    }
+                    .onSuccess { completeOrResubmit(key) }
+                    .onFailure { error -> retry(key, page, attempt, error) }
             }
         } catch (error: RejectedExecutionException) {
-            log.error("Post-commit indexing queue rejected page '{}'", page.slug, error)
+            retry(key, pending[key], attempt, error)
         }
+    }
+
+    private fun completeOrResubmit(key: String) {
+        if (pending.containsKey(key)) {
+            dispatch(key, 0)
+            return
+        }
+        scheduled.remove(key)
+        if (pending.containsKey(key) && scheduled.add(key)) dispatch(key, 0)
+    }
+
+    private fun retry(key: String, page: Page?, attempt: Int, error: Throwable) {
+        if (page != null) pending.putIfAbsent(key, page)
+        if (attempt >= 6 || shuttingDown) {
+            log.error("Deferred indexing requires reindex for page '{}'", page?.slug ?: key, error)
+            markNeedsReindex(key)
+            return
+        }
+        val delayMs = (10L shl attempt.coerceAtMost(7)).coerceAtMost(1000L)
+        try {
+            retryExecutor.schedule({ dispatch(key, attempt + 1) }, delayMs, TimeUnit.MILLISECONDS)
+        } catch (_: RejectedExecutionException) {
+            markNeedsReindex(key)
+        }
+    }
+
+    private fun markNeedsReindex(key: String) {
+        pending.remove(key)
+        scheduled.remove(key)
+        needsReindex.add(key)
     }
 
     private fun executeIndex(page: Page) {
@@ -76,27 +129,27 @@ class DeferredPageIndexer(
 
     /** Waits for all tasks submitted before this call. */
     fun awaitIdle(timeout: Duration): Boolean {
-        val barrier = CompletableFuture<Unit>()
-        try {
-            executor.execute {
-                synchronized(indexLock) { barrier.complete(Unit) }
-            }
-        } catch (_: RejectedExecutionException) {
-            return executor.isTerminated
+        val deadline = System.nanoTime() + timeout.toNanos()
+        while (System.nanoTime() < deadline) {
+            if (pending.isEmpty() && scheduled.isEmpty() &&
+                executor.activeCount == 0 && executor.queue.isEmpty()
+            ) return true
+            Thread.sleep(10)
         }
-        return try {
-            barrier.get(timeout.toMillis(), TimeUnit.MILLISECONDS)
-            true
-        } catch (_: Exception) {
-            false
-        }
+        return false
     }
+
+    fun needsReindexKeys(): Set<String> = needsReindex.toSet()
 
     @PreDestroy
     fun shutdown() {
+        shuttingDown = true
+        retryExecutor.shutdown()
         executor.shutdown()
-        if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+        if (!executor.awaitTermination(10, TimeUnit.SECONDS) || pending.isNotEmpty()) {
+            pending.keys.toList().forEach(::markNeedsReindex)
             executor.shutdownNow()
         }
+        retryExecutor.shutdownNow()
     }
 }

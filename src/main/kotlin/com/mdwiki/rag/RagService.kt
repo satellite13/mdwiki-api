@@ -82,7 +82,7 @@ class RagService(
         pageChunkRepository.deleteByPageId(pageId)
     }
 
-    fun search(query: String, topK: Int = 10): List<SearchResult> {
+    fun search(query: String, topK: Int = 10, tags: List<String> = emptyList()): List<SearchResult> {
         if (query.isBlank()) return emptyList()
         if (topK <= 0) return emptyList()
         val startedAt = System.nanoTime()
@@ -96,15 +96,18 @@ class RagService(
             )
         }
 
-        val vectorCandidates = fetchVectorCandidates(query, vectorSearchLimit)
-        val ftsCandidates = fetchFtsCandidates(query, vectorSearchLimit)
+        val normalizedTags = tags.map(String::lowercase).distinct()
+        val vectorCandidates = fetchVectorCandidates(query, vectorSearchLimit, normalizedTags)
+        val ftsCandidates = fetchFtsCandidates(query, vectorSearchLimit, normalizedTags)
         var allCandidates = (vectorCandidates + ftsCandidates).distinctBy { it.chunkId }
 
         if (allCandidates.isEmpty()) {
             log.info("RAG search returned no candidates for query='{}' (elapsedMs={})", query, elapsedMs(startedAt))
             return emptyList()
         }
-        allCandidates = (allCandidates + fetchGraphCandidates(allCandidates)).distinctBy { it.chunkId }
+        if (normalizedTags.isEmpty()) {
+            allCandidates = (allCandidates + fetchGraphCandidates(allCandidates)).distinctBy { it.chunkId }
+        }
 
         // Cap candidates before reranking to limit compute cost
         val cappedCandidates = allCandidates.take(minOf(topK * 3, allCandidates.size))
@@ -136,11 +139,15 @@ class RagService(
         return results
     }
 
-    private fun fetchVectorCandidates(query: String, vectorSearchLimit: Int): List<ChunkCandidate> {
+    private fun fetchVectorCandidates(query: String, vectorSearchLimit: Int, tags: List<String>): List<ChunkCandidate> {
         return try {
             val queryEmbedding = embeddingProvider.embed(query)
             val embeddingStr = "[${queryEmbedding.joinToString(",")}]"
-            val rawResults = pageChunkRepository.findByVectorSimilarity(embeddingStr, vectorSearchLimit)
+            val rawResults = if (tags.isEmpty()) {
+                pageChunkRepository.findByVectorSimilarity(embeddingStr, vectorSearchLimit)
+            } else {
+                pageChunkRepository.findByVectorSimilarityWithTags(embeddingStr, tags, tags.size, vectorSearchLimit)
+            }
             // Batch-load pages to avoid N+1 queries
             val pageIds = rawResults.mapNotNull { row -> row.getOrNull(1) as? UUID }.distinct()
             val pagesMap = pageRepository.findAllById(pageIds).mapNotNull { page ->
@@ -153,8 +160,9 @@ class RagService(
         }
     }
 
-    private fun fetchFtsCandidates(query: String, limit: Int): List<ChunkCandidate> {
-        val ftsPages = pageRepository.fullTextSearch(query, limit)
+    private fun fetchFtsCandidates(query: String, limit: Int, tags: List<String>): List<ChunkCandidate> {
+        val ftsPages = if (tags.isEmpty()) pageRepository.fullTextSearch(query, limit)
+        else pageRepository.fullTextSearchWithTags(query, tags, tags.size, limit)
         if (ftsPages.isEmpty()) return emptyList()
         val pagesById = ftsPages.mapNotNull { page -> page.id?.let { id -> id to page } }.toMap()
         if (pagesById.isEmpty()) return emptyList()

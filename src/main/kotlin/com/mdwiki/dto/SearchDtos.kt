@@ -8,5 +8,6 @@ data class SearchResult(
     val slug: String,
     val title: String,
     val snippet: String,
-    val updatedAt: Instant? = null
+    val updatedAt: Instant? = null,
+    val tags: List<String> = emptyList()
 )

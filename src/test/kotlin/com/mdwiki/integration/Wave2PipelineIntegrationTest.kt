@@ -15,6 +15,7 @@ import com.mdwiki.service.PageRevisionService
 import com.mdwiki.service.PageService
 import com.mdwiki.service.StableSectionLinkService
 import com.mdwiki.service.DeferredPageIndexer
+import com.mdwiki.service.SearchService
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -53,6 +54,7 @@ class Wave2PipelineIntegrationTest {
     @Autowired lateinit var folders: FolderRepository
     @Autowired lateinit var deferredPageIndexer: DeferredPageIndexer
     @MockitoBean lateinit var embeddingProvider: EmbeddingProvider
+    @Autowired lateinit var searchService: SearchService
 
     private fun editor(prefix: String): User {
         val suffix = UUID.randomUUID().toString()
@@ -222,5 +224,23 @@ class Wave2PipelineIntegrationTest {
             pageService.create(CreatePageRequest(slug, "Pool one", ""), actor.username)
             assertThat(deferredPageIndexer.awaitIdle(java.time.Duration.ofSeconds(5))).isTrue()
         }
+    }
+
+    @Test
+    fun `text and rag search apply all requested tags before limit`() {
+        val actor = editor("tag-search")
+        val suffix = UUID.randomUUID().toString().replace("-", "")
+        val one = "one$suffix"
+        val two = "two$suffix"
+        pageService.create(CreatePageRequest("tag-both-$suffix", "Needle both",
+            "needleunique #$one #$two"), actor.username)
+        pageService.create(CreatePageRequest("tag-one-$suffix", "Needle one",
+            "needleunique #$one"), actor.username)
+        assertThat(deferredPageIndexer.awaitIdle(java.time.Duration.ofSeconds(5))).isTrue()
+
+        assertThat(searchService.search("needleunique", tags = listOf(one, two)).map { it.slug })
+            .containsExactly("tag-both-$suffix")
+        assertThat(searchService.ragSearch("needleunique", 10, listOf(one, two)).map { it.pageSlug })
+            .allMatch { it == "tag-both-$suffix" }
     }
 }

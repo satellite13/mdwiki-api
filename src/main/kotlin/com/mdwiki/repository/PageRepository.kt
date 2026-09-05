@@ -77,6 +77,21 @@ interface PageRepository : JpaRepository<Page, UUID> {
 
     @Query(
         value = """
+            SELECT p.* FROM pages p
+            WHERE p.deleted_at IS NULL
+              AND p.content_tsv @@ plainto_tsquery('russian', :query)
+              AND (SELECT count(DISTINCT lower(t.name)) FROM page_tags pt
+                   JOIN tags t ON t.id = pt.tag_id
+                   WHERE pt.page_id = p.id AND lower(t.name) IN (:tags)) = :tagCount
+            ORDER BY ts_rank(p.content_tsv, plainto_tsquery('russian', :query)) DESC
+            LIMIT :limit
+        """,
+        nativeQuery = true
+    )
+    fun fullTextSearchWithTags(query: String, tags: Collection<String>, tagCount: Int, limit: Int): List<Page>
+
+    @Query(
+        value = """
             SELECT
                 p.id AS id,
                 p.slug AS slug,
@@ -97,4 +112,28 @@ interface PageRepository : JpaRepository<Page, UUID> {
         nativeQuery = true
     )
     fun searchWithHeadline(@Param("query") query: String, @Param("limit") limit: Int): List<PageSearchHit>
+
+    @Query(
+        value = """
+            SELECT p.id AS id, p.slug AS slug, p.title AS title, p.updated_at AS "updatedAt",
+              ts_headline('russian', coalesce(p.title, '') || E'\n\n' || coalesce(p.content_md, ''),
+                plainto_tsquery('russian', :query),
+                'StartSel=【, StopSel=】, MaxWords=55, MinWords=18, MaxFragments=2, ShortWord=3, FragmentDelimiter= … ') AS headline
+            FROM pages p
+            WHERE p.deleted_at IS NULL
+              AND p.content_tsv @@ plainto_tsquery('russian', :query)
+              AND (SELECT count(DISTINCT lower(t.name)) FROM page_tags pt
+                   JOIN tags t ON t.id = pt.tag_id
+                   WHERE pt.page_id = p.id AND lower(t.name) IN (:tags)) = :tagCount
+            ORDER BY ts_rank(p.content_tsv, plainto_tsquery('russian', :query)) DESC
+            LIMIT :limit
+        """,
+        nativeQuery = true
+    )
+    fun searchWithHeadlineAndTags(
+        @Param("query") query: String,
+        @Param("tags") tags: Collection<String>,
+        @Param("tagCount") tagCount: Int,
+        @Param("limit") limit: Int
+    ): List<PageSearchHit>
 }
