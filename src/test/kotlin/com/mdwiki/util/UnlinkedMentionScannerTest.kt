@@ -68,4 +68,16 @@ class UnlinkedMentionScannerTest {
         assertThat(matches).hasSize(1)
         assertThat(markdown.substring(matches.single().startOffset, matches.single().endOffset)).isEqualTo("Target")
     }
+
+    @Test
+    fun `matches supplementary unicode letters with code point boundaries`() {
+        val upper = "\uD801\uDC00" // DESERET CAPITAL LETTER LONG I
+        val lower = "\uD801\uDC28" // DESERET SMALL LETTER LONG I
+        val markdown = "$lower X${lower}X $upper"
+
+        val matches = UnlinkedMentionScanner.scan(markdown, upper)
+
+        assertThat(matches.map { markdown.substring(it.startOffset, it.endOffset) })
+            .containsExactly(lower, upper)
+    }
 }

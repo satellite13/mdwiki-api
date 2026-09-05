@@ -45,4 +45,20 @@ class PkmDailyConcurrencyIntegrationTest {
             pool.shutdownNow()
         }
     }
+
+    @Test
+    fun `lossy-equivalent usernames get UUID based distinct daily slugs`() {
+        val suffix = UUID.randomUUID().toString().take(8)
+        val first = users.saveAndFlush(User(username = "alice.foo-$suffix", email = "dot-$suffix@test",
+            passwordHash = "x", role = UserRole.EDITOR))
+        val second = users.saveAndFlush(User(username = "alice_foo-$suffix", email = "underscore-$suffix@test",
+            passwordHash = "x", role = UserRole.EDITOR))
+
+        val firstNote = service.putDaily(LocalDate.of(2026, 9, 6), first.username)
+        val secondNote = service.putDaily(LocalDate.of(2026, 9, 6), second.username)
+
+        assertThat(firstNote.page.slug).isNotEqualTo(secondNote.page.slug)
+        assertThat(firstNote.page.slug).contains(first.id.toString())
+        assertThat(secondNote.page.slug).contains(second.id.toString())
+    }
 }

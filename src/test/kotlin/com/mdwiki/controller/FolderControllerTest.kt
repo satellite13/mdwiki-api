@@ -6,6 +6,7 @@ import com.mdwiki.service.FolderService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -78,7 +79,7 @@ class FolderControllerTest {
     @WithMockUser(roles = ["EDITOR"])
     fun `PUT folders renames folder`() {
         val folderId = sampleFolder.id
-        whenever(folderService.rename(eq(folderId), any())).thenReturn(sampleFolder.copy(name = "Renamed"))
+        whenever(folderService.rename(eq(folderId), any(), eq("user"))).thenReturn(sampleFolder.copy(name = "Renamed"))
 
         mockMvc.put("/api/folders/$folderId") {
             contentType = MediaType.APPLICATION_JSON
@@ -87,6 +88,7 @@ class FolderControllerTest {
             status { isOk() }
             jsonPath("$.name") { value("Renamed") }
         }
+        verify(folderService).rename(folderId, UpdateFolderRequest("Renamed"), "user")
     }
 
     @Test
@@ -94,7 +96,7 @@ class FolderControllerTest {
     fun `PUT folders move moves folder`() {
         val folderId = sampleFolder.id
         val newParentId = UUID.randomUUID()
-        whenever(folderService.move(eq(folderId), any())).thenReturn(sampleFolder.copy(parentId = newParentId))
+        whenever(folderService.move(eq(folderId), any(), eq("user"))).thenReturn(sampleFolder.copy(parentId = newParentId))
 
         mockMvc.put("/api/folders/$folderId/move") {
             contentType = MediaType.APPLICATION_JSON
@@ -103,6 +105,7 @@ class FolderControllerTest {
             status { isOk() }
             jsonPath("$.parentId") { value(newParentId.toString()) }
         }
+        verify(folderService).move(folderId, MoveFolderRequest(newParentId), "user")
     }
 
     @Test
@@ -113,5 +116,6 @@ class FolderControllerTest {
         mockMvc.delete("/api/folders/$folderId").andExpect {
             status { isOk() }
         }
+        verify(folderService).delete(folderId, "user", FolderDeletePageAction.DELETE)
     }
 }

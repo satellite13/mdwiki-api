@@ -261,6 +261,10 @@ PKM root folders are owned and stored below `.pkm/{userId}/Inbox` and
 Legacy folders (`owner_id IS NULL`) remain shared. The existing global page/search ACL model
 still allows discovery of page metadata outside the tree, so complete content-level tenant
 isolation is not claimed.
+Owned-folder mutations and page folder assignment require the owner or an Admin, including
+REST and MCP entry points; folder moves must preserve the ownership scope. Daily slugs contain
+the immutable full user UUID plus the date. If an image title is omitted, its original filename
+is reduced to a basename, stripped of control characters, and safely limited to 500 characters.
 The legacy global disk reconciler and watcher intentionally skip `.pkm`; owned PKM Markdown
 must be mutated through authenticated page/capture APIs so it cannot be re-imported as shared content.
 

@@ -5,88 +5,37 @@ import com.mdwiki.error.ConflictException
 import com.mdwiki.mapper.displayTitle
 import com.mdwiki.mapper.toResponse
 import com.mdwiki.model.Folder
+import com.mdwiki.model.UserRole
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
-import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.util.NaturalSort
 import org.springframework.context.annotation.Lazy
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.Duration
-import java.time.Instant
 import java.util.UUID
 
 @Service
 class FolderService(
     private val folderRepository: FolderRepository,
     private val pageRepository: PageRepository,
-    private val userRepository: UserRepository,
     private val wikiFileService: WikiFileService,
     private val treeEventsService: TreeEventsService,
     private val deletePageUseCase: DeletePageUseCase,
-    @Lazy private val syncService: SyncService
+    @Lazy private val syncService: SyncService,
+    private val folderAccessPolicy: FolderAccessPolicy
 ) {
 
-    @Volatile
-    private var cachedTree: List<FolderTreeNode>? = null
-    @Volatile
-    private var cacheTime: Instant = Instant.MIN
-
     fun invalidateCache() {
-        cachedTree = null
+        // Trees are actor-specific and deliberately rebuilt on every request.
     }
 
-    fun getTree(username: String? = null): List<FolderTreeNode> {
-        if (username != null) return buildTreeFor(username)
-        val cached = cachedTree
-        if (cached != null && Duration.between(cacheTime, Instant.now()).seconds < 30) {
-            return cached
-        }
-
-        val allFolders = folderRepository.findAll()
-        val allPages = pageRepository.findAllByDeletedAtIsNull()
-
-        val foldersByParent = allFolders.groupBy { it.parent?.id }
-        val pagesByFolder = allPages.groupBy { it.folder?.id }
-
-        fun buildChildren(parentId: UUID?): List<FolderTreeNode> {
-            val folderNodes = (foldersByParent[parentId] ?: emptyList())
-                .sortedBy { it.sortOrder }
-                .map { folder ->
-                    FolderTreeNode(
-                        id = "folder-${folder.id}",
-                        name = folder.name,
-                        type = "folder",
-                        children = buildChildren(folder.id)
-                    )
-                }
-
-            val pageNodes = (pagesByFolder[parentId] ?: emptyList())
-                .sortedWith { left, right ->
-                    NaturalSort.compare(left.displayTitle(), right.displayTitle())
-                }
-                .map { page ->
-                    FolderTreeNode(
-                        id = page.id.toString(),
-                        name = page.displayTitle(),
-                        type = "page",
-                        slug = page.slug
-                    )
-                }
-
-            return folderNodes + pageNodes
-        }
-
-        val result = buildChildren(null)
-        cachedTree = result
-        cacheTime = Instant.now()
-        return result
-    }
+    fun getTree(username: String): List<FolderTreeNode> = buildTreeFor(username)
 
     private fun buildTreeFor(username: String): List<FolderTreeNode> {
+        val actor = folderAccessPolicy.actor(username)
         val visibleFolders = folderRepository.findAll()
-            .filter { it.owner == null || it.owner?.username == username }
+            .filter { actor.role == UserRole.ADMIN || it.owner == null || it.owner?.id == actor.id }
         val visibleIds = visibleFolders.mapNotNull { it.id }.toSet()
         val visiblePages = pageRepository.findAllByDeletedAtIsNull()
             .filter { it.folder == null || it.folder?.owner == null || it.folder?.id in visibleIds }
@@ -106,19 +55,24 @@ class FolderService(
 
     @Transactional
     fun create(request: CreateFolderRequest, username: String): FolderResponse {
-        if (folderRepository.existsByParentIdAndName(request.parentId, request.name)) {
-            throw ConflictException("Folder with name '${request.name}' already exists in this location")
-        }
-
-        val user = userRepository.findByUsername(username)
         val parent = request.parentId?.let {
             folderRepository.findById(it).orElseThrow { NoSuchElementException("Parent folder not found: $it") }
+        }
+        val user = folderAccessPolicy.requireCreate(parent, username)
+        val duplicate = if (parent == null) {
+            folderRepository.existsByOwnerIsNullAndParentIdIsNullAndName(request.name)
+        } else {
+            folderRepository.existsByParentIdAndName(request.parentId, request.name)
+        }
+        if (duplicate) {
+            throw ConflictException("Folder with name '${request.name}' already exists in this location")
         }
 
         val folder = Folder(
             name = request.name,
             parent = parent,
-            createdBy = user
+            createdBy = user,
+            owner = parent?.owner
         )
         val saved = folderRepository.save(folder)
         wikiFileService.ensureFolderDirectory(saved)
@@ -131,8 +85,7 @@ class FolderService(
     @Transactional
     fun getOrCreateOwnedPkmFolder(name: String, username: String): Folder {
         MultiPageMutationLock.acquire(pageRepository)
-        val owner = userRepository.findByUsername(username)
-            ?: throw NoSuchElementException("User not found: $username")
+        val owner = folderAccessPolicy.actor(username)
         folderRepository.findByOwnerIdAndParentIdIsNullAndName(owner.id!!, name)?.let { return it }
         val saved = folderRepository.saveAndFlush(
             Folder(name = name, createdBy = owner, owner = owner)
@@ -144,16 +97,23 @@ class FolderService(
     }
 
     @Transactional
-    fun rename(id: UUID, request: UpdateFolderRequest): FolderResponse {
+    fun rename(id: UUID, request: UpdateFolderRequest, username: String): FolderResponse {
         MultiPageMutationLock.acquire(pageRepository)
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
+        folderAccessPolicy.requireAccess(folder, username)
 
         // Проверяем конфликт только при реальной смене имени:
         // иначе existsByParentIdAndName находит саму папку
-        if (request.name != folder.name &&
-            folderRepository.existsByParentIdAndName(folder.parent?.id, request.name)
-        ) {
+        val duplicate = when {
+            request.name == folder.name -> false
+            folder.parent != null -> folderRepository.existsByParentIdAndName(folder.parent?.id, request.name)
+            folder.owner != null -> folderRepository.findByOwnerIdAndParentIdIsNullAndName(
+                folder.owner!!.id!!, request.name
+            ) != null
+            else -> folderRepository.existsByOwnerIsNullAndParentIdIsNullAndName(request.name)
+        }
+        if (duplicate) {
             throw ConflictException("Folder with name '${request.name}' already exists in this location")
         }
 
@@ -170,7 +130,7 @@ class FolderService(
     }
 
     @Transactional
-    fun move(id: UUID, request: MoveFolderRequest): FolderResponse {
+    fun move(id: UUID, request: MoveFolderRequest, username: String): FolderResponse {
         MultiPageMutationLock.acquire(pageRepository)
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
@@ -178,10 +138,15 @@ class FolderService(
         val oldParentId = folder.parent?.id
         val oldDir = wikiFileService.resolveFolderDirectory(folder)
 
-        if (request.parentId != null) {
+        val requestedParent = request.parentId?.let {
+            folderRepository.findById(it)
+                .orElseThrow { NoSuchElementException("Target parent folder not found: $it") }
+        }
+        folderAccessPolicy.requireMove(folder, requestedParent, username)
+
+        if (requestedParent != null) {
             require(request.parentId != id) { "Cannot move folder into itself" }
-            val targetParent = folderRepository.findById(request.parentId)
-                .orElseThrow { NoSuchElementException("Target parent folder not found: ${request.parentId}") }
+            val targetParent = requestedParent
 
             // Check for circular reference: walk up from targetParent to root
             var current: Folder? = targetParent
@@ -189,19 +154,19 @@ class FolderService(
                 require(current.id != id) { "Cannot move folder into its own subtree" }
                 current = current.parent
             }
-
-            folder.parent = targetParent
-        } else {
-            folder.parent = null
         }
 
-        // Конфликт имён в целевой папке (проверяем только при смене родителя,
-        // иначе existsByParentIdAndName находит саму папку)
-        if (request.parentId != oldParentId &&
+        // Check before mutating the managed entity: auto-flush would otherwise make
+        // the moving folder find itself in the destination.
+        val duplicateAtTarget = if (request.parentId == null) {
+            folderRepository.existsByOwnerIsNullAndParentIdIsNullAndName(folder.name)
+        } else {
             folderRepository.existsByParentIdAndName(request.parentId, folder.name)
-        ) {
+        }
+        if (request.parentId != oldParentId && duplicateAtTarget) {
             throw ConflictException("Folder with name '${folder.name}' already exists in target location")
         }
+        folder.parent = requestedParent
 
         val newDir = wikiFileService.resolveFolderDirectory(folder)
         wikiFileService.moveFolderDirectory(oldDir, newDir)
@@ -214,7 +179,11 @@ class FolderService(
     }
 
     @Transactional
-    fun delete(id: UUID, pageAction: FolderDeletePageAction = FolderDeletePageAction.DELETE) {
+    fun delete(
+        id: UUID,
+        username: String,
+        pageAction: FolderDeletePageAction = FolderDeletePageAction.DELETE
+    ) {
         MultiPageMutationLock.acquire(pageRepository)
         val folder = folderRepository.findById(id)
             .orElseThrow { NoSuchElementException("Folder not found: $id") }
@@ -222,6 +191,11 @@ class FolderService(
 
         val allFolders = folderRepository.findAll()
         val subtreeFolders = collectSubtree(folder, allFolders)
+        folderAccessPolicy.requireDeleteSubtree(
+            subtreeFolders,
+            username,
+            movePagesToRoot = pageAction == FolderDeletePageAction.MOVE_TO_ROOT
+        )
         val subtreeIds = subtreeFolders.mapNotNull { it.id }.toSet()
         // Include soft-deleted pages: fk_pages_folder has no ON DELETE CASCADE, so leftover
         // trash rows with folder_id block folder removal and the TX rolls back quietly from UX POV.

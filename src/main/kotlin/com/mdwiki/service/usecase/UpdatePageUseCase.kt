@@ -19,6 +19,7 @@ import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
+import com.mdwiki.service.FolderAccessPolicy
 import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -36,7 +37,8 @@ class UpdatePageUseCase(
     private val wikilinkService: WikilinkService,
     private val linkRepository: LinkRepository,
     private val syncService: SyncService,
-    private val sectionIndexService: SectionIndexService
+    private val sectionIndexService: SectionIndexService,
+    private val folderAccessPolicy: FolderAccessPolicy
 ) {
     @Transactional
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
@@ -67,6 +69,7 @@ class UpdatePageUseCase(
         }
         val user = userRepository.findByUsername(username)
             ?: throw NotFoundException("User not found: $username")
+        page.folder?.let { folderAccessPolicy.requireAccess(it, username) }
 
         if (frontmatterMetaService.isLocked(page)) {
             // Разрешаем только снятие лока: новый contentMd без locked: true.
@@ -96,6 +99,7 @@ class UpdatePageUseCase(
             request.folderId?.let { folderId ->
                 page.folder = folderRepository.findById(folderId)
                     .orElseThrow { NotFoundException("Folder not found: $folderId") }
+                    .also { folderAccessPolicy.requireAccess(it, username) }
             }
         }
 

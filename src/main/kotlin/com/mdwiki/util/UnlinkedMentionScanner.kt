@@ -76,20 +76,36 @@ object UnlinkedMentionScanner {
             .forEach { protect(it.range.first, it.range.last + 1) }
 
         val result = mutableListOf<Match>()
-        var from = 0
-        while (from <= markdown.length - title.length) {
-            val index = markdown.indexOf(title, from, ignoreCase = true)
-            if (index < 0) break
-            val end = index + title.length
-            val leftOk = index == 0 || !title.first().isLetterOrDigit() ||
-                !markdown.codePointBefore(index).isWordCodePoint()
-            val rightOk = end == markdown.length || !title.last().isLetterOrDigit() ||
-                !markdown.codePointAt(end).isWordCodePoint()
-            if (leftOk && rightOk && (index until end).none { protected[it] }) result += Match(index, end)
-            from = end.coerceAtLeast(index + 1)
+        val titleCodePoints = title.codePoints().toArray()
+        var index = 0
+        while (index < markdown.length) {
+            val end = matchEnd(markdown, index, titleCodePoints)
+            if (end != null) {
+                val leftOk = index == 0 || !titleCodePoints.first().isWordCodePoint() ||
+                    !markdown.codePointBefore(index).isWordCodePoint()
+                val rightOk = end == markdown.length || !titleCodePoints.last().isWordCodePoint() ||
+                    !markdown.codePointAt(end).isWordCodePoint()
+                if (leftOk && rightOk && (index until end).none { protected[it] }) result += Match(index, end)
+                index = end
+            } else {
+                index += Character.charCount(markdown.codePointAt(index))
+            }
         }
         return result
     }
+
+    private fun matchEnd(text: String, start: Int, expected: IntArray): Int? {
+        var offset = start
+        for (wanted in expected) {
+            if (offset >= text.length) return null
+            val actual = text.codePointAt(offset)
+            if (actual.foldCase() != wanted.foldCase()) return null
+            offset += Character.charCount(actual)
+        }
+        return offset
+    }
+
+    private fun Int.foldCase() = Character.toLowerCase(Character.toUpperCase(this))
 
     private fun Int.isWordCodePoint() = Character.isLetterOrDigit(this) || this == '_'.code
 }

@@ -27,6 +27,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.springframework.mock.web.MockMultipartFile
 import java.util.Optional
+import java.util.concurrent.atomic.AtomicReference
 import java.time.Instant
 import java.util.UUID
 
@@ -120,6 +121,27 @@ class PkmServiceTest {
             service.captureImage(png, null, "x".repeat(501), "alice")
         }
         org.mockito.kotlin.verifyNoInteractions(pageService)
+    }
+
+    @Test
+    fun `image filename fallback is sanitized and bounded before page creation`() {
+        val userId = UUID.randomUUID()
+        val owner = User(userId, "alice", "alice@test", "x", UserRole.EDITOR)
+        val inbox = Folder(UUID.randomUUID(), "Inbox", createdBy = owner, owner = owner)
+        whenever(users.findByUsername("alice")).thenReturn(owner)
+        whenever(settings.findById(userId)).thenReturn(Optional.of(UserPkmSettings(userId, owner, inboxFolder = inbox)))
+        val capturedTitle = AtomicReference<String>()
+        whenever(pageService.create(any(), eq("alice"))).thenAnswer { invocation ->
+            capturedTitle.set(invocation.getArgument<com.mdwiki.dto.CreatePageRequest>(0).title)
+            throw IllegalStateException("stop after create request")
+        }
+        val png = MockMultipartFile("file", "../${"a".repeat(600)}\u0000.png", "image/png",
+            byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))
+
+        assertThrows<IllegalStateException> { service.captureImage(png, null, null, "alice") }
+
+        assertThat(capturedTitle.get()).hasSizeLessThanOrEqualTo(500)
+            .doesNotContain("/", "\\", "\u0000")
     }
 
     @Test

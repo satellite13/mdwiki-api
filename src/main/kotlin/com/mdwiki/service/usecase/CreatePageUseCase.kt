@@ -14,6 +14,7 @@ import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
+import com.mdwiki.service.FolderAccessPolicy
 import org.springframework.stereotype.Component
 
 @Component
@@ -26,7 +27,8 @@ class CreatePageUseCase(
     private val wikiFileService: WikiFileService,
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikilinkService: WikilinkService,
-    private val sectionIndexService: SectionIndexService
+    private val sectionIndexService: SectionIndexService,
+    private val folderAccessPolicy: FolderAccessPolicy
 ) {
     fun execute(request: CreatePageRequest, username: String) = run {
         // Явно заданный `slug` имеет приоритет (после нормализации); fallback — slug из title.
@@ -43,7 +45,7 @@ class CreatePageUseCase(
         val folder = request.folderId?.let { folderId ->
             folderRepository.findById(folderId).orElseThrow {
                 NotFoundException("Folder not found: $folderId")
-            }
+            }.also { folderAccessPolicy.requireAccess(it, username) }
         }
 
         val page = Page(

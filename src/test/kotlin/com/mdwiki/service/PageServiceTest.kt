@@ -69,15 +69,16 @@ class PageServiceTest {
         val props = WikiProperties(contentDir = tempDir.toString())
         wikiFileService = WikiFileService(props, fileWatcherService, folderRepository)
         val wikilinkService = WikilinkService()
+        val folderAccessPolicy = FolderAccessPolicy(userRepository)
         val createPageUseCase = CreatePageUseCase(
             pageRepository, userRepository, folderRepository,
             pageMetadataService, pageIndexer, wikiFileService, frontmatterMetaService, wikilinkService,
-            sectionIndexService
+            sectionIndexService, folderAccessPolicy
         )
         val updatePageUseCase = UpdatePageUseCase(
             pageRepository, userRepository, folderRepository,
             pageMetadataService, pageIndexer, wikiFileService, frontmatterMetaService,
-            wikilinkService, linkRepository, syncService, sectionIndexService
+            wikilinkService, linkRepository, syncService, sectionIndexService, folderAccessPolicy
         )
         val deletePageUseCase = DeletePageUseCase(
             pageRepository, pageMetadataService, ragService, wikiFileService, syncService, frontmatterMetaService

@@ -39,6 +39,18 @@ class PkmService(
     private fun slug(prefix: String) =
         "$prefix-${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
 
+    private fun safeImageTitle(originalFilename: String?): String {
+        val basename = originalFilename
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('\\')
+            ?.filterNot(Char::isISOControl)
+            ?.trim()
+            .takeUnless { it.isNullOrBlank() }
+            ?: "Image"
+        val bounded = basename.take(500)
+        return if (bounded.lastOrNull()?.isHighSurrogate() == true) bounded.dropLast(1) else bounded
+    }
+
     private fun folder(username: String, inbox: Boolean): Folder {
         MultiPageMutationLock.acquire(pages)
         val owner = user(username)
@@ -94,7 +106,7 @@ class PkmService(
         val page = pageService.create(
             CreatePageRequest(
                 slug("capture"),
-                title?.trim().takeUnless { it.isNullOrBlank() } ?: file.originalFilename ?: "Image",
+                title?.trim().takeUnless { it.isNullOrBlank() } ?: safeImageTitle(file.originalFilename),
                 "",
                 folder(username, true).id
             ),
@@ -131,9 +143,8 @@ class PkmService(
         dailyNotes.findByUserIdAndNoteDate(owner.id!!, date)?.let {
             return DailyNoteResponse(date.toString(), it.page.toResponse(), false)
         }
-        val normalizedUser = username.lowercase().replace(Regex("[^a-z0-9а-яё]+"), "-").trim('-')
         val page = pageService.create(
-            CreatePageRequest("daily-$normalizedUser-$date", date.toString(), "# $date\n\n", folder(username, false).id),
+            CreatePageRequest("daily-${owner.id}-$date", date.toString(), "# $date\n\n", folder(username, false).id),
             username
         )
         val entity = pages.findById(page.id).orElseThrow()
