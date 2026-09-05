@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-attachment-uploader-null
+      author: mdwiki
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE attachments
+                DROP CONSTRAINT attachments_uploaded_by_fkey;
+              ALTER TABLE attachments
+                ADD CONSTRAINT attachments_uploaded_by_fkey
+                FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL;
+      rollback:
+        - sql:
+            sql: |
+              ALTER TABLE attachments
+                DROP CONSTRAINT attachments_uploaded_by_fkey;
+              ALTER TABLE attachments
+                ADD CONSTRAINT attachments_uploaded_by_fkey
+                FOREIGN KEY (uploaded_by) REFERENCES users(id);

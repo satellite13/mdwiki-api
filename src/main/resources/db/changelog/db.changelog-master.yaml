@@ -11,3 +11,5 @@ databaseChangeLog:
       file: db/changelog/004-pkm-wave1.yaml
   - include:
       file: db/changelog/005-folder-ownership.yaml
+  - include:
+      file: db/changelog/007-attachment-uploader-null.yaml

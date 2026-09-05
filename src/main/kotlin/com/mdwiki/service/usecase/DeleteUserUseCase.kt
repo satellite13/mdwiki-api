@@ -43,8 +43,7 @@ class DeleteUserUseCase(
         val ownedPageIds = ownedFolders.flatMap { folder ->
             pageRepository.findByFolderId(folder.id!!).mapNotNull { it.id }
         }.distinct()
-        (attachmentRepository.findByUploadedById(userId) +
-            attachmentRepository.findByPageIdIn(ownedPageIds))
+        attachmentRepository.findByPageIdIn(ownedPageIds)
             .distinctBy { it.id }
             .forEach { attachmentService.deletePreAuthorized(it.id!!) }
         ownedFolders.filter { it.parent == null }
