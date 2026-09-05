@@ -113,4 +113,52 @@ class MarkdownFrontmatterTest {
             )
         }
     }
+
+    @Test
+    fun `updates and removes complete multiline sequence field without dangling entries`() {
+        val markdown = "---\n" +
+            "title: Keep\n" +
+            "tags:\n" +
+            "  # legacy tags\n" +
+            "  - first\n" +
+            "  - second\n" +
+            "status: draft\n" +
+            "---\n" +
+            "# Body\n"
+
+        assertEquals(
+            "---\ntitle: Keep\ntags: [replacement]\nstatus: draft\n---\n# Body\n",
+            MarkdownFrontmatter.updateFields(markdown, mapOf("tags" to "[replacement]"))
+        )
+        assertEquals(
+            "---\ntitle: Keep\nstatus: draft\n---\n# Body\n",
+            MarkdownFrontmatter.removeFields(markdown, listOf("tags"))
+        )
+    }
+
+    @Test
+    fun `updates and removes complete nested mapping while preserving subsequent field and body`() {
+        val markdown = "---\n" +
+            "metadata:\n" +
+            "  author: Ada\n" +
+            "  details:\n" +
+            "    # retain only while field exists\n" +
+            "    topics:\n" +
+            "      - kotlin\n" +
+            "      - yaml\n" +
+            "\n" +
+            "  published: true\n" +
+            "next: unchanged\n" +
+            "---\n" +
+            "Body stays\n"
+
+        assertEquals(
+            "---\nmetadata: {updated: true}\nnext: unchanged\n---\nBody stays\n",
+            MarkdownFrontmatter.updateFields(markdown, mapOf("metadata" to "{updated: true}"))
+        )
+        assertEquals(
+            "---\nnext: unchanged\n---\nBody stays\n",
+            MarkdownFrontmatter.removeFields(markdown, listOf("metadata"))
+        )
+    }
 }

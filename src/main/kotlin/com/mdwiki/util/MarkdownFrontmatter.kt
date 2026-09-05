@@ -72,30 +72,22 @@ object MarkdownFrontmatter {
         return markdown.substring(0, frontmatter.yamlStart) + yaml + markdown.substring(frontmatter.yamlEnd)
     }
 
-    /** Includes the complete YAML literal/folded block scalar belonging to a field. */
+    /** Includes the complete indented YAML value belonging to a top-level field. */
     private fun fieldEnd(yaml: String, fieldStart: Int): Int {
         val lineEnd = yaml.indexOf('\n', fieldStart).let { if (it == -1) yaml.length else it }
-        val firstLine = yaml.substring(fieldStart, lineEnd).removeSuffix("\r")
-        val value = firstLine.substringAfter(':').trimStart()
-        val indicator = Regex("""^[|>](?:[1-9][+-]?|[+-][1-9]?|[+-]?)[ \t]*(?:#.*)?$""").matchEntire(value)
-            ?: return if (lineEnd < yaml.length) lineEnd + 1 else lineEnd
-        val explicitIndent = indicator.value.firstOrNull { it in '1'..'9' }?.digitToInt()
         var cursor = if (lineEnd < yaml.length) lineEnd + 1 else lineEnd
-        var contentIndent = explicitIndent
+        var hasIndentedValue = false
         while (cursor < yaml.length) {
             val nextEnd = yaml.indexOf('\n', cursor).let { if (it == -1) yaml.length else it }
             val next = yaml.substring(cursor, nextEnd).removeSuffix("\r")
-            if (next.isNotEmpty()) {
-                val indentation = next.takeWhile { it == ' ' }.length
-                if (contentIndent == null) {
-                    if (indentation == 0) break
-                    contentIndent = indentation
-                }
-                if (indentation < contentIndent) break
+            val indented = next.startsWith(' ') || next.startsWith('\t')
+            if (next.isNotEmpty() && !indented && (hasIndentedValue || !next.startsWith("#"))) {
+                break
             }
+            if (indented) hasIndentedValue = true
             cursor = if (nextEnd < yaml.length) nextEnd + 1 else nextEnd
         }
-        return cursor
+        return if (hasIndentedValue) cursor else if (lineEnd < yaml.length) lineEnd + 1 else lineEnd
     }
 
     /** Finds an unindented canonical YAML mapping key; indented block scalars stay untouched. */
