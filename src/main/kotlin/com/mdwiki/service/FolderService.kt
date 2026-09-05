@@ -30,6 +30,8 @@ class FolderService(
         // Trees are actor-specific and deliberately rebuilt on every request.
     }
 
+    /** Keep the persistence session open: tree visibility touches lazy folder.owner. */
+    @Transactional(readOnly = true)
     fun getTree(username: String): List<FolderTreeNode> = buildTreeFor(username)
 
     private fun buildTreeFor(username: String): List<FolderTreeNode> {
