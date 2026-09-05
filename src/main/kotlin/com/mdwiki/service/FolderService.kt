@@ -205,7 +205,7 @@ class FolderService(
         when (pageAction) {
             FolderDeletePageAction.DELETE -> {
                 for (page in pages) {
-                    deletePageUseCase.execute(
+                    deletePageUseCase.executePreAuthorized(
                         slug = page.slug,
                         mode = DeletePageUseCase.DeleteMode.HARD,
                         scheduleReconcile = false,

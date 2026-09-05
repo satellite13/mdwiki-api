@@ -80,8 +80,9 @@ class PageController(
     @DeleteMapping("/{slug}")
     fun delete(
         @PathVariable slug: String,
-        @RequestParam(defaultValue = "SOFT") mode: DeletePageUseCase.DeleteMode
-    ) = pageService.delete(slug, mode)
+        @RequestParam(defaultValue = "SOFT") mode: DeletePageUseCase.DeleteMode,
+        auth: Authentication
+    ) = pageService.delete(slug, mode, auth.name)
 
     @PostMapping("/{slug}/restore")
     fun restore(@PathVariable slug: String): PageResponse = pageService.restore(slug)

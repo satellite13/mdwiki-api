@@ -279,7 +279,7 @@ class FolderServiceTest {
 
         folderService.delete(folderId, "testuser", FolderDeletePageAction.DELETE)
 
-        verify(deletePageUseCase).execute(
+        verify(deletePageUseCase).executePreAuthorized(
             "orphan",
             DeletePageUseCase.DeleteMode.HARD,
             scheduleReconcile = false,
@@ -308,7 +308,7 @@ class FolderServiceTest {
 
         folderService.delete(folderId, "testuser", FolderDeletePageAction.DELETE)
 
-        verify(deletePageUseCase).execute(
+        verify(deletePageUseCase).executePreAuthorized(
             "trashed",
             DeletePageUseCase.DeleteMode.HARD,
             scheduleReconcile = false,
@@ -332,7 +332,7 @@ class FolderServiceTest {
         assertNull(page.folder)
         verify(wikiFileService).relocatePageFile(page, null)
         verify(pageRepository).saveAll(listOf(page))
-        verify(deletePageUseCase, never()).execute(any(), any(), any(), any())
+        verify(deletePageUseCase, never()).executePreAuthorized(any(), any(), any(), any())
         verify(folderRepository).delete(folder)
     }
 }

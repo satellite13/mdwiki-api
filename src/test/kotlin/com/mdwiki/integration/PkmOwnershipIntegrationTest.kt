@@ -13,9 +13,11 @@ import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.UserPkmSettingsRepository
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.FolderService
 import com.mdwiki.service.PageService
 import com.mdwiki.service.WikiFileService
+import com.mdwiki.service.usecase.DeletePageUseCase
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -44,6 +46,7 @@ class PkmOwnershipIntegrationTest {
     }
 
     @Autowired lateinit var users: UserRepository
+    @Autowired lateinit var pages: PageRepository
     @Autowired lateinit var settings: UserPkmSettingsRepository
     @Autowired lateinit var controller: PkmController
     @Autowired lateinit var folderService: FolderService
@@ -122,6 +125,27 @@ class PkmOwnershipIntegrationTest {
             admin.username
         )
         assertThat(adminPage.folderId).isEqualTo(aliceInbox.id)
+
+        val softDelete = pageService.create(
+            CreatePageRequest("soft-delete-$suffix", "Soft delete", "", aliceInbox.id),
+            alice.username
+        )
+        assertThrows<ForbiddenException> {
+            pageService.delete(softDelete.slug, DeletePageUseCase.DeleteMode.SOFT, bob.username)
+        }
+        pageService.delete(softDelete.slug, DeletePageUseCase.DeleteMode.SOFT, admin.username)
+        assertThat(pages.findById(softDelete.id).orElseThrow().deletedAt).isNotNull()
+
+        val hardDelete = pageService.create(
+            CreatePageRequest("hard-delete-$suffix", "Hard delete", "", aliceInbox.id),
+            alice.username
+        )
+        assertThrows<ForbiddenException> {
+            pageService.delete(hardDelete.slug, DeletePageUseCase.DeleteMode.HARD, bob.username)
+        }
+        pageService.delete(hardDelete.slug, DeletePageUseCase.DeleteMode.HARD, admin.username)
+        assertThat(pages.findById(hardDelete.id)).isEmpty()
+
         folderService.delete(child.id, admin.username)
     }
 

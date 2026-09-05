@@ -147,8 +147,18 @@ class PageService(
     }
 
     @Transactional
-    fun delete(slug: String, mode: DeletePageUseCase.DeleteMode = DeletePageUseCase.DeleteMode.SOFT) {
-        deletePageUseCase.execute(slug, mode)
+    fun delete(slug: String, mode: DeletePageUseCase.DeleteMode, username: String) {
+        deletePageUseCase.execute(slug, mode, username)
+        publishDelete()
+    }
+
+    @Transactional
+    internal fun deletePreAuthorized(slug: String, mode: DeletePageUseCase.DeleteMode) {
+        deletePageUseCase.executePreAuthorized(slug, mode)
+        publishDelete()
+    }
+
+    private fun publishDelete() {
         folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
     }

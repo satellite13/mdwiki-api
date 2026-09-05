@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.mdwiki.dto.*
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.error.ConflictException
+import com.mdwiki.error.ForbiddenException
 import com.mdwiki.service.GraphService
 import com.mdwiki.service.PageService
+import com.mdwiki.service.usecase.DeletePageUseCase
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -123,6 +125,50 @@ class PageControllerTest {
             status { isOk() }
             jsonPath("$.slug") { value("test-page") }
         }
+    }
+
+    @Test
+    @WithMockUser(username = "owner", roles = ["EDITOR"])
+    fun `DELETE page propagates actor and soft mode`() {
+        mockMvc.delete("/api/pages/test-page").andExpect {
+            status { isOk() }
+        }
+
+        verify(pageService).delete("test-page", DeletePageUseCase.DeleteMode.SOFT, "owner")
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = ["ADMIN"])
+    fun `DELETE page propagates actor and hard mode for admin`() {
+        mockMvc.delete("/api/pages/test-page") {
+            param("mode", "HARD")
+        }.andExpect {
+            status { isOk() }
+        }
+
+        verify(pageService).delete("test-page", DeletePageUseCase.DeleteMode.HARD, "admin")
+    }
+
+    @Test
+    @WithMockUser(username = "bob", roles = ["EDITOR"])
+    fun `DELETE owned page returns forbidden for foreign editor`() {
+        whenever(pageService.delete("test-page", DeletePageUseCase.DeleteMode.SOFT, "bob"))
+            .thenThrow(ForbiddenException("Folder belongs to another user"))
+
+        mockMvc.delete("/api/pages/test-page").andExpect {
+            status { isForbidden() }
+            jsonPath("$.error") { value("FORBIDDEN") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
+    fun `DELETE page is forbidden for reader`() {
+        mockMvc.delete("/api/pages/test-page").andExpect {
+            status { isForbidden() }
+        }
+
+        verify(pageService, org.mockito.kotlin.never()).delete(any(), any(), any())
     }
 
     @Test

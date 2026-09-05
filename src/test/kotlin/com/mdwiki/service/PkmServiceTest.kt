@@ -110,7 +110,7 @@ class PkmServiceTest {
         assertThrows<IllegalStateException> { service.captureImage(png, null, null, "alice") }
 
         verify(attachments).delete(attachment.id)
-        verify(pageService).delete(eq(created.slug), any())
+        verify(pageService).deletePreAuthorized(eq(created.slug), any())
     }
 
     @Test

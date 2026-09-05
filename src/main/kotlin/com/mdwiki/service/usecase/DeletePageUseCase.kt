@@ -6,6 +6,7 @@ import com.mdwiki.rag.RagService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
+import com.mdwiki.service.FolderAccessPolicy
 import org.springframework.stereotype.Component
 import java.time.Instant
 
@@ -16,7 +17,8 @@ class DeletePageUseCase(
     private val ragService: RagService,
     private val wikiFileService: WikiFileService,
     private val syncService: SyncService,
-    private val frontmatterMetaService: com.mdwiki.service.FrontmatterMetaService
+    private val frontmatterMetaService: com.mdwiki.service.FrontmatterMetaService,
+    private val folderAccessPolicy: FolderAccessPolicy
 ) {
     enum class DeleteMode {
         SOFT,
@@ -25,15 +27,32 @@ class DeletePageUseCase(
 
     fun execute(
         slug: String,
-        mode: DeleteMode = DeleteMode.SOFT,
+        mode: DeleteMode,
+        username: String
+    ) = executeInternal(slug, mode, scheduleReconcile = true, ignoreLocked = false) { page ->
+        page.folder?.let { folderAccessPolicy.requireAccess(it, username) }
+    }
+
+    internal fun executePreAuthorized(
+        slug: String,
+        mode: DeleteMode,
         scheduleReconcile: Boolean = true,
         ignoreLocked: Boolean = false
+    ) = executeInternal(slug, mode, scheduleReconcile, ignoreLocked) { }
+
+    private fun executeInternal(
+        slug: String,
+        mode: DeleteMode,
+        scheduleReconcile: Boolean,
+        ignoreLocked: Boolean,
+        authorize: (com.mdwiki.model.Page) -> Unit
     ) {
         val page = pageRepository.findBySlugForUpdate(slug)
         if (page != null) {
             if (!ignoreLocked && frontmatterMetaService.isLocked(page)) {
                 throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be deleted")
             }
+            authorize(page)
             if (mode == DeleteMode.SOFT) {
                 if (page.deletedAt == null) {
                     page.deletedAt = Instant.now()

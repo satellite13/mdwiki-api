@@ -81,7 +81,8 @@ class PageServiceTest {
             wikilinkService, linkRepository, syncService, sectionIndexService, folderAccessPolicy
         )
         val deletePageUseCase = DeletePageUseCase(
-            pageRepository, pageMetadataService, ragService, wikiFileService, syncService, frontmatterMetaService
+            pageRepository, pageMetadataService, ragService, wikiFileService, syncService,
+            frontmatterMetaService, folderAccessPolicy
         )
         val importMdPagesUseCase = ImportMdPagesUseCase(
             pageRepository, createPageUseCase, updatePageUseCase, wikilinkService
@@ -804,7 +805,7 @@ class PageServiceTest {
     fun `delete throws when page and markdown file both missing`() {
         whenever(pageRepository.findBySlugForUpdate("nonexistent")).thenReturn(null)
         assertThrows<NotFoundException> {
-            pageService.delete("nonexistent")
+            pageService.delete("nonexistent", DeletePageUseCase.DeleteMode.SOFT, "testuser")
         }
     }
 
@@ -814,7 +815,7 @@ class PageServiceTest {
         tempDir.resolve("$slug.md").toFile().writeText("# x")
         whenever(pageRepository.findBySlugForUpdate(slug)).thenReturn(null)
 
-        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD)
+        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD, "testuser")
 
         assertFalse(tempDir.resolve("$slug.md").toFile().exists())
         verify(pageRepository, never()).delete(any())
@@ -835,7 +836,7 @@ class PageServiceTest {
         doNothing().whenever(ragService).deletePageChunks(any())
         doNothing().whenever(pageMetadataService).cleanupOrphanedTags()
 
-        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD)
+        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD, "testuser")
 
         verify(pageMetadataService).deleteSourceLinks(page)
         verify(pageMetadataService).detachIncomingLinks(page)
@@ -852,7 +853,7 @@ class PageServiceTest {
         whenever(pageRepository.findBySlugForUpdate("doomed")).thenReturn(page)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
-        pageService.delete("doomed")
+        pageService.delete("doomed", DeletePageUseCase.DeleteMode.SOFT, "testuser")
 
         assertNotNull(page.deletedAt)
         val trashFile = tempDir.resolve(".trash/doomed.md").toFile()

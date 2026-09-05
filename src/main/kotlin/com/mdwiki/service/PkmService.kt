@@ -124,7 +124,7 @@ class PkmService(
             return CaptureResponse("image", updated, attachment)
         } catch (error: Exception) {
             attachment?.let { runCatching { attachmentService.delete(it.id) } }
-            runCatching { pageService.delete(page.slug, DeletePageUseCase.DeleteMode.HARD) }
+            runCatching { pageService.deletePreAuthorized(page.slug, DeletePageUseCase.DeleteMode.HARD) }
             throw error
         }
     }
