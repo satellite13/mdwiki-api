@@ -13,6 +13,7 @@ import com.mdwiki.service.SyncService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.PageRevisionService
+import com.mdwiki.service.PropertyService
 import com.mdwiki.model.RevisionOperation
 import com.mdwiki.util.PathSanitizer
 import com.mdwiki.util.PersistentInstant
@@ -34,7 +35,8 @@ class WikiSyncEngine(
     private val wikiFileService: WikiFileService,
     private val pageIndexer: DeferredPageIndexer,
     private val sectionIndexService: SectionIndexService,
-    private val pageRevisionService: PageRevisionService? = null
+    private val pageRevisionService: PageRevisionService? = null,
+    private val propertyService: PropertyService? = null
 ) {
     private val log = LoggerFactory.getLogger(WikiSyncEngine::class.java)
     private companion object {
@@ -150,6 +152,7 @@ class WikiSyncEngine(
             val saved = pageRepository.save(page)
             pageMetadataService.syncLinksAndTags(saved, content)
             pageMetadataService.resolveIncomingLinks(saved)
+            propertyService?.project(saved)
             pageIndexer.indexAfterCommit(saved)
             sectionIndexService.rebuild(saved, content)
             pageRevisionService?.record(saved, null, RevisionOperation.FILESYSTEM)
@@ -173,6 +176,7 @@ class WikiSyncEngine(
             if (wasDeleted) {
                 pageMetadataService.resolveIncomingLinks(saved)
             }
+            propertyService?.project(saved)
             pageIndexer.indexAfterCommit(saved)
             sectionIndexService.rebuild(saved, content)
             pageRevisionService?.record(saved, null, RevisionOperation.FILESYSTEM)

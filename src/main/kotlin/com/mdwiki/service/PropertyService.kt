@@ -44,7 +44,7 @@ class PropertyService(
 
     @Transactional
     fun update(id: java.util.UUID, request: PropertyDefinitionWriteRequest): PropertyDefinitionResponse {
-        val definition = active(id)
+        val definition = definitions.findByIdAndDeletedAtIsNull(id) ?: throw NotFoundException("Property not found")
         if (request.key != definition.key || request.type != definition.type) bad("Property key and type are immutable")
         if (request.expectedVersion != null && request.expectedVersion != definition.version) throw ConflictException("Property definition changed")
         val config = validateConfig(definition.type, request.config ?: definition.config)
@@ -55,7 +55,6 @@ class PropertyService(
         definition.displayName = request.displayName.trim()
         definition.config = config
         definition.required = request.required
-        definition.version++
         definition.updatedAt = PersistentInstant.now()
         return response(definition)
     }
@@ -64,7 +63,6 @@ class PropertyService(
     fun delete(id: java.util.UUID) {
         val definition = active(id)
         definition.deletedAt = PersistentInstant.now()
-        definition.version++
         definition.updatedAt = PersistentInstant.now()
     }
 

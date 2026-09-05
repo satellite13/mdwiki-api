@@ -73,4 +73,14 @@ class MarkdownFrontmatterTest {
             updated
         )
     }
+
+    @Test
+    fun `updates a top level property without corrupting literal nested yaml`() {
+        val markdown = "---\ndescription: |\n  priority: low\n---\nText"
+
+        assertEquals(
+            "---\ndescription: |\n  priority: low\npriority: high\n---\nText",
+            MarkdownFrontmatter.updateFields(markdown, mapOf("priority" to "high"))
+        )
+    }
 }

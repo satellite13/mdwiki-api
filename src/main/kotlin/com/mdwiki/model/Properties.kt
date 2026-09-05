@@ -22,7 +22,7 @@ class PropertyDefinition(
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16) val type: PropertyType,
     @JdbcTypeCode(SqlTypes.JSON) @Column(nullable = false, columnDefinition = "jsonb") var config: JsonNode,
     @Column(nullable = false) var required: Boolean = false,
-    @Column(nullable = false) var version: Long = 1,
+    @Version @Column(nullable = false) var version: Long = 1,
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "created_by") val createdBy: User? = null,
     @Column(name = "created_at", nullable = false, updatable = false) val createdAt: Instant = PersistentInstant.now(),
     @Column(name = "updated_at", nullable = false) var updatedAt: Instant = PersistentInstant.now(),
