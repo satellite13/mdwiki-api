@@ -3,15 +3,18 @@ package com.mdwiki.controller
 import com.mdwiki.dto.*
 import com.mdwiki.service.PkmService
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Size
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
+import org.springframework.validation.annotation.Validated
 import java.time.LocalDate
 import java.util.UUID
 
 @RestController
+@Validated
 class PkmController(private val service: PkmService) {
     @PostMapping("/api/captures/text")
     @ResponseStatus(HttpStatus.CREATED)
@@ -27,8 +30,8 @@ class PkmController(private val service: PkmService) {
     @ResponseStatus(HttpStatus.CREATED)
     fun captureImage(
         @RequestPart file: MultipartFile,
-        @RequestParam(required = false) caption: String?,
-        @RequestParam(required = false) title: String?,
+        @RequestParam(required = false) @Size(max = 2000) caption: String?,
+        @RequestParam(required = false) @Size(max = 500) title: String?,
         auth: Authentication
     ) = service.captureImage(file, caption, title, auth.name)
 

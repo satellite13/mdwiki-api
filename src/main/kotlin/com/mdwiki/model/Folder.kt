@@ -22,6 +22,10 @@ class Folder(
     @JoinColumn(name = "created_by")
     var createdBy: User? = null,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id")
+    var owner: User? = null,
+
     @Column(name = "sort_order", nullable = false)
     var sortOrder: Int = 0,
 

@@ -256,6 +256,17 @@ Wave 1 adds authenticated personal workflows while keeping Markdown as the sourc
 
 There is no shared request-idempotency infrastructure in the current API, so Wave 1 does not accept `Idempotency-Key`; the UI disables capture submission while a request is in flight.
 
+PKM root folders are owned and stored below `.pkm/{userId}/Inbox` and
+`.pkm/{userId}/Daily Notes`; the folder tree hides another user's owned folders and pages.
+Legacy folders (`owner_id IS NULL`) remain shared. The existing global page/search ACL model
+still allows discovery of page metadata outside the tree, so complete content-level tenant
+isolation is not claimed.
+The legacy global disk reconciler and watcher intentionally skip `.pkm`; owned PKM Markdown
+must be mutated through authenticated page/capture APIs so it cannot be re-imported as shared content.
+
+Orphan counting treats unresolved links as intentional outgoing links. Resolved links whose
+target is soft-deleted count as neither incoming nor outgoing.
+
 Wave 1 добавляет персональные сценарии для авторизованных пользователей, сохраняя Markdown источником истины:
 
 - быстрый захват текста, HTTP(S)-ссылок и изображений в лениво создаваемую папку `Inbox`;

@@ -12,7 +12,7 @@ import java.util.UUID
 class FolderController(private val folderService: FolderService) {
 
     @GetMapping("/tree")
-    fun getTree(): List<FolderTreeNode> = folderService.getTree()
+    fun getTree(auth: Authentication): List<FolderTreeNode> = folderService.getTree(auth.name)
 
     @PostMapping
     fun create(@Valid @RequestBody request: CreateFolderRequest, auth: Authentication): FolderResponse {

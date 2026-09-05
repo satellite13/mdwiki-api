@@ -5,6 +5,7 @@ import java.io.Serializable
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import org.springframework.data.domain.Persistable
 
 @Entity
 @Table(name = "user_pkm_settings")
@@ -24,7 +25,19 @@ class UserPkmSettings(
     val createdAt: Instant = Instant.now(),
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now()
-)
+) : Persistable<UUID> {
+    @Transient
+    private var newEntity: Boolean = true
+
+    override fun getId(): UUID = userId
+    override fun isNew(): Boolean = newEntity
+
+    @PostLoad
+    @PostPersist
+    private fun markPersisted() {
+        newEntity = false
+    }
+}
 
 data class UserPageId(var userId: UUID? = null, var pageId: UUID? = null) : Serializable
 data class UserDailyNoteId(var userId: UUID? = null, var noteDate: LocalDate? = null) : Serializable

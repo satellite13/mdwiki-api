@@ -99,6 +99,23 @@ class FolderServiceTest {
     }
 
     @Test
+    fun `user tree hides other owners PKM folder and pages`() {
+        val alice = User(UUID.randomUUID(), "alice", "alice@test", "x", UserRole.EDITOR)
+        val bob = User(UUID.randomUUID(), "bob", "bob@test", "x", UserRole.EDITOR)
+        val aliceInbox = Folder(UUID.randomUUID(), "Inbox", createdBy = alice, owner = alice)
+        val bobInbox = Folder(UUID.randomUUID(), "Inbox", createdBy = bob, owner = bob)
+        val alicePage = Page(UUID.randomUUID(), "alice-capture", "Alice", folder = aliceInbox)
+        val bobPage = Page(UUID.randomUUID(), "bob-capture", "Bob", folder = bobInbox)
+        whenever(folderRepository.findAll()).thenReturn(listOf(aliceInbox, bobInbox))
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(alicePage, bobPage))
+
+        val tree = folderService.getTree("alice")
+
+        assertEquals(1, tree.size)
+        assertEquals("alice-capture", tree.single().children.single().slug)
+    }
+
+    @Test
     fun `getTree sorts pages with natural order for numbered titles`() {
         val chapter9 = Page(id = UUID.randomUUID(), slug = "chapter-9", title = "Глава 9: Обучение и адаптация")
         val chapter10 = Page(id = UUID.randomUUID(), slug = "chapter-10", title = "Глава 10: Протокол контекста модели (MCP)")

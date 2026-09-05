@@ -22,6 +22,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.doThrow
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.mock.web.MockMultipartFile
@@ -30,6 +31,8 @@ import java.nio.file.Path
 import java.util.Base64
 import java.util.Optional
 import java.util.UUID
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @ExtendWith(MockitoExtension::class)
 class AttachmentServiceTest {
@@ -102,6 +105,51 @@ class AttachmentServiceTest {
         assertTrue(Files.exists(uploads.resolve(response.storedName)))
         verify(attachmentRepository).save(any<Attachment>())
         assertEquals("/api/uploads/${response.storedName}", response.url)
+    }
+
+    @Test
+    fun `upload removes file when repository flush fails`() {
+        whenever(userRepository.findByUsername("alice")).thenReturn(uploader)
+        whenever(attachmentRepository.save(any<Attachment>())).thenAnswer { invocation ->
+            val value = invocation.getArgument<Attachment>(0)
+            Attachment(
+                id = UUID.randomUUID(), originalName = value.originalName, storedName = value.storedName,
+                contentType = value.contentType, sizeBytes = value.sizeBytes, uploadedBy = value.uploadedBy
+            )
+        }
+        doThrow(IllegalStateException("db failed"))
+            .whenever(attachmentRepository).flush()
+        val file = MockMultipartFile("file", "note.txt", "text/plain", "hi".toByteArray())
+
+        assertThrows<IllegalStateException> { service.upload(file, "alice", null) }
+
+        val uploads = contentRoot.resolve("uploads")
+        assertTrue(!Files.exists(uploads) || Files.list(uploads).use { it.findAny().isEmpty })
+    }
+
+    @Test
+    fun `upload removes returned file when transaction rolls back`() {
+        whenever(userRepository.findByUsername("alice")).thenReturn(uploader)
+        whenever(attachmentRepository.save(any<Attachment>())).thenAnswer { invocation ->
+            val value = invocation.getArgument<Attachment>(0)
+            Attachment(id = UUID.randomUUID(), originalName = value.originalName, storedName = value.storedName,
+                contentType = value.contentType, sizeBytes = value.sizeBytes, uploadedBy = value.uploadedBy)
+        }
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            val response = service.upload(
+                MockMultipartFile("file", "note.txt", "text/plain", "hi".toByteArray()),
+                "alice", null
+            )
+            val stored = contentRoot.resolve("uploads").resolve(response.storedName)
+            assertTrue(Files.exists(stored))
+            TransactionSynchronizationManager.getSynchronizations().forEach {
+                it.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+            }
+            assertTrue(Files.notExists(stored))
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
     }
 
     @Test

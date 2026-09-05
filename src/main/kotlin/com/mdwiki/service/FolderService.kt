@@ -37,7 +37,8 @@ class FolderService(
         cachedTree = null
     }
 
-    fun getTree(): List<FolderTreeNode> {
+    fun getTree(username: String? = null): List<FolderTreeNode> {
+        if (username != null) return buildTreeFor(username)
         val cached = cachedTree
         if (cached != null && Duration.between(cacheTime, Instant.now()).seconds < 30) {
             return cached
@@ -83,6 +84,26 @@ class FolderService(
         return result
     }
 
+    private fun buildTreeFor(username: String): List<FolderTreeNode> {
+        val visibleFolders = folderRepository.findAll()
+            .filter { it.owner == null || it.owner?.username == username }
+        val visibleIds = visibleFolders.mapNotNull { it.id }.toSet()
+        val visiblePages = pageRepository.findAllByDeletedAtIsNull()
+            .filter { it.folder == null || it.folder?.owner == null || it.folder?.id in visibleIds }
+        val foldersByParent = visibleFolders.groupBy { it.parent?.id }
+        val pagesByFolder = visiblePages.groupBy { it.folder?.id }
+        fun children(parentId: UUID?): List<FolderTreeNode> {
+            val folderNodes = (foldersByParent[parentId] ?: emptyList()).sortedBy { it.sortOrder }.map {
+                FolderTreeNode("folder-${it.id}", it.name, "folder", children = children(it.id))
+            }
+            val pageNodes = (pagesByFolder[parentId] ?: emptyList())
+                .sortedWith { left, right -> NaturalSort.compare(left.displayTitle(), right.displayTitle()) }
+                .map { FolderTreeNode(it.id.toString(), it.displayTitle(), "page", it.slug) }
+            return folderNodes + pageNodes
+        }
+        return children(null)
+    }
+
     @Transactional
     fun create(request: CreateFolderRequest, username: String): FolderResponse {
         if (folderRepository.existsByParentIdAndName(request.parentId, request.name)) {
@@ -104,6 +125,22 @@ class FolderService(
         invalidateCache()
         treeEventsService.publishTreeUpdated()
         return saved.toResponse()
+    }
+
+    /** Creates or returns a user-owned PKM root folder under the global mutation lock. */
+    @Transactional
+    fun getOrCreateOwnedPkmFolder(name: String, username: String): Folder {
+        MultiPageMutationLock.acquire(pageRepository)
+        val owner = userRepository.findByUsername(username)
+            ?: throw NoSuchElementException("User not found: $username")
+        folderRepository.findByOwnerIdAndParentIdIsNullAndName(owner.id!!, name)?.let { return it }
+        val saved = folderRepository.saveAndFlush(
+            Folder(name = name, createdBy = owner, owner = owner)
+        )
+        wikiFileService.ensureFolderDirectory(saved)
+        invalidateCache()
+        treeEventsService.publishTreeUpdated()
+        return saved
     }
 
     @Transactional

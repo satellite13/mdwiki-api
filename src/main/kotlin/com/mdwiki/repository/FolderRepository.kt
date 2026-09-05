@@ -8,7 +8,9 @@ import java.util.UUID
 interface FolderRepository : JpaRepository<Folder, UUID> {
     fun findByParentId(parentId: UUID?): List<Folder>
     fun existsByParentIdAndName(parentId: UUID?, name: String): Boolean
+    fun findByOwnerIdAndParentIdIsNullAndName(ownerId: UUID, name: String): Folder?
+    fun existsByOwnerIdAndParentIdAndName(ownerId: UUID, parentId: UUID?, name: String): Boolean
 
-    @EntityGraph(attributePaths = ["parent"])
+    @EntityGraph(attributePaths = ["parent", "owner"])
     override fun findAll(): List<Folder>
 }

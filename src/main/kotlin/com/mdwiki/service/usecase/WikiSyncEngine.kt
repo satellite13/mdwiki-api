@@ -280,6 +280,7 @@ class WikiSyncEngine(
                     try {
                         // Корзина (.trash) — не контент: soft-deleted страницы не воскрешаем.
                         if (path.toAbsolutePath().normalize().startsWith(trashRoot)) return@forEach
+                        if (wikiFileService.isPkmPath(path.toFile())) return@forEach
                         if (Files.isRegularFile(path) && path.fileName?.toString()?.endsWith(".md") == true) {
                             result.add(path.toFile())
                         }

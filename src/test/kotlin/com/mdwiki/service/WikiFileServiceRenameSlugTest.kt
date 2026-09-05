@@ -3,6 +3,8 @@ package com.mdwiki.service
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Folder
 import com.mdwiki.model.Page
+import com.mdwiki.model.User
+import com.mdwiki.model.UserRole
 import com.mdwiki.repository.FolderRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -94,6 +96,26 @@ class WikiFileServiceRenameSlugTest {
         assertEquals(file.absolutePath, page.filePath)
         verifyNoInteractions(folder)
         verifyNoInteractions(folderRepository)
+    }
+
+    @Test
+    fun `owned PKM folders use owner scoped filesystem path`() {
+        val ownerId = UUID.randomUUID()
+        val owner = User(ownerId, "alice", "alice@example.test", "hash", UserRole.EDITOR)
+        val folder = Folder(id = UUID.randomUUID(), name = "Inbox", owner = owner)
+
+        val path = wikiFileService.resolveFolderDirectory(folder).toPath().normalize()
+
+        assertEquals(tempDir.resolve(".pkm").resolve(ownerId.toString()).resolve("Inbox"), path)
+    }
+
+    @Test
+    fun `global slug fallback does not discover owned PKM files`() {
+        val privateFile = tempDir.resolve(".pkm").resolve(UUID.randomUUID().toString())
+            .resolve("Inbox").also { it.toFile().mkdirs() }.resolve("private.md")
+        privateFile.toFile().writeText("private")
+
+        assertEquals(null, wikiFileService.findMarkdownFileForSlug("private"))
     }
 
     @Test

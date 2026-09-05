@@ -2,6 +2,8 @@ package com.mdwiki.dto
 
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.Positive
 import java.time.Instant
 
 data class TextCaptureRequest(
@@ -29,8 +31,8 @@ data class UnlinkedMentionResponse(
 )
 data class LinkUnlinkedMentionRequest(
     @field:NotBlank val sourceSlug: String,
-    val startOffset: Int,
-    val endOffset: Int,
+    @field:Min(0) val startOffset: Int,
+    @field:Positive val endOffset: Int,
     val expectedUpdatedAt: Instant
 )
 enum class OrphanDefinition { NO_INCOMING, NO_LINKS, NO_OUTGOING }

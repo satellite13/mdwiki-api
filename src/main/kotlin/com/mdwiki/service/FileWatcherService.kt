@@ -27,9 +27,13 @@ class FileWatcherService(
     /** Корзина (.trash) не наблюдается: перемещения туда/обратно — не sync-события. */
     private val trashRoot: Path =
         File(wikiProperties.contentDir, WikiFileService.TRASH_DIR_NAME).toPath().toAbsolutePath().normalize()
+    private val pkmRoot: Path =
+        File(wikiProperties.contentDir, WikiFileService.PKM_DIR_NAME).toPath().toAbsolutePath().normalize()
 
     private fun isInTrash(file: File): Boolean =
         file.toPath().toAbsolutePath().normalize().startsWith(trashRoot)
+    private fun isInPkm(file: File): Boolean =
+        file.toPath().toAbsolutePath().normalize().startsWith(pkmRoot)
 
     fun ignoreNextChange(filePath: String) {
         // Move/write operations may emit several FS events in a short burst.
@@ -56,7 +60,7 @@ class FileWatcherService(
                         for (event in key.pollEvents()) {
                             val path = event.context() as? Path ?: continue
                             val fullPath = watchedDir.resolve(path).toFile()
-                            if (isInTrash(fullPath)) continue
+                            if (isInTrash(fullPath) || isInPkm(fullPath)) continue
                             val fullPathString = fullPath.absolutePath
 
                             when (event.kind()) {
@@ -118,6 +122,7 @@ class FileWatcherService(
             paths
                 .filter { Files.isDirectory(it) }
                 .filter { !isInTrash(it.toFile()) }
+                .filter { !isInPkm(it.toFile()) }
                 .forEach { dir ->
                     val key = dir.register(
                         watchService,

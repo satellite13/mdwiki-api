@@ -23,6 +23,7 @@ class WikiFileService(
 
     companion object {
         const val TRASH_DIR_NAME = ".trash"
+        const val PKM_DIR_NAME = ".pkm"
     }
 
     fun contentRoot(): File = File(wikiProperties.contentDir).also { it.mkdirs() }
@@ -31,6 +32,10 @@ class WikiFileService(
         if (folder == null) return contentRoot()
         val segments = buildFolderSegments(folder)
         var current = contentRoot()
+        val ownerId = folderOwnerId(folder)
+        if (ownerId != null) {
+            current = File(File(current, PKM_DIR_NAME), ownerId)
+        }
         for (segment in segments) {
             current = File(current, segment)
         }
@@ -197,6 +202,10 @@ class WikiFileService(
         file.toPath().toAbsolutePath().normalize()
             .startsWith(trashDir().toPath().toAbsolutePath().normalize())
 
+    fun isPkmPath(file: File): Boolean =
+        file.toPath().toAbsolutePath().normalize()
+            .startsWith(File(contentRoot(), PKM_DIR_NAME).toPath().toAbsolutePath().normalize())
+
     /**
      * Перемещает файл страницы в корзину (soft-delete) и обновляет `page.filePath`.
      * @return false, если файла на диске не было (страница без файла — тоже валидный случай).
@@ -251,6 +260,7 @@ class WikiFileService(
             Files.walk(root.toPath()).use { stream ->
                 stream
                     .filter { !isTrashPath(it.toFile()) }
+                    .filter { !isPkmPath(it.toFile()) }
                     .filter { Files.isRegularFile(it) && it.fileName?.toString() == name }
                     .findFirst()
                     .map { it.toFile() }
@@ -361,6 +371,15 @@ class WikiFileService(
             current = current.parent
         }
         return segments.reversed()
+    }
+
+    private fun folderOwnerId(folder: Folder): String? {
+        var current: Folder? = folder
+        while (current != null) {
+            current.owner?.id?.let { return it.toString() }
+            current = current.parent
+        }
+        return null
     }
 
     /**

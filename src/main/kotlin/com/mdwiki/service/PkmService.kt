@@ -3,6 +3,7 @@ package com.mdwiki.service
 import com.mdwiki.dto.*
 import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
+import com.mdwiki.error.BadRequestException
 import com.mdwiki.mapper.displayTitle
 import com.mdwiki.mapper.toListItem
 import com.mdwiki.mapper.toResponse
@@ -10,6 +11,7 @@ import com.mdwiki.model.*
 import com.mdwiki.repository.*
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.util.UnlinkedMentionScanner
+import com.mdwiki.util.RasterImageValidator
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
@@ -21,7 +23,6 @@ import java.util.UUID
 class PkmService(
     private val users: UserRepository,
     private val pages: PageRepository,
-    private val folders: FolderRepository,
     private val settings: UserPkmSettingsRepository,
     private val dailyNotes: UserDailyNoteRepository,
     private val recent: UserRecentPageRepository,
@@ -46,8 +47,7 @@ class PkmService(
         val existing = if (inbox) prefs.inboxFolder else prefs.dailyFolder
         if (existing != null) return existing
         val name = if (inbox) "Inbox" else "Daily Notes"
-        val created = folderService.create(CreateFolderRequest(name = name), username)
-        val entity = folders.findById(created.id).orElseThrow()
+        val entity = folderService.getOrCreateOwnedPkmFolder(name, username)
         if (inbox) prefs.inboxFolder = entity else prefs.dailyFolder = entity
         prefs.updatedAt = java.time.Instant.now()
         settings.save(prefs)
@@ -88,6 +88,9 @@ class PkmService(
 
     @Transactional
     fun captureImage(file: MultipartFile, caption: String?, title: String?, username: String): CaptureResponse {
+        require((caption?.length ?: 0) <= 2000) { "Caption exceeds 2000 characters" }
+        require((title?.length ?: 0) <= 500) { "Title exceeds 500 characters" }
+        RasterImageValidator.validate(file)
         val page = pageService.create(
             CreatePageRequest(
                 slug("capture"),
@@ -202,8 +205,11 @@ class PkmService(
             ?: throw NotFoundException("Page not found: $targetSlug")
         val source = pages.findActiveBySlugForUpdate(request.sourceSlug)
             ?: throw NotFoundException("Page not found: ${request.sourceSlug}")
-        if (source.updatedAt != request.expectedUpdatedAt) throw ConflictException("Source page changed")
         val content = source.contentMd.orEmpty()
+        if (request.startOffset < 0 || request.endOffset <= request.startOffset || request.endOffset > content.length) {
+            throw BadRequestException("Mention offsets are outside source content")
+        }
+        if (source.updatedAt != request.expectedUpdatedAt) throw ConflictException("Source page changed")
         val match = UnlinkedMentionScanner.scan(content, target.displayTitle())
             .firstOrNull { it.startOffset == request.startOffset && it.endOffset == request.endOffset }
             ?: throw ConflictException("Mention no longer exists at supplied offsets")
@@ -221,8 +227,11 @@ class PkmService(
         val active = pages.findAllByDeletedAtIsNull()
         val allLinks = links.findAllWithPages().filter { it.sourcePage.deletedAt == null }
         return active.mapNotNull { page ->
-            val incoming = allLinks.count { it.targetPage?.id == page.id || it.targetSlug == page.slug }.toLong()
-            val outgoing = allLinks.count { it.sourcePage.id == page.id }.toLong()
+            val incoming = allLinks.count { it.targetPage?.deletedAt == null && it.targetPage?.id == page.id }.toLong()
+            // Unresolved links are intentional outgoing links; links resolved to deleted pages are ignored.
+            val outgoing = allLinks.count {
+                it.sourcePage.id == page.id && (it.targetPage == null || it.targetPage?.deletedAt == null)
+            }.toLong()
             val include = when (definition) {
                 OrphanDefinition.NO_INCOMING -> incoming == 0L
                 OrphanDefinition.NO_OUTGOING -> outgoing == 0L

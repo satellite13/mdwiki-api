@@ -1,0 +1,48 @@
+package com.mdwiki.integration
+
+import com.mdwiki.model.User
+import com.mdwiki.model.UserRole
+import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.PkmService
+import com.mdwiki.dto.DailyNoteResponse
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import java.time.LocalDate
+import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.Callable
+import java.util.concurrent.Future
+
+@SpringBootTest(properties = ["spring.datasource.hikari.maximum-pool-size=4"])
+class PkmDailyConcurrencyIntegrationTest {
+    @Autowired lateinit var users: UserRepository
+    @Autowired lateinit var service: PkmService
+
+    @Test
+    fun `concurrent daily PUT creates one page`() {
+        val suffix = UUID.randomUUID().toString().take(8)
+        val username = "daily-$suffix"
+        users.saveAndFlush(User(username = username, email = "$username@test", passwordHash = "x",
+            role = UserRole.EDITOR))
+        val start = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val futures: List<Future<DailyNoteResponse>> = (1..2).map {
+                pool.submit(Callable {
+                    start.await()
+                    service.putDaily(LocalDate.of(2026, 9, 5), username)
+                })
+            }
+            start.countDown()
+            val results = futures.map { it.get(30, TimeUnit.SECONDS) }
+            assertThat(results.map { it.page.id }.distinct()).hasSize(1)
+            assertThat(results.count { it.created }).isEqualTo(1)
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+}

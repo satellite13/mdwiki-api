@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/003-page-sections.yaml
   - include:
       file: db/changelog/004-pkm-wave1.yaml
+  - include:
+      file: db/changelog/005-folder-ownership.yaml

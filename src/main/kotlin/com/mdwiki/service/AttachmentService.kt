@@ -13,6 +13,8 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile
 import java.nio.file.Files
 import java.nio.file.Path
@@ -271,17 +273,30 @@ class AttachmentService(
         val dest = uploadsDir.resolve(storedName).normalize()
         require(dest.startsWith(uploadsDir)) { "Invalid upload path" }
         writeToDestination(dest)
-
-        val attachment = attachmentRepository.save(Attachment(
-            originalName = originalName,
-            storedName = storedName,
-            contentType = contentType,
-            sizeBytes = sizeBytes,
-            uploadedBy = user,
-            page = linkedPage
-        ))
-
-        return attachment.toResponse()
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCompletion(status: Int) {
+                    if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                        runCatching { Files.deleteIfExists(dest) }
+                    }
+                }
+            })
+        }
+        return try {
+            val attachment = attachmentRepository.save(Attachment(
+                originalName = originalName,
+                storedName = storedName,
+                contentType = contentType,
+                sizeBytes = sizeBytes,
+                uploadedBy = user,
+                page = linkedPage
+            ))
+            attachmentRepository.flush()
+            attachment.toResponse()
+        } catch (error: Exception) {
+            Files.deleteIfExists(dest)
+            throw error
+        }
     }
 
     @Transactional

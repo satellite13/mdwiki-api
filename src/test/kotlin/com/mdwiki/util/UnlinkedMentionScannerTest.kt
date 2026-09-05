@@ -29,6 +29,9 @@ class UnlinkedMentionScannerTest {
             Plain Target.
             [Target][reference]
             [reference]: /page/target
+            ``Target ` nested``
+            [nested [Target] label](https://example.test)
+            <https://example.test/Target>
         """.trimIndent()
 
         val matches = UnlinkedMentionScanner.scan(markdown, "Target")
@@ -36,5 +39,33 @@ class UnlinkedMentionScannerTest {
         assertThat(matches).hasSize(1)
         assertThat(markdown.substring(matches.single().startOffset, matches.single().endOffset))
             .isEqualTo("Target")
+    }
+
+    @Test
+    fun `uses unicode token boundaries without losing repeats`() {
+        val markdown = "Art Article Art, Кот Котик кот."
+
+        assertThat(UnlinkedMentionScanner.scan(markdown, "Art").map { it.startOffset })
+            .containsExactly(0, 12)
+        assertThat(UnlinkedMentionScanner.scan(markdown, "Кот").map {
+            markdown.substring(it.startOffset, it.endOffset)
+        }).containsExactly("Кот", "кот")
+    }
+
+    @Test
+    fun `supports variable fenced delimiters`() {
+        val markdown = """
+            ````kotlin
+            Target
+            ```
+            Target
+            ````
+            Target
+        """.trimIndent()
+
+        val matches = UnlinkedMentionScanner.scan(markdown, "Target")
+
+        assertThat(matches).hasSize(1)
+        assertThat(markdown.substring(matches.single().startOffset, matches.single().endOffset)).isEqualTo("Target")
     }
 }

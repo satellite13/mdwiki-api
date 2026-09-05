@@ -40,7 +40,7 @@ class FolderControllerTest {
             FolderTreeNode(id = "folder-${UUID.randomUUID()}", name = "docs", type = "folder"),
             FolderTreeNode(id = UUID.randomUUID().toString(), name = "Home", type = "page", slug = "home")
         )
-        whenever(folderService.getTree()).thenReturn(tree)
+        whenever(folderService.getTree("user")).thenReturn(tree)
 
         mockMvc.get("/api/folders/tree").andExpect {
             status { isOk() }
