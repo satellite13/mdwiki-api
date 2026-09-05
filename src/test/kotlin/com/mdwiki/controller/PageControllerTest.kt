@@ -3,6 +3,7 @@ package com.mdwiki.controller
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.mdwiki.dto.*
 import com.mdwiki.error.NotFoundException
+import com.mdwiki.error.ConflictException
 import com.mdwiki.service.GraphService
 import com.mdwiki.service.PageService
 import org.junit.jupiter.api.Test
@@ -121,6 +122,33 @@ class PageControllerTest {
         }.andExpect {
             status { isOk() }
             jsonPath("$.slug") { value("test-page") }
+        }
+    }
+
+    @Test
+    @WithMockUser(username = "editor", roles = ["EDITOR"])
+    fun `PUT page rejects invalid explicit slug`() {
+        mockMvc.put("/api/pages/test-page") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"slug":"Invalid slug"}"""
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.error") { value("VALIDATION_ERROR") }
+        }
+    }
+
+    @Test
+    @WithMockUser(username = "editor", roles = ["EDITOR"])
+    fun `PUT page returns conflict for an occupied explicit slug`() {
+        whenever(pageService.update(eq("test-page"), any(), eq("editor")))
+            .thenThrow(ConflictException("Page slug 'taken' already exists"))
+
+        mockMvc.put("/api/pages/test-page") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"slug":"taken"}"""
+        }.andExpect {
+            status { isConflict() }
+            jsonPath("$.error") { value("CONFLICT") }
         }
     }
 

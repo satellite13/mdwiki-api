@@ -38,7 +38,8 @@ export JWT_SECRET='local-dev-secret-change-me'
 - `POST /api/sync` синхронизирует wiki-content с БД, а
   `POST /api/sync/reindex` синхронно перестраивает эмбеддинги и возвращает
   счётчики `total`, `reindexed`, `failed`. Оба endpoint требуют ADMIN.
-- ADMIN может просматривать и восстанавливать мягко удалённые страницы;
+- ADMIN может просматривать и восстанавливать мягко удалённые страницы или
+  окончательно удалять их через `DELETE /api/pages/{slug}?mode=HARD`;
   также доступны импорт/экспорт бандлов, вложения и MCP-инструменты импорта.
 
 ## Версия API

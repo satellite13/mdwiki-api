@@ -4,6 +4,7 @@ import com.mdwiki.config.WikiProperties
 import com.mdwiki.dto.CreatePageRequest
 import com.mdwiki.dto.UpdatePageRequest
 import com.mdwiki.error.ConflictException
+import com.mdwiki.error.AppException
 import com.mdwiki.error.NotFoundException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.mdwiki.model.Page
@@ -34,6 +35,7 @@ import java.io.File
 import java.nio.file.Path
 import java.time.Instant
 import java.util.UUID
+import org.springframework.http.HttpStatus
 
 @ExtendWith(MockitoExtension::class)
 class PageServiceTest {
@@ -563,6 +565,59 @@ class PageServiceTest {
         })
         assertFalse(tempDir.resolve("old-slug.md").toFile().exists())
         assertTrue(tempDir.resolve("new-slug.md").toFile().exists())
+    }
+
+    @Test
+    fun `explicit slug rename rejects blank or invalid slug`() {
+        val page = renameablePage()
+        whenever(pageRepository.findBySlugAndDeletedAtIsNull("old-slug")).thenReturn(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+
+        for (invalidSlug in listOf("", "   ", "Invalid Slug", "bad_slug", "-bad")) {
+            val error = assertThrows<AppException> {
+                pageService.update(page.slug, UpdatePageRequest(slug = invalidSlug), "editor")
+            }
+            assertEquals(HttpStatus.BAD_REQUEST, error.status)
+        }
+        verify(pageRepository, never()).saveAndFlush(any<Page>())
+    }
+
+    @Test
+    fun `explicit slug rename conflicts with active or soft-deleted page without suffixing`() {
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+        for (deletedAt in listOf<Instant?>(null, Instant.parse("2026-09-05T10:00:00Z"))) {
+            reset(pageRepository)
+            val page = renameablePage()
+            val collision = Page(
+                id = UUID.randomUUID(),
+                slug = "taken",
+                title = "Taken",
+                contentMd = ""
+            ).apply { this.deletedAt = deletedAt }
+            whenever(pageRepository.findBySlugAndDeletedAtIsNull("old-slug")).thenReturn(page)
+            whenever(pageRepository.findBySlug("taken")).thenReturn(collision)
+
+            assertThrows<ConflictException> {
+                pageService.update("old-slug", UpdatePageRequest(slug = "taken"), "editor")
+            }
+        }
+        verify(pageRepository, never()).findBySlug("taken-2")
+    }
+
+    private fun renameablePage(): Page {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "old-slug",
+            title = "Old",
+            contentMd = "content"
+        )
+        page.filePath = tempDir.resolve("old-slug.md").toString()
+        tempDir.resolve("old-slug.md").toFile().writeText("content")
+        return page
     }
 
     @Test

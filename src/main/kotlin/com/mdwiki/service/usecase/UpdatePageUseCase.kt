@@ -1,6 +1,8 @@
 package com.mdwiki.service.usecase
 
 import com.mdwiki.dto.UpdatePageRequest
+import com.mdwiki.dto.PageSlugConstraints
+import com.mdwiki.error.BadRequestException
 import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.mapper.toResponse
@@ -18,7 +20,6 @@ import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
-import java.util.UUID
 
 @Component
 class UpdatePageUseCase(
@@ -71,11 +72,20 @@ class UpdatePageUseCase(
         var contentForSave = mergedContent ?: ""
 
         // Slug is immutable unless explicitly requested to change
-        val desiredSlug = request.slug?.let { wikilinkService.normalizePageSlug(it) } ?: oldSlug
+        val desiredSlug = request.slug?.let { explicitSlug ->
+            if (!Regex(PageSlugConstraints.PATTERN).matches(explicitSlug)) {
+                throw BadRequestException(PageSlugConstraints.MESSAGE)
+            }
+            explicitSlug
+        } ?: oldSlug
         val newSlug = if (desiredSlug == oldSlug) {
             oldSlug
         } else {
-            allocateUniqueSlug(desiredSlug, page.id)
+            val existing = pageRepository.findBySlug(desiredSlug)
+            if (existing != null && existing.id != page.id) {
+                throw ConflictException("Page slug '$desiredSlug' already exists")
+            }
+            desiredSlug
         }
         val slugChanged = newSlug != oldSlug
 
@@ -141,17 +151,4 @@ class UpdatePageUseCase(
         saved.toResponse()
     }
 
-    private fun allocateUniqueSlug(base: String, pageId: UUID?): String {
-        var candidate = base.ifBlank { "page" }
-        var counter = 2
-        while (true) {
-            val existing = pageRepository.findBySlug(candidate)
-            if (existing == null || (pageId != null && existing.id == pageId)) {
-                return candidate
-            }
-            val root = base.ifBlank { "page" }
-            candidate = "$root-$counter"
-            counter++
-        }
-    }
 }

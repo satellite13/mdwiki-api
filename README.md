@@ -38,7 +38,8 @@ Local Postgres: `docker-compose up -d` (port `54328`, db/user/password
 - `POST /api/sync` synchronizes wiki-content with the database and
   `POST /api/sync/reindex` synchronously rebuilds embeddings, returning
   `total`, `reindexed`, and `failed` counters. Both require ADMIN.
-- Soft-deleted pages can be listed/restored by ADMIN; bundle import/export,
+- ADMIN can list and restore soft-deleted pages, or permanently remove them
+  with `DELETE /api/pages/{slug}?mode=HARD`; bundle import/export,
   attachments, and MCP import tools remain available.
 
 ## API version
