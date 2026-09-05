@@ -244,6 +244,26 @@ Example response:
 }
 ```
 
+## PKM Wave 1 / Персональная база знаний
+
+Wave 1 adds authenticated personal workflows while keeping Markdown as the source of truth:
+
+- `POST /api/captures/text|url|image` — Editor/Admin quick capture into a lazily created Inbox. URL capture accepts only absolute HTTP(S) URLs and never fetches them server-side.
+- `GET|PUT /api/me/daily-notes/{yyyy-MM-dd}` — read or idempotently create a daily Markdown page.
+- `/api/me/recent-pages` and `/api/me/favorites` — per-user recent and favorite page collections.
+- `GET /api/pages/{slug}/unlinked-mentions` and `POST .../link` — detect and safely link plain-text mentions.
+- `GET /api/pages/orphans?definition=NO_INCOMING|NO_LINKS|NO_OUTGOING` — link-based orphan discovery.
+
+There is no shared request-idempotency infrastructure in the current API, so Wave 1 does not accept `Idempotency-Key`; the UI disables capture submission while a request is in flight.
+
+Wave 1 добавляет персональные сценарии для авторизованных пользователей, сохраняя Markdown источником истины:
+
+- быстрый захват текста, HTTP(S)-ссылок и изображений в лениво создаваемую папку `Inbox`;
+- чтение и идемпотентное создание ежедневных заметок;
+- раздельные для каждого пользователя недавние и избранные страницы;
+- поиск несвязанных упоминаний с безопасной заменой на wiki-ссылку;
+- поиск страниц-сирот по входящим и исходящим ссылкам.
+
 ### `wiki_attachment_upload` (path on the API host)
 
 Uploads a file from the server disk. The path must be inside

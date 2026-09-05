@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/002-normalized-title.yaml
   - include:
       file: db/changelog/003-page-sections.yaml
+  - include:
+      file: db/changelog/004-pkm-wave1.yaml
