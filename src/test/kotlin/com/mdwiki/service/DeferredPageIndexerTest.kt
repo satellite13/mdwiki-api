@@ -26,6 +26,7 @@ import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class DeferredPageIndexerTest {
     private val rag = mock<RagService>()
@@ -107,6 +108,50 @@ class DeferredPageIndexerTest {
         indexer.start()
 
         verify(queue, timeout(2_000)).delete(entry.copy(attempts = 1))
+    }
+
+    @Test
+    fun `processDueNow during active drain schedules one followup scan`() {
+        val first = page("first")
+        val second = page("second")
+        val firstEntry = PageIndexQueueEntry(first.id!!, 0, 1)
+        val secondEntry = PageIndexQueueEntry(second.id!!, 0, 2)
+        val firstIndexStarted = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val emptyClaimStarted = CountDownLatch(1)
+        val releaseEmptyClaim = CountDownLatch(1)
+        val claims = AtomicInteger()
+        whenever(queue.claimDue()).thenAnswer {
+            when (claims.incrementAndGet()) {
+                1 -> firstEntry
+                2 -> {
+                    emptyClaimStarted.countDown()
+                    releaseEmptyClaim.await(2, TimeUnit.SECONDS)
+                    null
+                }
+                3 -> secondEntry
+                else -> null
+            }
+        }
+        whenever(queue.lease(any(), any(), any())).thenReturn(true)
+        whenever(queue.hasDue()).thenReturn(false)
+        whenever(pages.findById(first.id!!)).thenReturn(Optional.of(first))
+        whenever(pages.findById(second.id!!)).thenReturn(Optional.of(second))
+        doAnswer {
+            firstIndexStarted.countDown()
+            releaseFirst.await(2, TimeUnit.SECONDS)
+            null
+        }.whenever(rag).indexPage(first)
+
+        register(first).afterCommit()
+        assertTrue(firstIndexStarted.await(2, TimeUnit.SECONDS))
+        releaseFirst.countDown()
+        assertTrue(emptyClaimStarted.await(2, TimeUnit.SECONDS))
+        indexer.processDueNow()
+        releaseEmptyClaim.countDown()
+
+        verify(queue, timeout(2_000)).delete(secondEntry.copy(attempts = 1))
+        assertTrue(indexer.awaitIdle(Duration.ofSeconds(2)))
     }
 
     private fun page(slug: String) =

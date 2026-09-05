@@ -54,6 +54,9 @@ class DeferredPageIndexer(
         Thread(task, "deferred-page-indexer-retry").apply { isDaemon = true }
     }
     private val drainScheduled = AtomicBoolean(false)
+    /** A manual wake-up that arrived while the sole drain worker was active. */
+    private val rescanRequested = AtomicBoolean(false)
+    private val drainStateLock = Any()
     @Value("\${mdwiki.indexing.startup-enabled:true}")
     private var startupEnabled: Boolean = true
     @Volatile private var shuttingDown = false
@@ -78,7 +81,18 @@ class DeferredPageIndexer(
         retryExecutor.scheduleWithFixedDelay({ scheduleDrain() }, 0, 250, TimeUnit.MILLISECONDS)
     }
 
-    fun processDueNow() = scheduleDrain()
+    fun processDueNow() {
+        synchronized(drainStateLock) {
+            if (shuttingDown) return
+            if (drainScheduled.get()) {
+                // The active worker may have just observed an empty queue.  Keep a
+                // sticky request so its finally block performs one fresh scan.
+                rescanRequested.set(true)
+                return
+            }
+            scheduleDrain()
+        }
+    }
 
     private fun scheduleDrain() {
         if (shuttingDown || !drainScheduled.compareAndSet(false, true)) return
@@ -102,8 +116,11 @@ class DeferredPageIndexer(
                 // Drain all currently due durable requests serially.
             }
         } finally {
-            drainScheduled.set(false)
-            if (!shuttingDown && queueRepository.hasDue()) scheduleDrain()
+            val followUp = synchronized(drainStateLock) {
+                drainScheduled.set(false)
+                !shuttingDown && (rescanRequested.getAndSet(false) || queueRepository.hasDue())
+            }
+            if (followUp) scheduleDrain()
         }
     }
 
