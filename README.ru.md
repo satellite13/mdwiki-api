@@ -25,6 +25,22 @@ export JWT_SECRET='local-dev-secret-change-me'
 Локальный Postgres: `docker-compose up -d` (порт `54328`, БД/user/password
 `mdwiki`).
 
+## PKM-возможности REST API
+
+- `GET /api/search` выполняет ранжированный полнотекстовый поиск,
+  `GET /api/search/rag` возвращает семантические совпадения по разделам.
+- `GET /api/pages/{slug}/sections` возвращает стабильные ключи разделов из
+  `PageService.mapSections` для deep links в preview.
+- При обновлении страницы можно явно изменить `slug`; существующий update-flow
+  переписывает ссылки.
+- Аннотации доступны на чтение ролям READER/EDITOR/ADMIN. Создание,
+  редактирование и удаление требуют EDITOR или ADMIN.
+- `POST /api/sync` синхронизирует wiki-content с БД, а
+  `POST /api/sync/reindex` синхронно перестраивает эмбеддинги и возвращает
+  счётчики `total`, `reindexed`, `failed`. Оба endpoint требуют ADMIN.
+- ADMIN может просматривать и восстанавливать мягко удалённые страницы;
+  также доступны импорт/экспорт бандлов, вложения и MCP-инструменты импорта.
+
 ## Версия API
 
 Публичный endpoint (без auth):

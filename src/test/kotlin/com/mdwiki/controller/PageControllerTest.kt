@@ -68,6 +68,37 @@ class PageControllerTest {
 
     @Test
     @WithMockUser(roles = ["READER"])
+    fun `GET page sections returns stable section map`() {
+        val updatedAt = Instant.parse("2026-09-05T10:00:00Z")
+        whenever(pageService.mapSections("test-page")).thenReturn(
+            PageSectionMapResponse(
+                slug = "test-page",
+                updatedAt = updatedAt,
+                sections = listOf(
+                    PageSectionMapItem(
+                        key = "overview-a1b2c3d4",
+                        heading = "Overview",
+                        headingPath = "Overview",
+                        level = 1,
+                        length = 42,
+                        hash = "abc123",
+                        includesChildren = false
+                    )
+                )
+            )
+        )
+
+        mockMvc.get("/api/pages/test-page/sections").andExpect {
+            status { isOk() }
+            jsonPath("$.slug") { value("test-page") }
+            jsonPath("$.sections[0].key") { value("overview-a1b2c3d4") }
+            jsonPath("$.sections[0].heading") { value("Overview") }
+        }
+        verify(pageService).mapSections("test-page")
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
     fun `GET pages by slug returns structured not found error`() {
         whenever(pageService.findBySlug("missing")).thenThrow(NotFoundException("Page not found: missing"))
 

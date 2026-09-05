@@ -33,6 +33,9 @@ class PageController(
     @GetMapping("/{slug}")
     fun getBySlug(@PathVariable slug: String): PageResponse = pageService.findBySlug(slug)
 
+    @GetMapping("/{slug}/sections")
+    fun getSections(@PathVariable slug: String): PageSectionMapResponse = pageService.mapSections(slug)
+
     @GetMapping("/{slug}/graph")
     fun getGraph(
         @PathVariable slug: String,
