@@ -37,7 +37,7 @@ class PropertyController(
     fun reindex() = properties.reprojectAll()
 
     @GetMapping("/pages/{slug}/properties")
-    fun getPage(@PathVariable slug: String) = properties.pageProperties(slug)
+    fun getPage(@PathVariable slug: String, auth: Authentication) = properties.pageProperties(slug, auth.name)
 
     @PatchMapping("/pages/{slug}/properties")
     @PreAuthorize("hasAnyRole('EDITOR','ADMIN')")

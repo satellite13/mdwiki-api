@@ -67,8 +67,9 @@ class PropertyService(
     }
 
     @Transactional(readOnly = true)
-    fun pageProperties(slug: String): PagePropertiesResponse {
+    fun pageProperties(slug: String, username: String): PagePropertiesResponse {
         val page = pages.findBySlugAndDeletedAtIsNull(slug) ?: throw NotFoundException("Page not found: $slug")
+        page.folder?.let { folderAccess.requireAccess(it, username) } ?: folderAccess.actor(username)
         val defs = definitions.findAllByDeletedAtIsNullOrderByDisplayNameAsc()
         val parsed = parsedFrontmatter(page.contentMd)
         val known = defs.associate { it.key to (parsed.get(it.key) ?: mapper.nullNode()) }.filterValues { !it.isNull }

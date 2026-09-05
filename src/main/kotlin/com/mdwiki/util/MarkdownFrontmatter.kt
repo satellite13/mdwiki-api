@@ -48,11 +48,12 @@ object MarkdownFrontmatter {
         fields.forEach { (key, value) ->
             val line = topLevelFieldLine(yaml, key)
             if (line != null) {
+                val end = fieldEnd(yaml, line)
                 val lineEnd = yaml.indexOf('\n', line).let { if (it == -1) yaml.length else it }
                 val contentEnd = if (lineEnd > line && yaml[lineEnd - 1] == '\r') lineEnd - 1 else lineEnd
                 val lineEnding = yaml.substring(contentEnd, if (lineEnd < yaml.length) lineEnd + 1 else lineEnd)
                 yaml = yaml.substring(0, line) + "$key: $value$lineEnding" +
-                    yaml.substring(if (lineEnd < yaml.length) lineEnd + 1 else lineEnd)
+                    yaml.substring(end)
             } else {
                 val separator = if (yaml.isEmpty() || yaml.endsWith("\n") || yaml.endsWith("\r\n")) "" else "\n"
                 yaml += "$separator$key: $value\n"
@@ -66,10 +67,35 @@ object MarkdownFrontmatter {
         var yaml = markdown.substring(frontmatter.yamlStart, frontmatter.yamlEnd)
         keys.forEach { key ->
             val line = topLevelFieldLine(yaml, key) ?: return@forEach
-            val lineEnd = yaml.indexOf('\n', line).let { if (it == -1) yaml.length else it }
-            yaml = yaml.removeRange(line, if (lineEnd < yaml.length) lineEnd + 1 else lineEnd)
+            yaml = yaml.removeRange(line, fieldEnd(yaml, line))
         }
         return markdown.substring(0, frontmatter.yamlStart) + yaml + markdown.substring(frontmatter.yamlEnd)
+    }
+
+    /** Includes the complete YAML literal/folded block scalar belonging to a field. */
+    private fun fieldEnd(yaml: String, fieldStart: Int): Int {
+        val lineEnd = yaml.indexOf('\n', fieldStart).let { if (it == -1) yaml.length else it }
+        val firstLine = yaml.substring(fieldStart, lineEnd).removeSuffix("\r")
+        val value = firstLine.substringAfter(':').trimStart()
+        val indicator = Regex("""^[|>](?:[1-9][+-]?|[+-][1-9]?|[+-]?)[ \t]*(?:#.*)?$""").matchEntire(value)
+            ?: return if (lineEnd < yaml.length) lineEnd + 1 else lineEnd
+        val explicitIndent = indicator.value.firstOrNull { it in '1'..'9' }?.digitToInt()
+        var cursor = if (lineEnd < yaml.length) lineEnd + 1 else lineEnd
+        var contentIndent = explicitIndent
+        while (cursor < yaml.length) {
+            val nextEnd = yaml.indexOf('\n', cursor).let { if (it == -1) yaml.length else it }
+            val next = yaml.substring(cursor, nextEnd).removeSuffix("\r")
+            if (next.isNotEmpty()) {
+                val indentation = next.takeWhile { it == ' ' }.length
+                if (contentIndent == null) {
+                    if (indentation == 0) break
+                    contentIndent = indentation
+                }
+                if (indentation < contentIndent) break
+            }
+            cursor = if (nextEnd < yaml.length) nextEnd + 1 else nextEnd
+        }
+        return cursor
     }
 
     /** Finds an unindented canonical YAML mapping key; indented block scalars stay untouched. */

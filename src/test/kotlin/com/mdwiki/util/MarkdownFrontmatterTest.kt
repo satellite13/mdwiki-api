@@ -83,4 +83,34 @@ class MarkdownFrontmatterTest {
             MarkdownFrontmatter.updateFields(markdown, mapOf("priority" to "high"))
         )
     }
+
+    @Test
+    fun `updates and removes complete block scalar fields without changing surrounding bytes`() {
+        val body = "\r\n# Body\r\nunchanged\r\n"
+        val markdown = "---\r\ntitle: Keep\r\nnotes: >2-\r\n    first line\r\n      nested line\r\n    second line\r\nflag: true\r\n---\r\n$body"
+
+        val updated = MarkdownFrontmatter.updateFields(markdown, mapOf("notes" to "\"replacement\""))
+        assertEquals("---\r\ntitle: Keep\r\nnotes: \"replacement\"\r\nflag: true\r\n---\r\n$body", updated)
+
+        val removed = MarkdownFrontmatter.removeFields(markdown, listOf("notes"))
+        assertEquals("---\r\ntitle: Keep\r\nflag: true\r\n---\r\n$body", removed)
+    }
+
+    @Test
+    fun `updates and removes every literal and folded block scalar indicator`() {
+        listOf("|", "|-", "|+", "|2", "|2-", "|2+", ">", ">-", ">+", ">2", ">2-", ">2+").forEach { indicator ->
+            val markdown = "---\nnotes: $indicator\n  first line\n\n  second line\nnext: unchanged\n---\nBody"
+
+            assertEquals(
+                "---\nnotes: \"replacement\"\nnext: unchanged\n---\nBody",
+                MarkdownFrontmatter.updateFields(markdown, mapOf("notes" to "\"replacement\"")),
+                "update $indicator"
+            )
+            assertEquals(
+                "---\nnext: unchanged\n---\nBody",
+                MarkdownFrontmatter.removeFields(markdown, listOf("notes")),
+                "remove $indicator"
+            )
+        }
+    }
 }

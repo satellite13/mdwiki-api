@@ -11,6 +11,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
+import org.mockito.kotlin.verify
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -36,5 +37,13 @@ class PropertyControllerTest {
             contentType = MediaType.APPLICATION_JSON
             content = """{"key":"priority","displayName":"Priority","type":"TEXT","config":{},"required":false}"""
         }.andExpect { status { isForbidden() } }
+    }
+
+    @Test
+    @WithMockUser(username = "reader", roles = ["READER"])
+    fun `page properties use the authenticated actor for folder access`() {
+        mvc.get("/api/pages/private/properties").andExpect { status { isOk() } }
+
+        verify(properties).pageProperties("private", "reader")
     }
 }

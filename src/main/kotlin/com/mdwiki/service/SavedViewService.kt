@@ -202,7 +202,7 @@ class SavedViewService(
     } catch (_: Exception) { bad("Invalid value for ${d.key}") }
     private fun encodeCursor(id: UUID, value: Any?): String = Base64.getUrlEncoder().withoutPadding().encodeToString(
         mapper.createObjectNode().put("id", id.toString()).also { node ->
-            if (value == null) node.putNull("value") else node.put("value", value.toString())
+            if (value == null) node.putNull("value") else node.set<JsonNode>("value", mapper.valueToTree(value))
         }.toString().toByteArray()
     )
     private fun decodeCursor(cursor: String): JsonNode = try {

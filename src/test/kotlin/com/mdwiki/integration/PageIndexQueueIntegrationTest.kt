@@ -19,6 +19,7 @@ import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.time.Duration
 import java.util.UUID
 
 @SpringBootTest
@@ -54,10 +55,12 @@ class PageIndexQueueIntegrationTest {
 
     @Test
     fun `failed indexing remains durable then succeeds without duplicate chunks`() {
-        val page = saveAndQueue("queue-retry-${UUID.randomUUID()}", "retry body")
         whenever(embeddingProvider.embed(any<List<String>>())).thenThrow(IllegalStateException("temporary"))
+        val page = saveAndQueue("queue-retry-${UUID.randomUUID()}", "retry body")
+        indexer.processDueNow()
 
         await { queueCount(page.id!!) == 1L && queueAttempts(page.id!!) > 0 }
+        assertThat(indexer.awaitIdle(Duration.ofSeconds(2))).isTrue()
         whenever(embeddingProvider.embed(any<List<String>>())).thenReturn(listOf(embedding()))
         jdbc.update("update page_index_queue set next_attempt_at = now() where page_id = ?", page.id)
         indexer.processDueNow()
