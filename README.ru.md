@@ -19,6 +19,14 @@ export JWT_SECRET='local-dev-secret-change-me'
 ./gradlew test             # unit/integration tests
 ```
 
+## API PKM Wave 2
+
+- История: `GET /api/pages/{slug}/revisions`, `GET /api/pages/{slug}/revisions/{revisionNo}` и построчный bounded diff `GET /api/pages/{slug}/diff?from=&to=`.
+- Недеструктивное восстановление: `POST /api/pages/{slug}/restore` с `revisionNo`, `expectedUpdatedAt` и необязательным `restoreTitle`; slug и папка не откатываются.
+- Приватные сохранённые поиски: CRUD в `/api/me/saved-searches`, уникальные без учёта регистра имена пользователя и обновление с `expectedVersion`.
+- Стабильные заголовки: `POST /api/pages/{slug}/sections/stable-link` материализует явный ID в Markdown; `GET /api/section-links/{stableId}` разрешает его после смены slug.
+- `POST /api/search/answer` возвращает синхронный **экстрактивный**, а не генеративный ответ. Каждый абзац ссылается на точную цитату; ответы не сохраняются.
+
 Фронтенд в dev-режиме проксирует `/api` на `:8080` (см.
 [mdwiki-frontend](../mdwiki-frontend)).
 

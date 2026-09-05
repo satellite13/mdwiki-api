@@ -5,6 +5,7 @@ import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.mapper.toResponse
 import com.mdwiki.model.Page
+import com.mdwiki.model.RevisionOperation
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
@@ -15,6 +16,8 @@ import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import com.mdwiki.service.FolderAccessPolicy
+import com.mdwiki.service.PageRevisionService
+import com.mdwiki.service.RevisionMutationContext
 import org.springframework.stereotype.Component
 
 @Component
@@ -28,7 +31,8 @@ class CreatePageUseCase(
     private val frontmatterMetaService: FrontmatterMetaService,
     private val wikilinkService: WikilinkService,
     private val sectionIndexService: SectionIndexService,
-    private val folderAccessPolicy: FolderAccessPolicy
+    private val folderAccessPolicy: FolderAccessPolicy,
+    private val pageRevisionService: PageRevisionService? = null
 ) {
     fun execute(request: CreatePageRequest, username: String) = run {
         // Явно заданный `slug` имеет приоритет (после нормализации); fallback — slug из title.
@@ -64,6 +68,9 @@ class CreatePageUseCase(
         pageMetadataService.resolveIncomingLinks(saved)
         pageIndexer.indexAfterCommit(saved)
         sectionIndexService.rebuild(saved, request.contentMd)
+        pageRevisionService?.record(
+            saved, username, RevisionMutationContext.get()?.operation ?: RevisionOperation.CREATE
+        )
 
         saved.toResponse()
     }

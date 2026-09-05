@@ -7,6 +7,7 @@ import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.mapper.toResponse
 import com.mdwiki.model.Page
+import com.mdwiki.model.RevisionOperation
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.LinkRepository
 import com.mdwiki.repository.PageRepository
@@ -20,6 +21,8 @@ import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
 import com.mdwiki.service.WikilinkService
 import com.mdwiki.service.FolderAccessPolicy
+import com.mdwiki.service.PageRevisionService
+import com.mdwiki.service.RevisionMutationContext
 import com.mdwiki.util.PersistentInstant
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -38,7 +41,8 @@ class UpdatePageUseCase(
     private val linkRepository: LinkRepository,
     private val syncService: SyncService,
     private val sectionIndexService: SectionIndexService,
-    private val folderAccessPolicy: FolderAccessPolicy
+    private val folderAccessPolicy: FolderAccessPolicy,
+    private val pageRevisionService: PageRevisionService? = null
 ) {
     @Transactional
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
@@ -177,6 +181,10 @@ class UpdatePageUseCase(
         if (slugChanged || folderChanged) {
             syncService.scheduleReconcileFromDisk()
         }
+        val mutation = RevisionMutationContext.get()
+        pageRevisionService?.record(saved, username,
+            mutation?.operation ?: if (slugChanged) RevisionOperation.RENAME else RevisionOperation.EDIT,
+            mutation?.restoredFrom)
 
         saved.toResponse()
     }

@@ -8,6 +8,9 @@ import com.mdwiki.error.ConflictException
 import com.mdwiki.error.ForbiddenException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.model.RevisionOperation
+import com.mdwiki.service.RevisionMutation
+import com.mdwiki.service.RevisionMutationContext
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.util.MarkdownSectionParser
@@ -52,11 +55,13 @@ class PatchSectionUseCase(
                 "Patch would swallow following section(s): ${swallowed.joinToString()}. End content with a newline and close fences so the next heading stays on its own line."
             )
         }
-        val saved = updatePageUseCase.execute(
-            slug,
-            UpdatePageRequest(contentMd = spliced, expectedUpdatedAt = request.expectedUpdatedAt),
-            username
-        )
+        val saved = RevisionMutationContext.with(RevisionMutation(RevisionOperation.PATCH)) {
+            updatePageUseCase.execute(
+                slug,
+                UpdatePageRequest(contentMd = spliced, expectedUpdatedAt = request.expectedUpdatedAt),
+                username
+            )
+        }
         val newHash = MarkdownSectionParser.parse(saved.contentMd ?: "")
             .find { it.stableKey == request.sectionKey }
             ?.let { SectionIndexService.hashOf(saved.contentMd ?: "", it.startOffset, it.endOffset) }

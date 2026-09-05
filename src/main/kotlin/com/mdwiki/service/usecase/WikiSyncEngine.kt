@@ -12,6 +12,8 @@ import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
+import com.mdwiki.service.PageRevisionService
+import com.mdwiki.model.RevisionOperation
 import com.mdwiki.util.PathSanitizer
 import com.mdwiki.util.PersistentInstant
 import org.slf4j.LoggerFactory
@@ -31,7 +33,8 @@ class WikiSyncEngine(
     private val folderRepository: FolderRepository,
     private val wikiFileService: WikiFileService,
     private val pageIndexer: DeferredPageIndexer,
-    private val sectionIndexService: SectionIndexService
+    private val sectionIndexService: SectionIndexService,
+    private val pageRevisionService: PageRevisionService? = null
 ) {
     private val log = LoggerFactory.getLogger(WikiSyncEngine::class.java)
     private companion object {
@@ -149,6 +152,7 @@ class WikiSyncEngine(
             pageMetadataService.resolveIncomingLinks(saved)
             pageIndexer.indexAfterCommit(saved)
             sectionIndexService.rebuild(saved, content)
+            pageRevisionService?.record(saved, null, RevisionOperation.FILESYSTEM)
             log.info("{}: added page '{}'", logPrefix, slug)
             return UpsertOutcome.ADDED
         }
@@ -171,6 +175,7 @@ class WikiSyncEngine(
             }
             pageIndexer.indexAfterCommit(saved)
             sectionIndexService.rebuild(saved, content)
+            pageRevisionService?.record(saved, null, RevisionOperation.FILESYSTEM)
             log.info(
                 if (wasDeleted) "{}: restored soft-deleted page '{}' from disk" else "{}: updated page '{}'",
                 logPrefix, slug

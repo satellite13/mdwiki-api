@@ -22,6 +22,14 @@ export JWT_SECRET='local-dev-secret-change-me'
 DB_URL=jdbc:postgresql://localhost:54328/mdwiki_test_pkm ./gradlew test
 ```
 
+## PKM Wave 2 API
+
+- Page history: `GET /api/pages/{slug}/revisions`, `GET /api/pages/{slug}/revisions/{revisionNo}`, and the bounded line-row diff at `GET /api/pages/{slug}/diff?from=&to=`.
+- Nondestructive restore: `POST /api/pages/{slug}/restore` with `revisionNo`, `expectedUpdatedAt`, and optional `restoreTitle`; content is restored while slug and folder remain current.
+- Private saved searches: CRUD under `/api/me/saved-searches`, with case-insensitive per-user names and `expectedVersion` updates.
+- Stable headings: `POST /api/pages/{slug}/sections/stable-link` materializes an explicit Markdown heading ID; `GET /api/section-links/{stableId}` resolves it after slug changes.
+- `POST /api/search/answer` returns a synchronous **extractive**, not generative, answer. Every answer paragraph references an exact retrieved quote; no AI answer is persisted.
+
 In dev mode the frontend proxies `/api` to `:8080` (see
 [mdwiki-frontend](../mdwiki-frontend)).
 

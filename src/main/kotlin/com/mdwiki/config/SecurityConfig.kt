@@ -53,7 +53,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.PUT, "/api/me/daily-notes/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers("/api/me/recent-pages/**", "/api/me/favorites/**").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/pages/deleted").hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.POST, "/api/pages/*/restore").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/api/pages/*/restore").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/pages/**", "/api/tags/**", "/api/search/**").hasAnyRole("READER", "EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/pages/**").hasAnyRole("EDITOR", "ADMIN")

@@ -1,0 +1,79 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-pkm-wave2
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: false
+            sql: |
+              CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+              CREATE TABLE page_revisions (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+                revision_no bigint NOT NULL,
+                content_md text NOT NULL,
+                content_hash char(64) NOT NULL,
+                title_snapshot varchar(500) NOT NULL,
+                slug_snapshot varchar(500) NOT NULL,
+                folder_id_snapshot uuid,
+                operation varchar(16) NOT NULL
+                  CHECK (operation IN ('CREATE','EDIT','PATCH','RESTORE','IMPORT','FILESYSTEM','RENAME')),
+                created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+                created_by_name varchar(255),
+                created_at timestamptz NOT NULL DEFAULT now(),
+                restored_from_revision_id uuid REFERENCES page_revisions(id) ON DELETE SET NULL,
+                CONSTRAINT uq_page_revision_no UNIQUE (page_id, revision_no)
+              );
+              CREATE INDEX idx_page_revisions_page_no_desc
+                ON page_revisions (page_id, revision_no DESC);
+
+              INSERT INTO page_revisions (
+                page_id, revision_no, content_md, content_hash, title_snapshot,
+                slug_snapshot, folder_id_snapshot, operation, created_by_user_id,
+                created_by_name, created_at
+              )
+              SELECT p.id, 1, coalesce(p.content_md, ''),
+                encode(digest(coalesce(p.content_md, ''), 'sha256'), 'hex'),
+                p.title, p.slug, p.folder_id, 'CREATE', p.updated_by,
+                u.username, p.updated_at
+              FROM pages p
+              LEFT JOIN users u ON u.id = p.updated_by
+              WHERE NOT EXISTS (
+                SELECT 1 FROM page_revisions r WHERE r.page_id = p.id
+              );
+
+              CREATE TABLE saved_searches (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name varchar(120) NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
+                query_text varchar(1000) NOT NULL CHECK (length(trim(query_text)) BETWEEN 1 AND 1000),
+                mode varchar(16) NOT NULL CHECK (mode IN ('HYBRID','TEXT','SEMANTIC')),
+                tags jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(tags) = 'array'),
+                min_score double precision CHECK (min_score IS NULL OR min_score BETWEEN 0 AND 1),
+                sort varchar(16) NOT NULL DEFAULT 'RELEVANCE' CHECK (sort IN ('RELEVANCE','UPDATED')),
+                version bigint NOT NULL DEFAULT 1,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE UNIQUE INDEX uq_saved_search_user_lower_name
+                ON saved_searches (user_id, lower(name));
+              CREATE INDEX idx_saved_search_user_updated
+                ON saved_searches (user_id, updated_at DESC);
+
+              CREATE TABLE section_anchors (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+                stable_id varchar(128) NOT NULL UNIQUE,
+                last_section_key varchar(1000) NOT NULL,
+                last_heading_path varchar(2000) NOT NULL,
+                retired_at timestamptz,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now(),
+                CONSTRAINT uq_section_anchor_page_stable UNIQUE (page_id, stable_id)
+              );
+      rollback:
+        - sql:
+            sql: >
+              DROP TABLE IF EXISTS section_anchors, saved_searches, page_revisions;

@@ -77,13 +77,27 @@ data class PageSectionMapItem(
     val level: Int,
     val length: Int,
     val hash: String,
-    val includesChildren: Boolean
+    val includesChildren: Boolean,
+    val stableId: String? = null
 )
 
 data class PageSectionMapResponse(
     val slug: String,
     val updatedAt: Instant,
     val sections: List<PageSectionMapItem>
+)
+
+data class RestoreRevisionRequest(
+    val revisionNo: Long,
+    val expectedUpdatedAt: Instant,
+    val restoreTitle: Boolean = false
+)
+
+data class RevisionDiffResponse(
+    val from: com.mdwiki.service.RevisionSnapshot,
+    val to: com.mdwiki.service.RevisionSnapshot,
+    val rows: List<com.mdwiki.service.RevisionDiffRow>,
+    val truncated: Boolean
 )
 
 data class PatchPageResponse(
