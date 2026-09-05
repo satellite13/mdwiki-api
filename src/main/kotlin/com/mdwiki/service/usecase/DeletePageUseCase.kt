@@ -29,7 +29,7 @@ class DeletePageUseCase(
         scheduleReconcile: Boolean = true,
         ignoreLocked: Boolean = false
     ) {
-        val page = pageRepository.findBySlug(slug)
+        val page = pageRepository.findBySlugForUpdate(slug)
         if (page != null) {
             if (!ignoreLocked && frontmatterMetaService.isLocked(page)) {
                 throw com.mdwiki.error.ForbiddenException("Page '$slug' is locked and cannot be deleted")

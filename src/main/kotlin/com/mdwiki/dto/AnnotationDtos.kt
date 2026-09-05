@@ -16,7 +16,9 @@ data class CreateAnnotationRequest(
 
 data class UpdateAnnotationRequest(
     val comment: String? = null,
-    @field:Size(max = 20) val color: String? = null
+    @field:Size(max = 20) val color: String? = null,
+    val clearComment: Boolean? = null,
+    val clearColor: Boolean? = null
 )
 
 data class AnnotationResponse(

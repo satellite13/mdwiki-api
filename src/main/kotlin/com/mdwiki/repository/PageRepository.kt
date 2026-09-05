@@ -18,6 +18,14 @@ interface PageRepository : JpaRepository<Page, UUID> {
     @Query("select p from Page p where p.id = :id and p.deletedAt is null")
     fun findActiveByIdForUpdate(@Param("id") id: UUID): Page?
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Page p where p.slug = :slug and p.deletedAt is null")
+    fun findActiveBySlugForUpdate(@Param("slug") slug: String): Page?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Page p where p.slug = :slug")
+    fun findBySlugForUpdate(@Param("slug") slug: String): Page?
+
     @EntityGraph(attributePaths = ["tags"])
     fun findByDeletedAtIsNotNullOrderByDeletedAtDesc(): List<Page>
 

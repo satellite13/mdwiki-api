@@ -155,7 +155,7 @@ class PageService(
 
     @Transactional
     fun restore(slug: String): PageResponse {
-        val page = pageRepository.findBySlug(slug)
+        val page = pageRepository.findBySlugForUpdate(slug)
             ?: throw NotFoundException("Page not found: $slug")
         if (page.deletedAt == null) {
             throw IllegalStateException("Page is not deleted: $slug")

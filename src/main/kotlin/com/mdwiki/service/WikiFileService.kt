@@ -7,6 +7,8 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.util.PathSanitizer
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -49,9 +51,11 @@ class WikiFileService(
     fun createOrRewritePageFile(page: Page, content: String) {
         val targetFile = resolveTargetMarkdownFile(page)
         targetFile.parentFile?.mkdirs()
-        fileWatcherService.ignoreNextChange(targetFile.absolutePath)
-        targetFile.writeText(content)
         page.filePath = targetFile.absolutePath
+        runAfterCommit {
+            fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+            targetFile.writeText(content)
+        }
     }
 
     fun relocatePageFile(page: Page, targetFolder: Folder?) {
@@ -96,7 +100,7 @@ class WikiFileService(
      * Переименовывает markdown-файл страницы под новый slug (тот же каталог папки), обновляет [page.slug] и [page.filePath].
      * Сначала опирается на [Page.filePath], чтобы не трогать ленивую цепочку [Folder] (иначе возможен LazyInitializationException).
      */
-    fun renamePageFileToSlug(page: Page, newSlug: String) {
+    fun renamePageFileToSlug(page: Page, newSlug: String, content: String = page.contentMd ?: "") {
         if (page.slug == newSlug) return
 
         val sourceFromPath = page.filePath?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.exists() }
@@ -125,20 +129,23 @@ class WikiFileService(
         }
 
         targetFile.parentFile?.mkdirs()
-        if (sourceFile != null && sourceFile.exists()) {
-            if (sourceFile.absolutePath != targetFile.absolutePath) {
-                fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
-                fileWatcherService.ignoreNextChange(targetFile.absolutePath)
-                moveFile(sourceFile, targetFile)
-            }
-        } else {
-            fileWatcherService.ignoreNextChange(targetFile.absolutePath)
-            if (!targetFile.exists()) {
-                targetFile.writeText(page.contentMd ?: "")
+        if (sourceFile?.absolutePath != targetFile.absolutePath && targetFile.exists()) {
+            throw IllegalStateException("Cannot rename page file: target already exists: ${targetFile.absolutePath}")
+        }
+        val renameOperation = {
+            try {
+                writeRenamedFile(sourceFile, targetFile, content)
+            } catch (error: Exception) {
+                throw IllegalStateException(
+                    "Page slug was committed but markdown file rename failed; source was preserved: ${targetFile.absolutePath}",
+                    error
+                )
             }
         }
+
         page.slug = newSlug
         page.filePath = targetFile.absolutePath
+        runAfterCommit(renameOperation)
     }
 
     fun deletePageFile(page: Page) {
@@ -340,5 +347,48 @@ class WikiFileService(
         if (!sourceFile.delete()) {
             throw IllegalStateException("Cannot delete source file after copy: ${sourceFile.absolutePath}")
         }
+    }
+
+    /**
+     * Публикует новый файл без overwrite и удаляет source только после успешной записи.
+     * При ошибке удаления source новый target удаляется как компенсация.
+     */
+    private fun writeRenamedFile(sourceFile: File?, targetFile: File, content: String) {
+        if (sourceFile?.absolutePath == targetFile.absolutePath) {
+            fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+            targetFile.writeText(content)
+            return
+        }
+        if (targetFile.exists()) {
+            throw IllegalStateException("Cannot rename page file: target already exists: ${targetFile.absolutePath}")
+        }
+        targetFile.parentFile?.mkdirs()
+        val tempFile = File.createTempFile(".${targetFile.name}.", ".tmp", targetFile.parentFile)
+        try {
+            tempFile.writeText(content)
+            fileWatcherService.ignoreNextChange(targetFile.absolutePath)
+            Files.move(tempFile.toPath(), targetFile.toPath())
+            if (sourceFile != null && sourceFile.exists()) {
+                fileWatcherService.ignoreNextChange(sourceFile.absolutePath)
+                if (!sourceFile.delete()) {
+                    targetFile.delete()
+                    throw IllegalStateException("Cannot delete source file: ${sourceFile.absolutePath}")
+                }
+            }
+        } finally {
+            tempFile.delete()
+        }
+    }
+
+    private fun runAfterCommit(operation: () -> Unit) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            operation()
+            return
+        }
+        TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+            override fun afterCommit() {
+                operation()
+            }
+        })
     }
 }

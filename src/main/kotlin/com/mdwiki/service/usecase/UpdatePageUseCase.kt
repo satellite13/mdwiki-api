@@ -36,7 +36,7 @@ class UpdatePageUseCase(
     private val sectionIndexService: SectionIndexService
 ) {
     fun execute(slug: String, request: UpdatePageRequest, username: String) = run {
-        val page = pageRepository.findBySlugAndDeletedAtIsNull(slug)
+        val page = pageRepository.findActiveBySlugForUpdate(slug)
             ?: throw NotFoundException("Page not found: $slug")
         val user = userRepository.findByUsername(username)
             ?: throw NotFoundException("User not found: $username")
@@ -96,7 +96,7 @@ class UpdatePageUseCase(
             contentForSave = wikilinkService.rewriteWikilinksReferencingNormalizedSlug(
                 contentForSave, oldSlug, newSlug, oldNormalizedTitle
             )
-            wikiFileService.renamePageFileToSlug(page, newSlug)
+            wikiFileService.renamePageFileToSlug(page, newSlug, contentForSave)
             page.contentMd = contentForSave
             frontmatterMetaService.refreshFromContent(page, contentForSave)
             pageRepository.saveAndFlush(page)
@@ -129,7 +129,9 @@ class UpdatePageUseCase(
         if (request.contentMd != null || slugChanged) {
             page.contentMd = contentForSave
             frontmatterMetaService.refreshFromContent(page, contentForSave)
-            wikiFileService.createOrRewritePageFile(page, contentForSave)
+            if (!slugChanged) {
+                wikiFileService.createOrRewritePageFile(page, contentForSave)
+            }
         }
 
         page.updatedBy = user

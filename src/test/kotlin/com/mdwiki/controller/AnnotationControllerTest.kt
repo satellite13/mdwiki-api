@@ -5,6 +5,9 @@ import com.mdwiki.dto.AnnotationResponse
 import com.mdwiki.service.AnnotationService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -74,5 +77,25 @@ class AnnotationControllerTest {
             status { isOk() }
             jsonPath("$.comment") { value("changed") }
         }
+    }
+
+    @Test
+    @WithMockUser(username = "editor", roles = ["EDITOR"])
+    fun `update deserializes explicit annotation clear flags`() {
+        whenever(annotationService.update(any(), any())).thenReturn(annotation.copy(comment = null, color = null))
+
+        mockMvc.put("/api/annotations/${annotation.id}") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"clearComment":true,"clearColor":true}"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.comment") { doesNotExist() }
+            jsonPath("$.color") { doesNotExist() }
+        }
+
+        verify(annotationService).update(
+            eq(annotation.id),
+            argThat { clearComment == true && clearColor == true && comment == null && color == null }
+        )
     }
 }

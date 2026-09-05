@@ -57,8 +57,14 @@ class AnnotationService(
     fun update(id: UUID, request: UpdateAnnotationRequest): AnnotationResponse {
         val annotation = annotationRepository.findById(id)
             .orElseThrow { NotFoundException("Annotation not found: $id") }
-        request.comment?.let { annotation.comment = it }
-        request.color?.let { annotation.color = it }
+        when {
+            request.clearComment == true -> annotation.comment = null
+            request.comment != null -> annotation.comment = request.comment
+        }
+        when {
+            request.clearColor == true -> annotation.color = null
+            request.color != null -> annotation.color = request.color
+        }
         annotation.updatedAt = Instant.now()
         annotationRepository.save(annotation)
         val page = pageRepository.findById(annotation.pageId)
