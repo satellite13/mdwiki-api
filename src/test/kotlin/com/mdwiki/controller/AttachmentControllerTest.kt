@@ -46,12 +46,31 @@ class AttachmentControllerTest {
     @Test
     @WithMockUser(roles = ["READER"])
     fun `GET attachments delegates to service`() {
-        whenever(attachmentService.list(0, 50, null, null, "user")).thenReturn(
+        whenever(attachmentService.list(0, 20, null, null, "user")).thenReturn(
             org.springframework.data.domain.PageImpl(listOf(sample))
         )
 
         mockMvc.get("/api/attachments").andExpect {
             status { isOk() }
+            jsonPath("$[0].storedName") { value("uuid.png") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
+    fun `GET attachments sets X-Total-Count and passes q`() {
+        val page = org.springframework.data.domain.PageImpl(
+            listOf(sample),
+            org.springframework.data.domain.PageRequest.of(0, 20),
+            42
+        )
+        whenever(attachmentService.list(0, 20, null, "png", "user")).thenReturn(page)
+
+        mockMvc.get("/api/attachments") {
+            param("q", "png")
+        }.andExpect {
+            status { isOk() }
+            header { string("X-Total-Count", "42") }
             jsonPath("$[0].storedName") { value("uuid.png") }
         }
     }
