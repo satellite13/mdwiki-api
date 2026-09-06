@@ -21,6 +21,8 @@ class WikiAttachmentListTool(private val attachmentService: AttachmentService) {
         @McpToolParam(description = "Optional page UUID to filter attachments", required = false) pageId: String?
     ): List<Map<String, Any?>> {
         val parsedPageId = pageId?.takeIf { it.isNotBlank() }?.let(::parseUuid)
-        return attachmentService.list(page ?: 0, size ?: 50, parsedPageId, currentUsername()).map(::attachmentToMap)
+        return attachmentService.list(page ?: 0, size ?: 50, parsedPageId, null, currentUsername())
+            .content
+            .map(::attachmentToMap)
     }
 }

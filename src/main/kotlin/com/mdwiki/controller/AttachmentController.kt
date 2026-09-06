@@ -18,7 +18,7 @@ class AttachmentController(private val attachmentService: AttachmentService) {
         @RequestParam(required = false) pageId: UUID?,
         auth: Authentication
     ): List<AttachmentResponse> {
-        return attachmentService.list(page, size, pageId, auth.name)
+        return attachmentService.list(page, size, pageId, null, auth.name).content
     }
 
     @PostMapping

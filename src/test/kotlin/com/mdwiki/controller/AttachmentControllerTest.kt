@@ -46,7 +46,9 @@ class AttachmentControllerTest {
     @Test
     @WithMockUser(roles = ["READER"])
     fun `GET attachments delegates to service`() {
-        whenever(attachmentService.list(0, 50, null, "user")).thenReturn(listOf(sample))
+        whenever(attachmentService.list(0, 50, null, null, "user")).thenReturn(
+            org.springframework.data.domain.PageImpl(listOf(sample))
+        )
 
         mockMvc.get("/api/attachments").andExpect {
             status { isOk() }
