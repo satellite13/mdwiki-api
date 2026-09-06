@@ -301,6 +301,30 @@ class AttachmentServiceTest {
     }
 
     @Test
+    fun `deleteAllForPage removes linked attachments and files`() {
+        val pageId = UUID.randomUUID()
+        val stored = "page-pic.bin"
+        Files.createDirectories(contentRoot.resolve("uploads"))
+        val path = contentRoot.resolve("uploads").resolve(stored)
+        Files.writeString(path, "x")
+        val att = Attachment(
+            id = UUID.randomUUID(),
+            originalName = "pic.bin",
+            storedName = stored,
+            contentType = "application/octet-stream",
+            sizeBytes = 1,
+            uploadedBy = null,
+            page = Page(id = pageId, slug = "with-pic", title = "With pic")
+        )
+        whenever(attachmentRepository.findByPageIdIn(listOf(pageId))).thenReturn(listOf(att))
+
+        service.deleteAllForPage(pageId)
+
+        assertTrue(!Files.exists(path))
+        verify(attachmentRepository).delete(att)
+    }
+
+    @Test
     fun `delete throws when attachment missing`() {
         val id = UUID.randomUUID()
         whenever(attachmentRepository.findById(id)).thenReturn(Optional.empty())

@@ -6,6 +6,7 @@ import com.mdwiki.model.Page
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
+import com.mdwiki.service.AttachmentService
 import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
@@ -35,6 +36,7 @@ class WikiSyncEngine(
     private val wikiFileService: WikiFileService,
     private val pageIndexer: DeferredPageIndexer,
     private val sectionIndexService: SectionIndexService,
+    private val attachmentService: AttachmentService,
     private val pageRevisionService: PageRevisionService? = null,
     private val propertyService: PropertyService? = null
 ) {
@@ -98,6 +100,7 @@ class WikiSyncEngine(
                 pageMetadataService.deleteSourceLinks(page)
                 // Без detach входящих ссылок FK fk_links_target блокирует удаление.
                 pageMetadataService.detachIncomingLinks(page)
+                attachmentService.deleteAllForPage(page.id!!)
                 ragService.deletePageChunks(page.id!!)
                 pageRepository.delete(page)
                 removed++
@@ -204,6 +207,7 @@ class WikiSyncEngine(
         pageMetadataService.deleteSourceLinks(page)
         // Без detach входящих ссылок FK fk_links_target блокирует удаление.
         pageMetadataService.detachIncomingLinks(page)
+        attachmentService.deleteAllForPage(page.id!!)
         ragService.deletePageChunks(page.id!!)
         pageRepository.delete(page)
         runCatching { pageMetadataService.cleanupOrphanedTags() }

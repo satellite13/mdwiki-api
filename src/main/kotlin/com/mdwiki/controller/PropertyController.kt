@@ -1,8 +1,6 @@
 package com.mdwiki.controller
 
 import com.mdwiki.dto.*
-import com.mdwiki.error.NotFoundException
-import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.PropertyService
 import com.mdwiki.service.usecase.UpdatePageUseCase
 import org.springframework.security.access.prepost.PreAuthorize
@@ -14,7 +12,6 @@ import java.util.UUID
 @RequestMapping("/api")
 class PropertyController(
     private val properties: PropertyService,
-    private val pages: PageRepository,
     private val updatePage: UpdatePageUseCase
 ) {
     @GetMapping("/property-definitions")
@@ -42,8 +39,8 @@ class PropertyController(
     @PatchMapping("/pages/{slug}/properties")
     @PreAuthorize("hasAnyRole('EDITOR','ADMIN')")
     fun patchPage(@PathVariable slug: String, @RequestBody request: PatchPagePropertiesRequest, auth: Authentication): PageResponse {
-        val page = pages.findBySlugAndDeletedAtIsNull(slug) ?: throw NotFoundException("Page not found: $slug")
-        val markdown = properties.patchPage(page, request, auth.name)
+        // Load page inside PropertyService.patchPage (same @Transactional) so lazy folder access works.
+        val markdown = properties.patchPage(slug, request, auth.name)
         return updatePage.execute(slug, UpdatePageRequest(contentMd = markdown, expectedUpdatedAt = request.expectedUpdatedAt), auth.name)
     }
 }

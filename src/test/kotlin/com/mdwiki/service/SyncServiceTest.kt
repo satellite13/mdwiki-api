@@ -72,7 +72,8 @@ class SyncServiceTest {
             folderRepository,
             wikiFileService,
             mock<DeferredPageIndexer>(),
-            sectionIndexService
+            sectionIndexService,
+            attachmentService
         )
         whenever(attachmentService.syncFromDisk()).thenReturn(AttachmentService.AttachmentSyncResult(0))
         syncService = SyncService(
@@ -134,6 +135,7 @@ class SyncServiceTest {
         // иначе FK fk_links_target ломает удаление.
         verify(pageMetadataService).deleteSourceLinks(page)
         verify(pageMetadataService).detachIncomingLinks(page)
+        verify(attachmentService).deleteAllForPage(page.id!!)
         verify(pageRepository).delete(page)
     }
 

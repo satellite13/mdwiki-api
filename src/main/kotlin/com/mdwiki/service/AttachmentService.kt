@@ -322,6 +322,16 @@ class AttachmentService(
         deletePreAuthorized(attachment)
     }
 
+    /**
+     * Удаляет все вложения страницы (файлы + строки). Нужно перед hard-delete страницы:
+     * FK attachments_page_id_fkey без CASCADE.
+     */
+    @Transactional
+    fun deleteAllForPage(pageId: UUID) {
+        attachmentRepository.findByPageIdIn(listOf(pageId))
+            .forEach { deletePreAuthorized(it) }
+    }
+
     @Transactional
     internal fun deletePreAuthorized(id: UUID) {
         val attachment = attachmentRepository.findById(id)

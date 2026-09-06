@@ -33,7 +33,7 @@ class PropertyDefinitionConcurrencyIntegrationTest {
             role = UserRole.ADMIN
         ))
         val request = PropertyDefinitionWriteRequest("priority$suffix".take(20), "Priority", PropertyType.TEXT,
-            mapper.createObjectNode())
+            emptyMap())
         val created = properties.create(request, admin.username)
         val start = CountDownLatch(1)
         val executor = Executors.newFixedThreadPool(2)

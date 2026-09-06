@@ -3,6 +3,7 @@ package com.mdwiki.service.usecase
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
+import com.mdwiki.service.AttachmentService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.WikiFileService
@@ -21,6 +22,7 @@ class DeletePageUseCase(
     private val syncService: SyncService,
     private val frontmatterMetaService: com.mdwiki.service.FrontmatterMetaService,
     private val folderAccessPolicy: FolderAccessPolicy,
+    private val attachmentService: AttachmentService,
     private val pageRevisionService: PageRevisionService? = null
 ) {
     enum class DeleteMode {
@@ -86,6 +88,8 @@ class DeletePageUseCase(
         pageMetadataService.deleteSourceLinks(page)
         // Отвязываем входящие ссылки, иначе FK fk_links_target ломает hard-delete.
         pageMetadataService.detachIncomingLinks(page)
+        // Вложения ссылаются на page_id без ON DELETE CASCADE — удаляем до строки pages.
+        page.id?.let { attachmentService.deleteAllForPage(it) }
         page.id?.let { ragService.deletePageChunks(it) }
         wikiFileService.deletePageFile(page)
         val orphanOnly = wikiFileService.findMarkdownFileForSlug(slug)

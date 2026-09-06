@@ -57,6 +57,7 @@ class PageServiceTest {
     @Mock private lateinit var folderService: FolderService
     @Mock private lateinit var syncService: SyncService
     @Mock private lateinit var sectionIndexService: SectionIndexService
+    @Mock private lateinit var attachmentService: AttachmentService
 
     private lateinit var pageService: PageService
     private lateinit var wikiFileService: WikiFileService
@@ -82,7 +83,7 @@ class PageServiceTest {
         )
         val deletePageUseCase = DeletePageUseCase(
             pageRepository, pageMetadataService, ragService, wikiFileService, syncService,
-            frontmatterMetaService, folderAccessPolicy
+            frontmatterMetaService, folderAccessPolicy, attachmentService
         )
         val importMdPagesUseCase = ImportMdPagesUseCase(
             pageRepository, createPageUseCase, updatePageUseCase, wikilinkService
@@ -840,6 +841,7 @@ class PageServiceTest {
 
         verify(pageMetadataService).deleteSourceLinks(page)
         verify(pageMetadataService).detachIncomingLinks(page)
+        verify(attachmentService).deleteAllForPage(id)
         verify(pageRepository).delete(page)
         assertFalse(file.exists())
     }

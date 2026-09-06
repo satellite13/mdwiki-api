@@ -8,6 +8,7 @@ import com.mdwiki.model.UserRole
 import com.mdwiki.rag.RagService
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
+import com.mdwiki.service.AttachmentService
 import com.mdwiki.service.FolderAccessPolicy
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
@@ -35,6 +36,7 @@ class DeletePageUseCaseOwnershipTest {
     @Mock lateinit var files: WikiFileService
     @Mock lateinit var sync: SyncService
     @Mock lateinit var users: UserRepository
+    @Mock lateinit var attachments: AttachmentService
 
     @ParameterizedTest
     @EnumSource(DeletePageUseCase.DeleteMode::class)
@@ -51,6 +53,7 @@ class DeletePageUseCaseOwnershipTest {
             assertNotNull(page.deletedAt)
             assertEquals(1, saveInvocationCount())
         } else {
+            verify(attachments).deleteAllForPage(page.id!!)
             verify(pages).delete(page)
         }
     }
@@ -90,7 +93,8 @@ class DeletePageUseCaseOwnershipTest {
         files,
         sync,
         FrontmatterMetaService(),
-        FolderAccessPolicy(users)
+        FolderAccessPolicy(users),
+        attachments
     )
 
     private fun saveInvocationCount() =

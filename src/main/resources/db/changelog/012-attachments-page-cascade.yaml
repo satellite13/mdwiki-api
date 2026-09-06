@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: 012-attachments-page-cascade
+      author: mdwiki
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE attachments
+                DROP CONSTRAINT IF EXISTS attachments_page_id_fkey;
+              ALTER TABLE attachments
+                ADD CONSTRAINT attachments_page_id_fkey
+                FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE;
+      rollback:
+        - sql:
+            sql: |
+              ALTER TABLE attachments
+                DROP CONSTRAINT IF EXISTS attachments_page_id_fkey;
+              ALTER TABLE attachments
+                ADD CONSTRAINT attachments_page_id_fkey
+                FOREIGN KEY (page_id) REFERENCES pages(id);

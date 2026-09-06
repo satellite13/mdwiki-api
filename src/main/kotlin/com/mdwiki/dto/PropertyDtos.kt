@@ -1,6 +1,5 @@
 package com.mdwiki.dto
 
-import com.fasterxml.jackson.databind.JsonNode
 import com.mdwiki.model.PropertyType
 import com.mdwiki.model.SavedViewFilterMode
 import com.mdwiki.model.SavedViewType
@@ -11,15 +10,16 @@ data class PropertyDefinitionWriteRequest(
     val key: String,
     val displayName: String,
     val type: PropertyType,
-    val config: JsonNode? = null,
+    /** Plain JSON object; Jackson 3 cannot bind request bodies into jackson-2 JsonNode. */
+    val config: Map<String, Any?>? = null,
     val required: Boolean = false,
     val expectedVersion: Long? = null
 )
 data class PropertyDefinitionResponse(
     val id: UUID, val key: String, val displayName: String, val type: PropertyType,
-    val config: JsonNode, val required: Boolean, val version: Long, val createdAt: Instant, val updatedAt: Instant
+    val config: Map<String, Any?>, val required: Boolean, val version: Long, val createdAt: Instant, val updatedAt: Instant
 )
-data class PropertyOperation(val op: PropertyOperationType, val key: String, val value: JsonNode? = null)
+data class PropertyOperation(val op: PropertyOperationType, val key: String, val value: Any? = null)
 enum class PropertyOperationType { SET, REMOVE }
 data class PatchPagePropertiesRequest(val expectedUpdatedAt: Instant, val operations: List<PropertyOperation>)
 data class PagePropertiesResponse(

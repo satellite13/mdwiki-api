@@ -37,7 +37,7 @@ class PropertyService(
         val key = request.key.trim()
         if (!Regex("[A-Za-z][A-Za-z0-9_-]{0,99}").matches(key)) bad("Property key must be an ASCII identifier")
         if (definitions.existsByKeyIgnoreCaseAndDeletedAtIsNull(key)) throw ConflictException("Property key already exists")
-        val config = validateConfig(request.type, request.config ?: mapper.createObjectNode())
+        val config = validateConfig(request.type, toJsonNode(request.config ?: emptyMap<String, Any?>()))
         val actor = users.findByUsername(username) ?: throw NotFoundException("User not found")
         return response(definitions.save(PropertyDefinition(key = key, displayName = request.displayName.trim(), type = request.type, config = config, required = request.required, createdBy = actor)))
     }
@@ -47,7 +47,7 @@ class PropertyService(
         val definition = definitions.findByIdAndDeletedAtIsNull(id) ?: throw NotFoundException("Property not found")
         if (request.key != definition.key || request.type != definition.type) bad("Property key and type are immutable")
         if (request.expectedVersion != null && request.expectedVersion != definition.version) throw ConflictException("Property definition changed")
-        val config = validateConfig(definition.type, request.config ?: definition.config)
+        val config = validateConfig(definition.type, request.config?.let(::toJsonNode) ?: definition.config)
         if ((definition.type == PropertyType.SELECT || definition.type == PropertyType.MULTI_SELECT) && removedOptions(definition.config, config).isNotEmpty()) {
             val removed = removedOptions(definition.config, config)
             if (values.findAll().any { it.property.id == definition.id && it.valueJson.any { node -> node.asText() in removed } }) bad("Cannot remove an option that is in use")
@@ -87,7 +87,8 @@ class PropertyService(
     }
 
     @Transactional
-    fun patchPage(page: Page, request: PatchPagePropertiesRequest, username: String): String {
+    fun patchPage(slug: String, request: PatchPagePropertiesRequest, username: String): String {
+        val page = pages.findBySlugAndDeletedAtIsNull(slug) ?: throw NotFoundException("Page not found: $slug")
         page.folder?.let { folderAccess.requireAccess(it, username) }
         if (!PersistentInstant.same(page.updatedAt, request.expectedUpdatedAt)) throw ConflictException("Page has changed")
         val defs = definitions.findAllByDeletedAtIsNullOrderByDisplayNameAsc().associateBy { it.key }
@@ -96,7 +97,7 @@ class PropertyService(
         request.operations.forEach { operation ->
             val definition = defs[operation.key] ?: bad("Unknown property: ${operation.key}")
             when (operation.op) {
-                PropertyOperationType.SET -> set[operation.key] = yamlValue(validateValue(definition, operation.value ?: bad("Value is required")))
+                PropertyOperationType.SET -> set[operation.key] = yamlValue(validateValue(definition, toJsonNode(operation.value ?: bad("Value is required"))))
                 PropertyOperationType.REMOVE -> {
                     if (definition.required) bad("Required property cannot be removed: ${definition.key}")
                     remove += definition.key
@@ -136,7 +137,25 @@ class PropertyService(
     fun reprojectAll() = pages.findAllByDeletedAtIsNull().forEach(::project)
 
     private fun active(id: java.util.UUID) = definitions.findById(id).orElseThrow { NotFoundException("Property not found") }.also { if (it.deletedAt != null) throw NotFoundException("Property not found") }
-    private fun response(d: PropertyDefinition) = PropertyDefinitionResponse(requireNotNull(d.id), d.key, d.displayName, d.type, d.config, d.required, d.version, d.createdAt, d.updatedAt)
+    private fun response(d: PropertyDefinition) = PropertyDefinitionResponse(
+        requireNotNull(d.id),
+        d.key,
+        d.displayName,
+        d.type,
+        (PropertyJsonValues.toWire(d.config) as? Map<*, *>)
+            ?.entries
+            ?.associate { it.key.toString() to it.value }
+            ?: emptyMap(),
+        d.required,
+        d.version,
+        d.createdAt,
+        d.updatedAt
+    )
+    private fun toJsonNode(value: Any?): JsonNode = when (value) {
+        null -> mapper.nullNode()
+        is JsonNode -> value
+        else -> mapper.valueToTree(value)
+    }
     private fun parsedFrontmatter(content: String?): JsonNode {
         val text = MarkdownFrontmatter.extractYamlInner(content ?: "") ?: return mapper.createObjectNode()
         return try { yaml.readTree(text) ?: mapper.createObjectNode() } catch (_: Exception) { bad("Malformed YAML frontmatter") }
