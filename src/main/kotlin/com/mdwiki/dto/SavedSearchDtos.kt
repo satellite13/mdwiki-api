@@ -25,5 +25,6 @@ data class SavedSearchResponse(
     val sort: SavedSearchSort,
     val version: Long,
     val createdAt: Instant,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    val favorited: Boolean = false
 )

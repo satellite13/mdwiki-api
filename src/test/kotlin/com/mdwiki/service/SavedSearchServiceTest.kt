@@ -6,6 +6,7 @@ import com.mdwiki.model.SavedSearch
 import com.mdwiki.model.SavedSearchMode
 import com.mdwiki.model.User
 import com.mdwiki.repository.SavedSearchRepository
+import com.mdwiki.repository.UserFavoriteSearchRepository
 import com.mdwiki.repository.UserRepository
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -21,6 +22,7 @@ import java.util.UUID
 class SavedSearchServiceTest {
     @Mock lateinit var searches: SavedSearchRepository
     @Mock lateinit var users: UserRepository
+    @Mock lateinit var favoriteSearches: UserFavoriteSearchRepository
 
     @Test
     fun `update translates unique constraint race to conflict`() {
@@ -33,7 +35,7 @@ class SavedSearchServiceTest {
         whenever(searches.saveAndFlush(any())).thenThrow(DataIntegrityViolationException("uq_saved_search_user_lower_name"))
 
         assertThatThrownBy {
-            SavedSearchService(searches, users).update("reader", saved.id!!,
+            SavedSearchService(searches, users, favoriteSearches).update("reader", saved.id!!,
                 SavedSearchWriteRequest("Race", "q", SavedSearchMode.HYBRID, expectedVersion = 3))
         }.isInstanceOf(ConflictException::class.java)
             .hasMessage("Saved search name already exists")

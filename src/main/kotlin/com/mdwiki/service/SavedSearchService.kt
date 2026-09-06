@@ -7,6 +7,7 @@ import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.model.SavedSearch
 import com.mdwiki.repository.SavedSearchRepository
+import com.mdwiki.repository.UserFavoriteSearchRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.util.PersistentInstant
 import org.springframework.dao.DataIntegrityViolationException
@@ -17,13 +18,23 @@ import java.util.UUID
 @Service
 class SavedSearchService(
     private val searches: SavedSearchRepository,
-    private val users: UserRepository
+    private val users: UserRepository,
+    private val favoriteSearches: UserFavoriteSearchRepository
 ) {
     @Transactional(readOnly = true)
-    fun list(username: String) = searches.findAllByUserIdOrderByUpdatedAtDesc(userId(username)).map(::response)
+    fun list(username: String): List<SavedSearchResponse> {
+        val uid = userId(username)
+        val favoritedIds = favoriteSearches.listByUser(uid).map { it.savedSearchId }.toSet()
+        return searches.findAllByUserIdOrderByUpdatedAtDesc(uid)
+            .map { response(it, it.id in favoritedIds) }
+    }
 
     @Transactional(readOnly = true)
-    fun get(username: String, id: UUID) = response(owned(username, id))
+    fun get(username: String, id: UUID): SavedSearchResponse {
+        val uid = userId(username)
+        val search = searches.findByIdAndUserId(id, uid) ?: throw NotFoundException("Saved search not found")
+        return response(search, favoriteSearches.existsByUserIdAndSavedSearchId(uid, id))
+    }
 
     @Transactional
     fun create(username: String, request: SavedSearchWriteRequest): SavedSearchResponse {
@@ -41,7 +52,7 @@ class SavedSearchService(
                 tags = request.tags.distinct(),
                 minScore = request.minScore,
                 sort = request.sort
-            )))
+            )), favorited = false)
         } catch (_: DataIntegrityViolationException) {
             throw ConflictException("Saved search name already exists")
         }
@@ -67,7 +78,8 @@ class SavedSearchService(
         search.version++
         search.updatedAt = PersistentInstant.now()
         return try {
-            response(searches.saveAndFlush(search))
+            val saved = searches.saveAndFlush(search)
+            response(saved, favoriteSearches.existsByUserIdAndSavedSearchId(requireNotNull(saved.user.id), requireNotNull(saved.id)))
         } catch (_: DataIntegrityViolationException) {
             throw ConflictException("Saved search name already exists")
         }
@@ -78,6 +90,22 @@ class SavedSearchService(
         val user = users.findByUsername(username) ?: return
         searches.findByIdAndUserId(id, requireNotNull(user.id))?.let(searches::delete)
     }
+
+    @Transactional
+    fun addFavorite(savedSearchId: UUID, username: String) {
+        val uid = userId(username)
+        owned(username, savedSearchId)
+        favoriteSearches.add(uid, savedSearchId)
+    }
+
+    @Transactional
+    fun removeFavorite(savedSearchId: UUID, username: String) {
+        favoriteSearches.deleteByUserIdAndSavedSearchId(userId(username), savedSearchId)
+    }
+
+    @Transactional(readOnly = true)
+    fun listFavorites(username: String) =
+        favoriteSearches.listByUser(userId(username)).map { response(it.savedSearch, favorited = true) }
 
     private fun validate(request: SavedSearchWriteRequest) {
         if (request.name.trim().length !in 1..120) throw BadRequestException("name must be 1..120 characters")
@@ -92,8 +120,8 @@ class SavedSearchService(
     private fun owned(username: String, id: UUID) =
         searches.findByIdAndUserId(id, userId(username)) ?: throw NotFoundException("Saved search not found")
 
-    private fun response(s: SavedSearch) = SavedSearchResponse(
+    private fun response(s: SavedSearch, favorited: Boolean) = SavedSearchResponse(
         requireNotNull(s.id), s.name, s.queryText, s.mode, s.tags, s.minScore,
-        s.sort, s.version, s.createdAt, s.updatedAt
+        s.sort, s.version, s.createdAt, s.updatedAt, favorited
     )
 }

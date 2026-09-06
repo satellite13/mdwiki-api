@@ -2,6 +2,8 @@ package com.mdwiki.controller
 
 import com.mdwiki.dto.*
 import com.mdwiki.service.PkmService
+import com.mdwiki.service.SavedSearchService
+import com.mdwiki.service.SavedViewService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
 import org.springframework.format.annotation.DateTimeFormat
@@ -15,7 +17,11 @@ import java.util.UUID
 
 @RestController
 @Validated
-class PkmController(private val service: PkmService) {
+class PkmController(
+    private val service: PkmService,
+    private val savedSearches: SavedSearchService,
+    private val savedViews: SavedViewService
+) {
     @PostMapping("/api/captures/text")
     @ResponseStatus(HttpStatus.CREATED)
     fun captureText(@Valid @RequestBody request: TextCaptureRequest, auth: Authentication) =
@@ -68,6 +74,32 @@ class PkmController(private val service: PkmService) {
 
     @GetMapping("/api/me/favorites")
     fun favorites(auth: Authentication) = service.listFavorites(auth.name)
+
+    @PutMapping("/api/me/favorite-searches/{savedSearchId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun addFavoriteSearch(@PathVariable savedSearchId: UUID, auth: Authentication) =
+        savedSearches.addFavorite(savedSearchId, auth.name)
+
+    @DeleteMapping("/api/me/favorite-searches/{savedSearchId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun removeFavoriteSearch(@PathVariable savedSearchId: UUID, auth: Authentication) =
+        savedSearches.removeFavorite(savedSearchId, auth.name)
+
+    @GetMapping("/api/me/favorite-searches")
+    fun listFavoriteSearches(auth: Authentication) = savedSearches.listFavorites(auth.name)
+
+    @PutMapping("/api/me/favorite-views/{viewId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun addFavoriteView(@PathVariable viewId: UUID, auth: Authentication) =
+        savedViews.addFavorite(viewId, auth.name)
+
+    @DeleteMapping("/api/me/favorite-views/{viewId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun removeFavoriteView(@PathVariable viewId: UUID, auth: Authentication) =
+        savedViews.removeFavorite(viewId, auth.name)
+
+    @GetMapping("/api/me/favorite-views")
+    fun listFavoriteViews(auth: Authentication) = savedViews.listFavorites(auth.name)
 
     @GetMapping("/api/pages/{slug}/unlinked-mentions")
     fun mentions(@PathVariable slug: String) = service.mentions(slug)

@@ -16,6 +16,7 @@ import com.mdwiki.model.UserRole
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.PropertyDefinitionRepository
 import com.mdwiki.repository.SavedViewRepository
+import com.mdwiki.repository.UserFavoriteViewRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.util.PersistentInstant
 import jakarta.persistence.EntityManager
@@ -34,13 +35,23 @@ class SavedViewService(
     private val definitions: PropertyDefinitionRepository,
     private val pages: PageRepository,
     private val entityManager: EntityManager,
-    private val mapper: ObjectMapper
+    private val mapper: ObjectMapper,
+    private val favoriteViews: UserFavoriteViewRepository
 ) {
     @Transactional(readOnly = true)
-    fun list(username: String) = views.findAllByUserIdOrderByUpdatedAtDesc(user(username).id!!).map(::response)
+    fun list(username: String): List<SavedViewResponse> {
+        val uid = user(username).id!!
+        val favoritedIds = favoriteViews.listByUser(uid).map { it.viewId }.toSet()
+        return views.findAllByUserIdOrderByUpdatedAtDesc(uid)
+            .map { response(it, it.id in favoritedIds) }
+    }
 
     @Transactional(readOnly = true)
-    fun get(id: UUID, username: String) = response(owned(id, username))
+    fun get(id: UUID, username: String): SavedViewResponse {
+        val uid = user(username).id!!
+        val view = views.findByIdAndUserId(id, uid) ?: throw NotFoundException("Saved view not found")
+        return response(view, favoriteViews.existsByUserIdAndViewId(uid, id))
+    }
 
     @Transactional
     fun create(request: SavedViewWriteRequest, username: String): SavedViewResponse {
@@ -58,11 +69,27 @@ class SavedViewService(
         if (!view.name.equals(request.name.trim(), true) && views.existsByUserIdAndNameIgnoreCase(view.user.id!!, request.name.trim())) throw ConflictException("View name already exists")
         view.name = request.name.trim(); view.type = request.type; view.filters = request.filters; view.sort = request.sort; view.grouping = request.grouping; view.layout = request.layout
         view.version++; view.updatedAt = PersistentInstant.now()
-        return response(view)
+        return response(view, favoriteViews.existsByUserIdAndViewId(view.user.id!!, id))
     }
 
     @Transactional
     fun delete(id: UUID, username: String) = views.delete(owned(id, username))
+
+    @Transactional
+    fun addFavorite(viewId: UUID, username: String) {
+        val uid = user(username).id!!
+        owned(viewId, username)
+        favoriteViews.add(uid, viewId)
+    }
+
+    @Transactional
+    fun removeFavorite(viewId: UUID, username: String) {
+        favoriteViews.deleteByUserIdAndViewId(user(username).id!!, viewId)
+    }
+
+    @Transactional(readOnly = true)
+    fun listFavorites(username: String) =
+        favoriteViews.listByUser(user(username).id!!).map { response(it.view, favorited = true) }
 
     @Transactional(readOnly = true)
     fun run(id: UUID, username: String, cursor: String?, limit: Int): Map<String, Any?> {
@@ -132,7 +159,12 @@ class SavedViewService(
             pageRows.last().id!!,
             sortDefinition?.let { d -> valueForCursor(d, pageRows.last().id!!) }
         )
-        return mapOf("items" to items, "nextCursor" to next, "view" to response(view), "nullOrdering" to "NULLS_LAST")
+        return mapOf(
+            "items" to items,
+            "nextCursor" to next,
+            "view" to response(view, favoriteViews.existsByUserIdAndViewId(actor.id!!, view.id!!)),
+            "nullOrdering" to "NULLS_LAST"
+        )
     }
 
     private fun validate(request: SavedViewWriteRequest) {
@@ -218,6 +250,6 @@ class SavedViewService(
     }
     private fun user(username: String) = users.findByUsername(username) ?: throw NotFoundException("User not found")
     private fun owned(id: UUID, username: String) = views.findByIdAndUserId(id, user(username).id!!) ?: throw NotFoundException("Saved view not found")
-    private fun response(v: SavedView) = SavedViewResponse(v.id!!, v.name, v.type, v.filters, v.sort, v.grouping, v.layout, v.version, v.createdAt, v.updatedAt)
+    private fun response(v: SavedView, favorited: Boolean = false) = SavedViewResponse(v.id!!, v.name, v.type, v.filters, v.sort, v.grouping, v.layout, v.version, v.createdAt, v.updatedAt, favorited)
     private fun bad(message: String): Nothing = throw UnprocessableEntityException(message)
 }

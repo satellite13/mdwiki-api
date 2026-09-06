@@ -36,7 +36,8 @@ data class SavedViewWriteRequest(
 data class SavedViewResponse(
     val id: UUID, val name: String, val type: SavedViewType, val filters: JsonNode,
     val sort: JsonNode, val grouping: JsonNode?, val layout: JsonNode,
-    val version: Long, val createdAt: Instant, val updatedAt: Instant
+    val version: Long, val createdAt: Instant, val updatedAt: Instant,
+    val favorited: Boolean = false
 )
 
 /** One database-filtered view row. `groupKey` is present only for grouped views. */
