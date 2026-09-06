@@ -40,6 +40,8 @@ class UserPkmSettings(
 }
 
 data class UserPageId(var userId: UUID? = null, var pageId: UUID? = null) : Serializable
+data class UserSavedSearchId(var userId: UUID? = null, var savedSearchId: UUID? = null) : Serializable
+data class UserSavedViewId(var userId: UUID? = null, var viewId: UUID? = null) : Serializable
 data class UserDailyNoteId(var userId: UUID? = null, var noteDate: LocalDate? = null) : Serializable
 
 @Entity
@@ -76,6 +78,32 @@ class UserFavoritePage(
     @Id @Column(name = "page_id") val pageId: UUID,
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "page_id", insertable = false, updatable = false)
     val page: Page,
+    @Column(name = "created_at", nullable = false, updatable = false)
+    val createdAt: Instant = Instant.now()
+)
+
+@Entity
+@Table(name = "user_favorite_searches")
+@IdClass(UserSavedSearchId::class)
+class UserFavoriteSearch(
+    @Id @Column(name = "user_id") val userId: UUID,
+    @Id @Column(name = "saved_search_id") val savedSearchId: UUID,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "saved_search_id", insertable = false, updatable = false)
+    val savedSearch: SavedSearch,
+    @Column(name = "created_at", nullable = false, updatable = false)
+    val createdAt: Instant = Instant.now()
+)
+
+@Entity
+@Table(name = "user_favorite_views")
+@IdClass(UserSavedViewId::class)
+class UserFavoriteView(
+    @Id @Column(name = "user_id") val userId: UUID,
+    @Id @Column(name = "view_id") val viewId: UUID,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "view_id", insertable = false, updatable = false)
+    val view: SavedView,
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()
 )

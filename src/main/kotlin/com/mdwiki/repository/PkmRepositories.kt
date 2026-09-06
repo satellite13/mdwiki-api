@@ -54,3 +54,46 @@ interface UserFavoritePageRepository : JpaRepository<UserFavoritePage, UserPageI
     )
     fun listActive(@Param("userId") userId: UUID): List<UserFavoritePage>
 }
+
+interface UserFavoriteSearchRepository : JpaRepository<UserFavoriteSearch, UserSavedSearchId> {
+    @Modifying
+    @Query(
+        value = """
+            INSERT INTO user_favorite_searches(user_id,saved_search_id,created_at)
+            VALUES (:userId,:savedSearchId,now())
+            ON CONFLICT(user_id,saved_search_id) DO NOTHING
+        """,
+        nativeQuery = true
+    )
+    fun add(@Param("userId") userId: UUID, @Param("savedSearchId") savedSearchId: UUID)
+
+    fun deleteByUserIdAndSavedSearchId(userId: UUID, savedSearchId: UUID)
+    fun existsByUserIdAndSavedSearchId(userId: UUID, savedSearchId: UUID): Boolean
+
+    @Query(
+        "select f from UserFavoriteSearch f join fetch f.savedSearch s " +
+            "where f.userId=:userId order by f.createdAt desc"
+    )
+    fun listByUser(@Param("userId") userId: UUID): List<UserFavoriteSearch>
+}
+
+interface UserFavoriteViewRepository : JpaRepository<UserFavoriteView, UserSavedViewId> {
+    @Modifying
+    @Query(
+        value = """
+            INSERT INTO user_favorite_views(user_id,view_id,created_at)
+            VALUES (:userId,:viewId,now()) ON CONFLICT(user_id,view_id) DO NOTHING
+        """,
+        nativeQuery = true
+    )
+    fun add(@Param("userId") userId: UUID, @Param("viewId") viewId: UUID)
+
+    fun deleteByUserIdAndViewId(userId: UUID, viewId: UUID)
+    fun existsByUserIdAndViewId(userId: UUID, viewId: UUID): Boolean
+
+    @Query(
+        "select f from UserFavoriteView f join fetch f.view v " +
+            "where f.userId=:userId order by f.createdAt desc"
+    )
+    fun listByUser(@Param("userId") userId: UUID): List<UserFavoriteView>
+}
