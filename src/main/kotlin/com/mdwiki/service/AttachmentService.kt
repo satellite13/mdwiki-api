@@ -9,6 +9,7 @@ import com.mdwiki.repository.AttachmentRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import org.slf4j.LoggerFactory
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -116,15 +117,26 @@ class AttachmentService(
     }
 
     @Transactional(readOnly = true)
-    fun list(page: Int, size: Int, pageId: UUID?, requestingUsername: String): List<AttachmentResponse> {
-        // Shared-wiki reads intentionally remain global; actor is propagated for a stable contract.
+    fun list(
+        page: Int,
+        size: Int,
+        pageId: UUID?,
+        q: String?,
+        requestingUsername: String
+    ): Page<AttachmentResponse> {
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
-        val results = if (pageId != null) {
-            attachmentRepository.findByPageId(pageId, pageable)
-        } else {
-            attachmentRepository.findAll(pageable)
+        val needle = q?.trim()?.takeIf { it.isNotEmpty() }
+        val results = when {
+            pageId != null && needle != null ->
+                attachmentRepository.findByPageIdAndOriginalNameContainingIgnoreCase(pageId, needle, pageable)
+            pageId != null ->
+                attachmentRepository.findByPageId(pageId, pageable)
+            needle != null ->
+                attachmentRepository.findByOriginalNameContainingIgnoreCase(needle, pageable)
+            else ->
+                attachmentRepository.findAll(pageable)
         }
-        return results.content.map { it.toResponse() }
+        return results.map { it.toResponse() }
     }
 
     @Transactional

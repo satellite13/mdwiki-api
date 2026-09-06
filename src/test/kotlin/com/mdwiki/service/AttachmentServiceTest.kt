@@ -20,10 +20,12 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.doThrow
 import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.mock.web.MockMultipartFile
 import java.nio.file.Files
@@ -68,7 +70,7 @@ class AttachmentServiceTest {
     fun `list without pageId uses findAll`() {
         whenever(attachmentRepository.findAll(any<Pageable>())).thenReturn(PageImpl(emptyList()))
 
-        service.list(0, 50, null, "reader")
+        service.list(0, 50, null, null, "reader")
 
         verify(attachmentRepository).findAll(any<Pageable>())
     }
@@ -78,9 +80,37 @@ class AttachmentServiceTest {
         val pid = UUID.randomUUID()
         whenever(attachmentRepository.findByPageId(any<UUID>(), any<Pageable>())).thenReturn(PageImpl(emptyList()))
 
-        service.list(0, 50, pid, "reader")
+        service.list(0, 50, pid, null, "reader")
 
         verify(attachmentRepository).findByPageId(any<UUID>(), any<Pageable>())
+    }
+
+    @Test
+    fun `list without q uses findAll`() {
+        whenever(attachmentRepository.findAll(any<Pageable>())).thenReturn(PageImpl(emptyList()))
+        val result = service.list(0, 20, null, null, "reader")
+        assertEquals(0, result.totalElements)
+        verify(attachmentRepository).findAll(any<Pageable>())
+    }
+
+    @Test
+    fun `list with q uses name search`() {
+        whenever(
+            attachmentRepository.findByOriginalNameContainingIgnoreCase(eq("note"), any<Pageable>())
+        ).thenReturn(PageImpl(emptyList(), PageRequest.of(0, 20), 0))
+        service.list(0, 20, null, "note", "reader")
+        verify(attachmentRepository).findByOriginalNameContainingIgnoreCase(eq("note"), any<Pageable>())
+    }
+
+    @Test
+    fun `list with pageId and q uses combined search`() {
+        val pid = UUID.randomUUID()
+        whenever(
+            attachmentRepository.findByPageIdAndOriginalNameContainingIgnoreCase(eq(pid), eq("img"), any<Pageable>())
+        ).thenReturn(PageImpl(emptyList()))
+        service.list(0, 20, pid, "img", "reader")
+        verify(attachmentRepository)
+            .findByPageIdAndOriginalNameContainingIgnoreCase(eq(pid), eq("img"), any<Pageable>())
     }
 
     @Test
