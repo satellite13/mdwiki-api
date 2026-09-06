@@ -102,6 +102,7 @@ tasks.named<Copy>("processResources") {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    maxHeapSize = "1g"
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     environment("SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE", "1")
     environment("MDWIKI_INDEXING_STARTUP_ENABLED", "false")

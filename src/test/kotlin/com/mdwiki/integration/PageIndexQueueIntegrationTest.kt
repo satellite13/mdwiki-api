@@ -123,7 +123,20 @@ class PageIndexQueueIntegrationTest {
     private fun queueAttempts(pageId: UUID): Int =
         jdbc.queryForObject("select attempts from page_index_queue where page_id = ?", Int::class.java, pageId) ?: 0
 
-    private fun embedding() = FloatArray(1536) { 0.01f }
+    private fun embedding() = FloatArray(embeddingDimension()) { 0.01f }
+
+    private fun embeddingDimension(): Int = jdbc.queryForObject(
+        """
+        SELECT a.atttypmod
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = current_schema()
+          AND c.relname = 'page_chunks'
+          AND a.attname = 'embedding'
+        """.trimIndent(),
+        Int::class.java,
+    )!!
 
     private fun await(condition: () -> Boolean) {
         val deadline = System.nanoTime() + java.time.Duration.ofSeconds(12).toNanos()
