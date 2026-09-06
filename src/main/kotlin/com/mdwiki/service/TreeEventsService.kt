@@ -1,6 +1,7 @@
 package com.mdwiki.service
 
 import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.io.IOException
@@ -33,19 +34,40 @@ class TreeEventsService {
     }
 
     fun publishTreeUpdated() {
+        broadcast { emitter ->
+            emitter.send(SseEmitter.event().name("tree-updated").data("changed"))
+        }
+    }
+
+    /**
+     * Keep SSE streams warm for event-source-polyfill (default idle timeout 45s)
+     * and for reverse proxies that drop quiet connections.
+     */
+    @Scheduled(fixedRate = HEARTBEAT_INTERVAL_MS)
+    fun sendHeartbeats() {
+        broadcast { emitter ->
+            emitter.send(SseEmitter.event().comment("keepalive"))
+        }
+    }
+
+    private fun broadcast(send: (SseEmitter) -> Unit) {
         if (emitters.isEmpty()) return
 
         val deadEmitters = mutableListOf<Long>()
         emitters.forEach { (id, emitter) ->
             try {
-                emitter.send(SseEmitter.event().name("tree-updated").data("changed"))
+                send(emitter)
             } catch (_: IOException) {
                 deadEmitters.add(id)
             } catch (e: Exception) {
-                log.debug("Failed to emit tree-updated event", e)
+                log.debug("Failed to emit tree SSE event", e)
                 deadEmitters.add(id)
             }
         }
         deadEmitters.forEach { emitters.remove(it) }
+    }
+
+    companion object {
+        const val HEARTBEAT_INTERVAL_MS = 15_000L
     }
 }

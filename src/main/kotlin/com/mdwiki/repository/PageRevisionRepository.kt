@@ -22,6 +22,8 @@ interface PageRevisionRepository : JpaRepository<PageRevision, UUID> {
 
     fun findByPageIdAndRevisionNo(pageId: UUID, revisionNo: Long): PageRevision?
 
+    fun findTopByPageIdOrderByRevisionNoDesc(pageId: UUID): PageRevision?
+
     @Query("select coalesce(max(r.revisionNo), 0) from PageRevision r where r.pageId = :pageId")
     fun maxRevisionNo(@Param("pageId") pageId: UUID): Long
 }

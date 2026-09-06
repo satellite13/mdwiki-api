@@ -63,14 +63,28 @@ class PageRevisionService(
         val pageId = requireNotNull(page.id)
         pages.findActiveByIdForUpdate(pageId)
             ?: pages.findById(pageId).orElseThrow { NotFoundException("Page not found: $pageId") }
-        val actor = username?.let(users::findByUsername)
         val content = page.contentMd ?: ""
+        val hash = sha256(content)
+        // Не пишем «пустые» версии: autosave/повторный save без diff к последнему снимку.
+        if (operation != RevisionOperation.CREATE) {
+            val latest = revisions.findTopByPageIdOrderByRevisionNoDesc(pageId)
+            if (latest != null
+                && latest.contentHash == hash
+                && latest.titleSnapshot == page.title
+                && latest.slugSnapshot == page.slug
+                && latest.folderIdSnapshot == page.folder?.id
+                && latest.deletedAtSnapshot == page.deletedAt
+            ) {
+                return latest
+            }
+        }
+        val actor = username?.let(users::findByUsername)
         val revision = revisions.saveAndFlush(
             PageRevision(
                 pageId = pageId,
                 revisionNo = revisions.maxRevisionNo(pageId) + 1,
                 contentMd = content,
-                contentHash = sha256(content),
+                contentHash = hash,
                 titleSnapshot = page.title,
                 slugSnapshot = page.slug,
                 folderIdSnapshot = page.folder?.id,

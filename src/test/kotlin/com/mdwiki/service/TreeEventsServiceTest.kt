@@ -38,4 +38,16 @@ class TreeEventsServiceTest {
         emitter.complete()
         assertDoesNotThrow { treeEventsService.publishTreeUpdated() }
     }
+
+    @Test
+    fun `sendHeartbeats does not throw when no subscribers`() {
+        assertDoesNotThrow { treeEventsService.sendHeartbeats() }
+    }
+
+    @Test
+    fun `sendHeartbeats does not throw for live subscriber`() {
+        val emitter = treeEventsService.subscribe()
+        assertDoesNotThrow { treeEventsService.sendHeartbeats() }
+        emitter.complete()
+    }
 }

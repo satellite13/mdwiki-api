@@ -52,4 +52,30 @@ class PageRevisionIntegrationTest {
         jdbc.update("delete from users where id = ?", user.id)
         assertThat(revisions.get(page, 2).createdByName).isEqualTo(user.username)
     }
+
+    @Test
+    fun `skips identical edit revision without content or metadata diff`() {
+        val suffix = UUID.randomUUID().toString()
+        val user = users.saveAndFlush(User(
+            username = "revision-noop-$suffix",
+            email = "$suffix@noop",
+            passwordHash = "x",
+            role = UserRole.EDITOR
+        ))
+        val page = pages.saveAndFlush(Page(slug = "revision-noop-$suffix", title = "Same", contentMd = "body\n"))
+
+        revisions.record(page, user.username, RevisionOperation.CREATE)
+        val firstEdit = revisions.record(page, user.username, RevisionOperation.EDIT)
+        val secondEdit = revisions.record(page, user.username, RevisionOperation.EDIT)
+
+        assertThat(secondEdit.id).isEqualTo(firstEdit.id)
+        assertThat(revisions.list(page, 20, null)).hasSize(1)
+        assertThat(revisions.list(page, 20, null).single().revisionNo).isEqualTo(1)
+
+        page.contentMd = "changed\n"
+        pages.saveAndFlush(page)
+        val changed = revisions.record(page, user.username, RevisionOperation.EDIT)
+        assertThat(changed.revisionNo).isEqualTo(2)
+        assertThat(revisions.list(page, 20, null)).hasSize(2)
+    }
 }
