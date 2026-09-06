@@ -5,7 +5,7 @@ MCP tools, and RAG search.
 
 Русская версия: `README.ru.md`
 
-Current version: **v0.1.16** (see the git tag; at runtime — `GET /api/version`).
+Current version: **v0.1.17** (see the git tag; at runtime — `GET /api/version`).
 
 [![CI](https://github.com/satellite13/mdwiki-api/actions/workflows/ci.yml/badge.svg)](https://github.com/satellite13/mdwiki-api/actions/workflows/ci.yml)
 
@@ -75,8 +75,8 @@ GET /api/version
 ```json
 {
   "name": "mdwiki-api",
-  "version": "0.1.16",
-  "versionTag": "v0.1.16",
+  "version": "0.1.17",
+  "versionTag": "v0.1.17",
   "gitSha": "…"
 }
 ```
