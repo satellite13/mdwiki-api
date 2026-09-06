@@ -12,6 +12,7 @@ import com.mdwiki.mapper.toListItem
 import com.mdwiki.model.PropertyDefinition
 import com.mdwiki.model.PropertyType
 import com.mdwiki.model.SavedView
+import com.mdwiki.model.SavedViewFilterMode
 import com.mdwiki.model.UserRole
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.PropertyDefinitionRepository
@@ -55,19 +56,37 @@ class SavedViewService(
 
     @Transactional
     fun create(request: SavedViewWriteRequest, username: String): SavedViewResponse {
-        validate(request)
+        val filters = toJsonNode(request.filters)
+        val sort = toJsonNode(request.sort)
+        val grouping = request.grouping?.let(::toJsonNode)
+        val layout = toJsonNode(request.layout)
+        validate(request.name, filters, sort, grouping, layout)
         val user = user(username)
         if (views.existsByUserIdAndNameIgnoreCase(user.id!!, request.name.trim())) throw ConflictException("View name already exists")
-        return response(views.save(SavedView(user = user, name = request.name.trim(), type = request.type, filters = request.filters, sort = request.sort, grouping = request.grouping, layout = request.layout)))
+        return response(views.save(SavedView(
+            user = user,
+            name = request.name.trim(),
+            type = request.type,
+            filterMode = request.filterMode,
+            filters = filters,
+            sort = sort,
+            grouping = grouping,
+            layout = layout
+        )))
     }
 
     @Transactional
     fun update(id: UUID, request: SavedViewWriteRequest, username: String): SavedViewResponse {
-        validate(request)
+        val filters = toJsonNode(request.filters)
+        val sort = toJsonNode(request.sort)
+        val grouping = request.grouping?.let(::toJsonNode)
+        val layout = toJsonNode(request.layout)
+        validate(request.name, filters, sort, grouping, layout)
         val view = owned(id, username)
         if (request.expectedVersion == null || request.expectedVersion != view.version) throw ConflictException("Saved view changed")
         if (!view.name.equals(request.name.trim(), true) && views.existsByUserIdAndNameIgnoreCase(view.user.id!!, request.name.trim())) throw ConflictException("View name already exists")
-        view.name = request.name.trim(); view.type = request.type; view.filters = request.filters; view.sort = request.sort; view.grouping = request.grouping; view.layout = request.layout
+        view.name = request.name.trim(); view.type = request.type; view.filterMode = request.filterMode
+        view.filters = filters; view.sort = sort; view.grouping = grouping; view.layout = layout
         view.version++; view.updatedAt = PersistentInstant.now()
         return response(view, favoriteViews.existsByUserIdAndViewId(view.user.id!!, id))
     }
@@ -106,12 +125,16 @@ class SavedViewService(
         // A user may see shared-root pages and pages in own folders; administrators see all pages.
         predicates += "(${if (actor.role == UserRole.ADMIN) "true" else "(f.owner_id IS NULL OR f.owner_id = :actorId)"})"
         if (actor.role != UserRole.ADMIN) parameters["actorId"] = actor.id!!
-        view.filters.forEachIndexed { index, node ->
+        val filterPredicates = view.filters.mapIndexed { index, node ->
             val definition = schema.getValue(node.path("key").asText())
             val alias = "v$index"
             val clause = filterClause(definition, node, alias, parameters)
-            predicates += "EXISTS (SELECT 1 FROM page_property_values $alias WHERE $alias.page_id = p.id AND $alias.property_id = :${alias}Property AND $clause)"
             parameters["${alias}Property"] = definition.id!!
+            "EXISTS (SELECT 1 FROM page_property_values $alias WHERE $alias.page_id = p.id AND $alias.property_id = :${alias}Property AND $clause)"
+        }
+        if (filterPredicates.isNotEmpty()) {
+            val separator = if (view.filterMode == SavedViewFilterMode.ANY) " OR " else " AND "
+            predicates += filterPredicates.joinToString(separator, prefix = "(", postfix = ")")
         }
         val sortDefinition = sort?.let { schema.getValue(it.path("key").asText()) }
         val sortAlias = if (sortDefinition == null) null else "sort_value"
@@ -167,9 +190,10 @@ class SavedViewService(
         )
     }
 
-    private fun validate(request: SavedViewWriteRequest) {
-        if (request.name.trim().length !in 1..120 || !request.filters.isArray || !request.sort.isArray || !request.layout.isObject || (request.grouping != null && !request.grouping.isObject)) bad("Invalid saved view JSON AST")
-        validateAst(request.filters, request.sort, request.grouping, activeSchema())
+    private fun validate(name: String, filters: JsonNode, sort: JsonNode, grouping: JsonNode?, layout: JsonNode) {
+        if (name.trim().length !in 1..120 || !filters.isArray || !sort.isArray || !layout.isObject || (grouping != null && !grouping.isObject)) bad("Invalid saved view JSON AST")
+        if (filters.size() > 20) bad("Only 20 filters are supported")
+        validateAst(filters, sort, grouping, activeSchema())
     }
     private fun activeSchema() = definitions.findAllByDeletedAtIsNullOrderByDisplayNameAsc().associateBy { it.key }
     private fun validateAst(filters: JsonNode, sort: JsonNode, grouping: JsonNode?, schema: Map<String, PropertyDefinition>) {
@@ -250,6 +274,32 @@ class SavedViewService(
     }
     private fun user(username: String) = users.findByUsername(username) ?: throw NotFoundException("User not found")
     private fun owned(id: UUID, username: String) = views.findByIdAndUserId(id, user(username).id!!) ?: throw NotFoundException("Saved view not found")
-    private fun response(v: SavedView, favorited: Boolean = false) = SavedViewResponse(v.id!!, v.name, v.type, v.filters, v.sort, v.grouping, v.layout, v.version, v.createdAt, v.updatedAt, favorited)
+    private fun response(v: SavedView, favorited: Boolean = false): SavedViewResponse {
+        @Suppress("UNCHECKED_CAST")
+        fun asList(node: JsonNode) = (PropertyJsonValues.toWire(node) as? List<*>)?.map { it } ?: emptyList()
+        @Suppress("UNCHECKED_CAST")
+        fun asMap(node: JsonNode?) = (PropertyJsonValues.toWire(node) as? Map<*, *>)
+            ?.entries
+            ?.associate { it.key.toString() to it.value }
+        return SavedViewResponse(
+            v.id!!,
+            v.name,
+            v.type,
+            v.filterMode,
+            asList(v.filters),
+            asList(v.sort),
+            asMap(v.grouping),
+            asMap(v.layout) ?: emptyMap(),
+            v.version,
+            v.createdAt,
+            v.updatedAt,
+            favorited
+        )
+    }
+    private fun toJsonNode(value: Any?): JsonNode = when (value) {
+        null -> mapper.nullNode()
+        is JsonNode -> value
+        else -> mapper.valueToTree(value)
+    }
     private fun bad(message: String): Nothing = throw UnprocessableEntityException(message)
 }

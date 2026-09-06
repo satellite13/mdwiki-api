@@ -23,3 +23,5 @@ databaseChangeLog:
       file: db/changelog/011-pkm-wave3-properties-views.yaml
   - include:
       file: db/changelog/013-favorite-searches-views.yaml
+  - include:
+      file: db/changelog/014-saved-view-filter-mode.yaml

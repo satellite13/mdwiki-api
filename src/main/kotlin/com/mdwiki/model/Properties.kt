@@ -12,6 +12,7 @@ import java.util.UUID
 
 enum class PropertyType { TEXT, NUMBER, BOOLEAN, DATE, DATETIME, URL, SELECT, MULTI_SELECT, PAGE_REF }
 enum class SavedViewType { TABLE, LIST, CARDS }
+enum class SavedViewFilterMode { ALL, ANY }
 
 @Entity
 @Table(name = "property_definitions")
@@ -58,6 +59,8 @@ class SavedView(
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "user_id", nullable = false) val user: User,
     @Column(nullable = false, length = 120) var name: String,
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 8) var type: SavedViewType,
+    @Enumerated(EnumType.STRING) @Column(name = "filter_mode", nullable = false, length = 3)
+    var filterMode: SavedViewFilterMode = SavedViewFilterMode.ALL,
     @JdbcTypeCode(SqlTypes.JSON) @Column(nullable = false, columnDefinition = "jsonb") var filters: JsonNode,
     @JdbcTypeCode(SqlTypes.JSON) @Column(nullable = false, columnDefinition = "jsonb") var sort: JsonNode,
     @JdbcTypeCode(SqlTypes.JSON) @Column(columnDefinition = "jsonb") var grouping: JsonNode? = null,

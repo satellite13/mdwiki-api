@@ -1,6 +1,5 @@
 package com.mdwiki.integration
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.mdwiki.dto.SavedSearchWriteRequest
 import com.mdwiki.dto.SavedViewWriteRequest
 import com.mdwiki.error.NotFoundException
@@ -23,17 +22,6 @@ class FavoriteSearchViewIntegrationTest {
     @Autowired lateinit var users: UserRepository
     @Autowired lateinit var searches: SavedSearchService
     @Autowired lateinit var views: SavedViewService
-    @Autowired lateinit var mapper: ObjectMapper
-
-    private fun emptyViewRequest(name: String, type: SavedViewType = SavedViewType.LIST) =
-        SavedViewWriteRequest(
-            name,
-            type,
-            mapper.createArrayNode(),
-            mapper.createArrayNode(),
-            null,
-            mapper.createObjectNode()
-        )
 
     @Test
     fun `add favorite search is idempotent and lists with favorited flag`() {
@@ -82,7 +70,10 @@ class FavoriteSearchViewIntegrationTest {
         val suffix = UUID.randomUUID().toString()
         val owner = users.saveAndFlush(User(username = "fav-v-$suffix", email = "fav-v-$suffix@test",
             passwordHash = "x", role = UserRole.READER))
-        val created = views.create(emptyViewRequest("Star view"), owner.username)
+        val created = views.create(
+            SavedViewWriteRequest("Star view", SavedViewType.LIST),
+            owner.username
+        )
         assertThat(created.favorited).isFalse()
 
         views.addFavorite(created.id, owner.username)
@@ -106,7 +97,10 @@ class FavoriteSearchViewIntegrationTest {
             passwordHash = "x", role = UserRole.READER))
         val other = users.saveAndFlush(User(username = "oth-v-$suffix", email = "oth-v-$suffix@test",
             passwordHash = "x", role = UserRole.READER))
-        val created = views.create(emptyViewRequest("Secret", SavedViewType.TABLE), owner.username)
+        val created = views.create(
+            SavedViewWriteRequest("Secret", SavedViewType.TABLE),
+            owner.username
+        )
 
         assertThatThrownBy { views.addFavorite(created.id, other.username) }
             .isInstanceOf(NotFoundException::class.java)
