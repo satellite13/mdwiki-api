@@ -4,13 +4,16 @@ import com.mdwiki.dto.CompleteOpenTaskRequest
 import com.mdwiki.error.ConflictException
 import com.mdwiki.error.ForbiddenException
 import com.mdwiki.model.Page
+import com.mdwiki.model.Folder
 import com.mdwiki.model.User
+import com.mdwiki.model.UserRole
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.WikiFileService
+import com.mdwiki.service.FolderAccessPolicy
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -44,7 +47,8 @@ class CompleteOpenTaskUseCaseTest {
         wikiFileService,
         pageMetadataService,
         pageIndexer,
-        sectionIndexService
+        sectionIndexService,
+        FolderAccessPolicy(userRepository)
     )
 
     @Test
@@ -63,6 +67,19 @@ class CompleteOpenTaskUseCaseTest {
         verify(pageRepository).save(argThat<Page> { contentMd == "- [x] Deploy\nnext" })
         verify(pageMetadataService).syncLinksAndTags(page, "- [x] Deploy\nnext", cleanupOrphanedTags = true)
         verify(pageIndexer).indexAfterCommit(page)
+    }
+
+    @Test
+    fun `foreign editor cannot complete task on owned page`() {
+        val alice = User(UUID.randomUUID(), "alice", "alice@test", "x", UserRole.EDITOR)
+        val bob = User(UUID.randomUUID(), "bob", "bob@test", "x", UserRole.EDITOR)
+        val page = page(content = "- [ ] Deploy").apply {
+            folder = Folder(UUID.randomUUID(), "Inbox", owner = alice)
+        }
+        whenever(pageRepository.findActiveByIdForUpdate(page.id!!)).thenReturn(page)
+        whenever(userRepository.findByUsername("bob")).thenReturn(bob)
+
+        assertThrows<ForbiddenException> { useCase().execute(requestFor(page), "bob") }
     }
 
     @Test

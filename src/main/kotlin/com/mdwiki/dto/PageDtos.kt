@@ -7,11 +7,16 @@ import jakarta.validation.constraints.Pattern
 import java.time.Instant
 import java.util.UUID
 
+object PageSlugConstraints {
+    const val PATTERN = "^[a-z0-9а-яё]+(?:-[a-z0-9а-яё]+)*$"
+    const val MESSAGE = "Slug must be lowercase letters (latin or Cyrillic), digits, and hyphens"
+}
+
 data class CreatePageRequest(
     @field:NotBlank
     @field:Pattern(
-        regexp = "^[a-z0-9а-яё]+(?:-[a-z0-9а-яё]+)*$",
-        message = "Slug must be lowercase letters (latin or Cyrillic), digits, and hyphens"
+        regexp = PageSlugConstraints.PATTERN,
+        message = PageSlugConstraints.MESSAGE
     )
     val slug: String,
     @field:NotBlank
@@ -23,6 +28,10 @@ data class CreatePageRequest(
 data class UpdatePageRequest(
     val title: String? = null,
     val contentMd: String? = null,
+    @field:Pattern(
+        regexp = PageSlugConstraints.PATTERN,
+        message = PageSlugConstraints.MESSAGE
+    )
     val slug: String? = null,
     val folderId: UUID? = null,
     val clearFolder: Boolean? = null,
@@ -68,13 +77,27 @@ data class PageSectionMapItem(
     val level: Int,
     val length: Int,
     val hash: String,
-    val includesChildren: Boolean
+    val includesChildren: Boolean,
+    val stableId: String? = null
 )
 
 data class PageSectionMapResponse(
     val slug: String,
     val updatedAt: Instant,
     val sections: List<PageSectionMapItem>
+)
+
+data class RestoreRevisionRequest(
+    val revisionNo: Long,
+    val expectedUpdatedAt: Instant,
+    val restoreTitle: Boolean = false
+)
+
+data class RevisionDiffResponse(
+    val from: com.mdwiki.service.RevisionSnapshot,
+    val to: com.mdwiki.service.RevisionSnapshot,
+    val rows: List<com.mdwiki.service.RevisionDiffRow>,
+    val truncated: Boolean
 )
 
 data class PatchPageResponse(

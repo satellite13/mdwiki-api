@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 013-favorite-searches-views
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: false
+            sql: |
+              CREATE TABLE user_favorite_searches (
+                user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                saved_search_id uuid NOT NULL REFERENCES saved_searches(id) ON DELETE CASCADE,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (user_id, saved_search_id)
+              );
+              CREATE INDEX idx_favorite_searches_user_created
+                ON user_favorite_searches (user_id, created_at DESC);
+              CREATE TABLE user_favorite_views (
+                user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                view_id uuid NOT NULL REFERENCES saved_views(id) ON DELETE CASCADE,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (user_id, view_id)
+              );
+              CREATE INDEX idx_favorite_views_user_created
+                ON user_favorite_views (user_id, created_at DESC);
+      rollback:
+        - sql:
+            sql: >
+              DROP TABLE IF EXISTS user_favorite_views, user_favorite_searches;

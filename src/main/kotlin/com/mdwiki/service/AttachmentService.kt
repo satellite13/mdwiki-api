@@ -9,10 +9,13 @@ import com.mdwiki.repository.AttachmentRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.repository.UserRepository
 import org.slf4j.LoggerFactory
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile
 import java.nio.file.Files
 import java.nio.file.Path
@@ -25,7 +28,8 @@ class AttachmentService(
     private val attachmentRepository: AttachmentRepository,
     private val userRepository: UserRepository,
     private val pageRepository: PageRepository,
-    private val wikiProperties: WikiProperties
+    private val wikiProperties: WikiProperties,
+    private val folderAccessPolicy: FolderAccessPolicy
 ) {
 
     private val log = LoggerFactory.getLogger(AttachmentService::class.java)
@@ -113,14 +117,26 @@ class AttachmentService(
     }
 
     @Transactional(readOnly = true)
-    fun list(page: Int, size: Int, pageId: UUID?): List<AttachmentResponse> {
+    fun list(
+        page: Int,
+        size: Int,
+        pageId: UUID?,
+        q: String?,
+        requestingUsername: String
+    ): Page<AttachmentResponse> {
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
-        val results = if (pageId != null) {
-            attachmentRepository.findByPageId(pageId, pageable)
-        } else {
-            attachmentRepository.findAll(pageable)
+        val needle = q?.trim()?.takeIf { it.isNotEmpty() }
+        val results = when {
+            pageId != null && needle != null ->
+                attachmentRepository.findByPageIdAndOriginalNameContainingIgnoreCase(pageId, needle, pageable)
+            pageId != null ->
+                attachmentRepository.findByPageId(pageId, pageable)
+            needle != null ->
+                attachmentRepository.findByOriginalNameContainingIgnoreCase(needle, pageable)
+            else ->
+                attachmentRepository.findAll(pageable)
         }
-        return results.content.map { it.toResponse() }
+        return results.map { it.toResponse() }
     }
 
     @Transactional
@@ -263,6 +279,7 @@ class AttachmentService(
         val user = userRepository.findByUsername(username)
         val linkedPage = pageId?.let {
             pageRepository.findById(it).orElseThrow { NotFoundException("Page not found: $it") }
+                .also { page -> page.folder?.let { folderAccessPolicy.requireAccess(it, username) } }
         }
         val ext = originalName.substringAfterLast('.', "")
         val storedName = "${UUID.randomUUID()}${if (ext.isNotBlank()) ".$ext" else ""}"
@@ -271,23 +288,67 @@ class AttachmentService(
         val dest = uploadsDir.resolve(storedName).normalize()
         require(dest.startsWith(uploadsDir)) { "Invalid upload path" }
         writeToDestination(dest)
-
-        val attachment = attachmentRepository.save(Attachment(
-            originalName = originalName,
-            storedName = storedName,
-            contentType = contentType,
-            sizeBytes = sizeBytes,
-            uploadedBy = user,
-            page = linkedPage
-        ))
-
-        return attachment.toResponse()
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCompletion(status: Int) {
+                    if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                        runCatching { Files.deleteIfExists(dest) }
+                    }
+                }
+            })
+        }
+        return try {
+            val attachment = attachmentRepository.save(Attachment(
+                originalName = originalName,
+                storedName = storedName,
+                contentType = contentType,
+                sizeBytes = sizeBytes,
+                uploadedBy = user,
+                page = linkedPage
+            ))
+            attachmentRepository.flush()
+            attachment.toResponse()
+        } catch (error: Exception) {
+            Files.deleteIfExists(dest)
+            throw error
+        }
     }
 
     @Transactional
-    fun delete(id: UUID) {
+    fun delete(id: UUID, username: String) {
         val attachment = attachmentRepository.findById(id)
             .orElseThrow { NotFoundException("Attachment not found") }
+        attachment.page?.folder?.let { folderAccessPolicy.requireAccess(it, username) }
+        deletePreAuthorized(attachment)
+    }
+
+    /**
+     * Удаляет все вложения страницы (файлы + строки). Нужно перед hard-delete страницы:
+     * FK attachments_page_id_fkey без CASCADE.
+     */
+    @Transactional
+    fun deleteAllForPage(pageId: UUID) {
+        attachmentRepository.findByPageIdIn(listOf(pageId))
+            .forEach { deletePreAuthorized(it) }
+    }
+
+    @Transactional
+    internal fun deletePreAuthorized(id: UUID) {
+        val attachment = attachmentRepository.findById(id)
+            .orElseThrow { NotFoundException("Attachment not found") }
+        deletePreAuthorized(attachment)
+    }
+
+    @Transactional
+    internal fun linkPreAuthorized(id: UUID, pageId: UUID): AttachmentResponse {
+        val attachment = attachmentRepository.findById(id)
+            .orElseThrow { NotFoundException("Attachment not found") }
+        attachment.page = pageRepository.findById(pageId)
+            .orElseThrow { NotFoundException("Page not found: $pageId") }
+        return attachmentRepository.save(attachment).toResponse()
+    }
+
+    private fun deletePreAuthorized(attachment: Attachment) {
         val filePath = uploadsDir.resolve(attachment.storedName).normalize()
         if (filePath.startsWith(uploadsDir)) {
             Files.deleteIfExists(filePath)

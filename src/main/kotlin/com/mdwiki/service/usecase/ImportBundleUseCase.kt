@@ -11,6 +11,7 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.AttachmentService
 import com.mdwiki.service.FolderService
+import com.mdwiki.service.MultiPageMutationLock
 import com.mdwiki.service.WikilinkService
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
@@ -42,6 +43,7 @@ class ImportBundleUseCase(
         if (declaredSizeBytes != null && declaredSizeBytes > maxBytes) {
             throw IllegalArgumentException("Bundle exceeds max size of ${wikiProperties.bundle.maxSize}")
         }
+        MultiPageMutationLock.acquire(pageRepository)
         if (targetFolderId != null && folderRepository.findById(targetFolderId).isEmpty) {
             throw IllegalArgumentException("Target folder not found: $targetFolderId")
         }

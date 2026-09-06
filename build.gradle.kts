@@ -102,8 +102,10 @@ tasks.named<Copy>("processResources") {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    maxHeapSize = "1g"
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     environment("SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE", "1")
+    environment("MDWIKI_INDEXING_STARTUP_ENABLED", "false")
     // mdwiki.jwt.secret обязателен (дефолта больше нет); тестовый, не для prod.
     environment("JWT_SECRET", "integration-test-jwt-secret-do-not-use-in-production")
     finalizedBy(tasks.jacocoTestReport)

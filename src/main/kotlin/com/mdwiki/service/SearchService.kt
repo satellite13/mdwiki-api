@@ -16,23 +16,31 @@ class SearchService(
 ) {
 
     @Transactional(readOnly = true)
-    fun search(query: String, limit: Int = 20): List<SearchResult> {
+    fun search(query: String, limit: Int = 20, tags: List<String> = emptyList()): List<SearchResult> {
         if (query.isBlank()) return emptyList()
-        return pageRepository.searchWithHeadline(query, limit).map { hit ->
+        val normalizedTags = tags.map { it.trim().lowercase() }.filter { it.isNotBlank() }.distinct()
+        val hits = if (normalizedTags.isEmpty()) pageRepository.searchWithHeadline(query, limit)
+        else pageRepository.searchWithHeadlineAndTags(query, normalizedTags, normalizedTags.size, limit)
+        val pagesById = pageRepository.findAllById(hits.map { it.getId() }).associateBy { it.id }
+        return hits.map { hit ->
             SearchResult(
                 pageId = hit.getId(),
                 slug = hit.getSlug(),
                 title = hit.getTitle(),
-                snippet = headlineToSearchSnippet(hit.getHeadline())
+                snippet = headlineToSearchSnippet(hit.getHeadline()),
+                updatedAt = hit.getUpdatedAt(),
+                tags = pagesById[hit.getId()]?.tags?.map { it.name }?.sorted().orEmpty()
             )
         }
     }
 
     @Transactional(readOnly = true)
-    fun ragSearch(query: String, topK: Int = 10): List<RagSearchResult> {
+    fun ragSearch(query: String, topK: Int = 10, tags: List<String> = emptyList()): List<RagSearchResult> {
         if (query.isBlank()) return emptyList()
         val limit = topK.coerceIn(1, 50)
-        val hits = ragService.search(query, limit)
+        val normalizedTags = tags.map { it.trim().lowercase() }.filter { it.isNotBlank() }.distinct()
+        val hits = if (normalizedTags.isEmpty()) ragService.search(query, limit)
+        else ragService.search(query, limit, normalizedTags)
         if (hits.isEmpty()) return emptyList()
 
         val pagesBySlug = pageRepository.findAllBySlugIn(hits.map { it.pageSlug }.distinct())
@@ -51,7 +59,8 @@ class SearchService(
                 tags = page?.tags?.map { it.name }?.sorted().orEmpty(),
                 sectionKey = page?.contentMd?.let { content ->
                     SectionAnchorResolver.resolveKey(content, hit.sectionHeading, hit.chunkText)
-                }
+                },
+                updatedAt = page?.updatedAt
             )
         }
     }

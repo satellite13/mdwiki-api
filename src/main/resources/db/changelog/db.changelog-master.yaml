@@ -7,3 +7,23 @@ databaseChangeLog:
       file: db/changelog/002-normalized-title.yaml
   - include:
       file: db/changelog/003-page-sections.yaml
+  - include:
+      file: db/changelog/004-pkm-wave1.yaml
+  - include:
+      file: db/changelog/005-folder-ownership.yaml
+  - include:
+      file: db/changelog/007-attachment-uploader-null.yaml
+  - include:
+      file: db/changelog/008-pkm-wave2.yaml
+  - include:
+      file: db/changelog/009-wave2-revision-trash.yaml
+  - include:
+      file: db/changelog/010-page-index-queue.yaml
+  - include:
+      file: db/changelog/011-pkm-wave3-properties-views.yaml
+  - include:
+      file: db/changelog/012-attachments-page-cascade.yaml
+  - include:
+      file: db/changelog/013-favorite-searches-views.yaml
+  - include:
+      file: db/changelog/014-saved-view-filter-mode.yaml

@@ -23,7 +23,8 @@ import java.util.UUID
 class AnnotationService(
     private val annotationRepository: AnnotationRepository,
     private val pageRepository: PageRepository,
-    private val wikiProperties: WikiProperties
+    private val wikiProperties: WikiProperties,
+    private val folderAccessPolicy: FolderAccessPolicy
 ) {
     private val yamlMapper = ObjectMapper(YAMLFactory()).registerModule(KotlinModule.Builder().build())
 
@@ -31,7 +32,8 @@ class AnnotationService(
         get() = Path.of(wikiProperties.contentDir).toAbsolutePath().normalize().resolve(".mdwiki/annotations")
 
     @Transactional(readOnly = true)
-    fun listBySlug(slug: String): List<AnnotationResponse> {
+    fun listBySlug(slug: String, requestingUsername: String): List<AnnotationResponse> {
+        // Shared-wiki reads intentionally remain global.
         val page = pageRepository.findBySlug(slug) ?: throw NotFoundException("Page not found: $slug")
         return annotationRepository.findByPageId(page.id!!).map { it.toResponse() }
     }
@@ -39,6 +41,7 @@ class AnnotationService(
     @Transactional
     fun create(slug: String, request: CreateAnnotationRequest, username: String): AnnotationResponse {
         val page = pageRepository.findBySlug(slug) ?: throw NotFoundException("Page not found: $slug")
+        page.folder?.let { folderAccessPolicy.requireAccess(it, username) }
         val annotation = annotationRepository.save(Annotation(
             pageId = page.id!!,
             highlightedText = request.highlightedText,
@@ -54,25 +57,33 @@ class AnnotationService(
     }
 
     @Transactional
-    fun update(id: UUID, request: UpdateAnnotationRequest): AnnotationResponse {
+    fun update(id: UUID, request: UpdateAnnotationRequest, username: String): AnnotationResponse {
         val annotation = annotationRepository.findById(id)
             .orElseThrow { NotFoundException("Annotation not found: $id") }
-        request.comment?.let { annotation.comment = it }
-        request.color?.let { annotation.color = it }
-        annotation.updatedAt = Instant.now()
-        annotationRepository.save(annotation)
         val page = pageRepository.findById(annotation.pageId)
             .orElseThrow { NotFoundException("Page not found") }
+        page.folder?.let { folderAccessPolicy.requireAccess(it, username) }
+        when {
+            request.clearComment == true -> annotation.comment = null
+            request.comment != null -> annotation.comment = request.comment
+        }
+        when {
+            request.clearColor == true -> annotation.color = null
+            request.color != null -> annotation.color = request.color
+        }
+        annotation.updatedAt = Instant.now()
+        annotationRepository.save(annotation)
         syncYaml(page.slug)
         return annotation.toResponse()
     }
 
     @Transactional
-    fun delete(id: UUID) {
+    fun delete(id: UUID, username: String) {
         val annotation = annotationRepository.findById(id)
             .orElseThrow { NotFoundException("Annotation not found: $id") }
         val page = pageRepository.findById(annotation.pageId)
             .orElseThrow { NotFoundException("Page not found") }
+        page.folder?.let { folderAccessPolicy.requireAccess(it, username) }
         annotationRepository.delete(annotation)
         syncYaml(page.slug)
     }

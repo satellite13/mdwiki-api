@@ -6,6 +6,8 @@ import com.mdwiki.mapper.displayTitle
 import com.mdwiki.mapper.toListItem
 import com.mdwiki.mapper.toResponse
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.model.RevisionOperation
+import com.mdwiki.util.MarkdownSectionParser
 import com.mdwiki.service.usecase.CreatePageUseCase
 import com.mdwiki.service.usecase.DeletePageUseCase
 import com.mdwiki.service.usecase.ImportMdPagesUseCase
@@ -32,7 +34,9 @@ class PageService(
     private val importMdPagesUseCase: ImportMdPagesUseCase,
     private val patchPageUseCase: PatchPageUseCase,
     private val patchSectionUseCase: PatchSectionUseCase,
-    private val sectionIndexService: SectionIndexService
+    private val sectionIndexService: SectionIndexService,
+    private val pageRevisionService: PageRevisionService? = null,
+    private val revisionDiffService: RevisionDiffService? = null
 ) {
     @Transactional(readOnly = true)
     fun findAll(page: Int = 0, size: Int = 50): Page<PageListItem> {
@@ -107,6 +111,7 @@ class PageService(
             ?: throw NotFoundException("Page not found: $slug")
         val content = page.contentMd ?: ""
         val sections = sectionIndexService.listOrRebuild(page)
+        val explicitIds = MarkdownSectionParser.parse(content).associate { it.stableKey to it.explicitId }
         return PageSectionMapResponse(
             slug = page.slug,
             updatedAt = page.updatedAt,
@@ -124,7 +129,8 @@ class PageService(
                         other !== section &&
                             other.startOffset > section.startOffset &&
                             other.startOffset < section.endOffset
-                    }
+                    },
+                    stableId = explicitIds[section.stableKey]
                 )
             }
         )
@@ -146,16 +152,60 @@ class PageService(
         return patched
     }
 
+    @Transactional(readOnly = true)
+    fun listRevisions(slug: String, limit: Int, before: Long?) =
+        requireNotNull(pageRevisionService).list(activePage(slug), limit, before)
+
+    @Transactional(readOnly = true)
+    fun getRevision(slug: String, revisionNo: Long) =
+        requireNotNull(pageRevisionService).get(activePage(slug), revisionNo)
+
+    @Transactional(readOnly = true)
+    fun diffRevisions(slug: String, from: Long, to: Long): RevisionDiffResponse {
+        val page = activePage(slug)
+        val before = requireNotNull(pageRevisionService).get(page, from)
+        val after = pageRevisionService.get(page, to)
+        val diff = requireNotNull(revisionDiffService).diff(before.contentMd, after.contentMd)
+        return RevisionDiffResponse(before, after, diff.rows, diff.truncated)
+    }
+
     @Transactional
-    fun delete(slug: String, mode: DeletePageUseCase.DeleteMode = DeletePageUseCase.DeleteMode.SOFT) {
-        deletePageUseCase.execute(slug, mode)
+    fun restoreRevision(slug: String, request: RestoreRevisionRequest, username: String): PageResponse {
+        val page = activePage(slug)
+        val revision = requireNotNull(pageRevisionService).entity(page, request.revisionNo)
+        return RevisionMutationContext.with(RevisionMutation(RevisionOperation.RESTORE, revision)) {
+            updatePageUseCase.execute(slug, UpdatePageRequest(
+                contentMd = revision.contentMd,
+                title = revision.titleSnapshot.takeIf { request.restoreTitle },
+                expectedUpdatedAt = request.expectedUpdatedAt
+            ), username)
+        }
+    }
+
+    private fun activePage(slug: String) =
+        pageRepository.findBySlugAndDeletedAtIsNull(slug)
+            ?: throw NotFoundException("Page not found: $slug")
+
+    @Transactional
+    fun delete(slug: String, mode: DeletePageUseCase.DeleteMode, username: String) {
+        deletePageUseCase.execute(slug, mode, username)
+        publishDelete()
+    }
+
+    @Transactional
+    internal fun deletePreAuthorized(slug: String, mode: DeletePageUseCase.DeleteMode) {
+        deletePageUseCase.executePreAuthorized(slug, mode)
+        publishDelete()
+    }
+
+    private fun publishDelete() {
         folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
     }
 
     @Transactional
-    fun restore(slug: String): PageResponse {
-        val page = pageRepository.findBySlug(slug)
+    fun restore(slug: String, username: String? = null): PageResponse {
+        val page = pageRepository.findBySlugForUpdate(slug)
             ?: throw NotFoundException("Page not found: $slug")
         if (page.deletedAt == null) {
             throw IllegalStateException("Page is not deleted: $slug")
@@ -164,11 +214,17 @@ class PageService(
         // Возвращаем файл из корзины на место (если он там был).
         wikiFileService.restorePageFileFromTrash(page)
         val saved = pageRepository.save(page)
+        pageRepository.flush()
+        pageRevisionService?.record(saved, username, RevisionOperation.RESTORE_TRASH)
         sectionIndexService.rebuild(saved)
         folderService.invalidateCache()
         treeEventsService.publishTreeUpdated()
         return saved.toResponse()
     }
+
+    @Transactional
+    internal fun restorePreAuthorized(slug: String, username: String? = null): PageResponse =
+        restore(slug, username)
 
     @Transactional(readOnly = true)
     fun findDeleted(): List<PageListItem> {

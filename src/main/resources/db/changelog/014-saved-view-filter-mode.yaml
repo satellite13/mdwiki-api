@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: 014-saved-view-filter-mode
+      author: mdwiki
+      changes:
+        - addColumn:
+            tableName: saved_views
+            columns:
+              - column:
+                  name: filter_mode
+                  type: varchar(3)
+                  defaultValue: ALL
+                  constraints:
+                    nullable: false
+        - sql:
+            sql: ALTER TABLE saved_views ADD CONSTRAINT chk_saved_views_filter_mode CHECK (filter_mode IN ('ALL', 'ANY'))
+      rollback:
+        - dropColumn:
+            tableName: saved_views
+            columnName: filter_mode

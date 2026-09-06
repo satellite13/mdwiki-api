@@ -45,6 +45,9 @@ class FolderServiceTest {
 
     @BeforeEach
     fun setUp() {
+        whenever(userRepository.findByUsername(any())).thenReturn(
+            User(UUID.randomUUID(), "testuser", "default@test", "x", UserRole.EDITOR)
+        )
         val stubDir = File(System.getProperty("java.io.tmpdir"))
         whenever(wikiFileService.ensureFolderDirectory(any())).thenReturn(stubDir)
         whenever(wikiFileService.resolveFolderDirectory(any())).thenReturn(stubDir)
@@ -54,11 +57,11 @@ class FolderServiceTest {
         folderService = FolderService(
             folderRepository,
             pageRepository,
-            userRepository,
             wikiFileService,
             treeEventsService,
             deletePageUseCase,
-            syncService
+            syncService,
+            FolderAccessPolicy(userRepository)
         )
     }
 
@@ -73,7 +76,7 @@ class FolderServiceTest {
         whenever(folderRepository.findAll()).thenReturn(listOf(rootFolder, childFolder))
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(rootPage, childPage))
 
-        val tree = folderService.getTree()
+        val tree = folderService.getTree("testuser")
 
         assertEquals(2, tree.size) // root folder + root page
         val folderNode = tree.first { it.type == "folder" }
@@ -99,6 +102,24 @@ class FolderServiceTest {
     }
 
     @Test
+    fun `user tree hides other owners PKM folder and pages`() {
+        val alice = User(UUID.randomUUID(), "alice", "alice@test", "x", UserRole.EDITOR)
+        val bob = User(UUID.randomUUID(), "bob", "bob@test", "x", UserRole.EDITOR)
+        val aliceInbox = Folder(UUID.randomUUID(), "Inbox", createdBy = alice, owner = alice)
+        val bobInbox = Folder(UUID.randomUUID(), "Inbox", createdBy = bob, owner = bob)
+        val alicePage = Page(UUID.randomUUID(), "alice-capture", "Alice", folder = aliceInbox)
+        val bobPage = Page(UUID.randomUUID(), "bob-capture", "Bob", folder = bobInbox)
+        whenever(folderRepository.findAll()).thenReturn(listOf(aliceInbox, bobInbox))
+        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(alicePage, bobPage))
+        whenever(userRepository.findByUsername("alice")).thenReturn(alice)
+
+        val tree = folderService.getTree("alice")
+
+        assertEquals(1, tree.size)
+        assertEquals("alice-capture", tree.single().children.single().slug)
+    }
+
+    @Test
     fun `getTree sorts pages with natural order for numbered titles`() {
         val chapter9 = Page(id = UUID.randomUUID(), slug = "chapter-9", title = "Глава 9: Обучение и адаптация")
         val chapter10 = Page(id = UUID.randomUUID(), slug = "chapter-10", title = "Глава 10: Протокол контекста модели (MCP)")
@@ -106,7 +127,7 @@ class FolderServiceTest {
         whenever(folderRepository.findAll()).thenReturn(emptyList())
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(chapter10, chapter9))
 
-        val tree = folderService.getTree()
+        val tree = folderService.getTree("testuser")
         val pages = tree.filter { it.type == "page" }
 
         assertEquals(2, pages.size)
@@ -120,7 +141,7 @@ class FolderServiceTest {
         whenever(folderRepository.findAll()).thenReturn(emptyList())
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(active))
 
-        val tree = folderService.getTree()
+        val tree = folderService.getTree("testuser")
 
         assertEquals(1, tree.size)
         assertEquals("kept", tree.single().slug)
@@ -140,7 +161,7 @@ class FolderServiceTest {
         whenever(folderRepository.findAll()).thenReturn(emptyList())
         whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(listOf(page))
 
-        val tree = folderService.getTree()
+        val tree = folderService.getTree("testuser")
 
         assertEquals("Глава 2. Маршрутизация", tree.single().name)
         assertEquals("agentic-patterns-glava-2-marshrutizaciya", tree.single().slug)
@@ -150,7 +171,7 @@ class FolderServiceTest {
     fun `create folder`() {
         val user = User(id = UUID.randomUUID(), username = "testuser", email = "t@t.com", passwordHash = "h")
         whenever(userRepository.findByUsername("testuser")).thenReturn(user)
-        whenever(folderRepository.existsByParentIdAndName(null, "new-folder")).thenReturn(false)
+        whenever(folderRepository.existsByOwnerIsNullAndParentIdIsNullAndName("new-folder")).thenReturn(false)
         whenever(folderRepository.save(any<Folder>())).thenAnswer {
             val f = it.arguments[0] as Folder
             Folder(id = UUID.randomUUID(), name = f.name, parent = f.parent, createdBy = f.createdBy)
@@ -165,7 +186,7 @@ class FolderServiceTest {
 
     @Test
     fun `create folder throws on duplicate name`() {
-        whenever(folderRepository.existsByParentIdAndName(null, "existing")).thenReturn(true)
+        whenever(folderRepository.existsByOwnerIsNullAndParentIdIsNullAndName("existing")).thenReturn(true)
 
         assertThrows<com.mdwiki.error.ConflictException> {
             folderService.create(CreateFolderRequest(name = "existing"), "testuser")
@@ -177,10 +198,10 @@ class FolderServiceTest {
         val folderId = UUID.randomUUID()
         val folder = Folder(id = folderId, name = "old-name")
         whenever(folderRepository.findById(folderId)).thenReturn(Optional.of(folder))
-        whenever(folderRepository.existsByParentIdAndName(null, "new-name")).thenReturn(false)
+        whenever(folderRepository.existsByOwnerIsNullAndParentIdIsNullAndName("new-name")).thenReturn(false)
         whenever(folderRepository.save(any<Folder>())).thenAnswer { it.arguments[0] }
 
-        val result = folderService.rename(folderId, UpdateFolderRequest(name = "new-name"))
+        val result = folderService.rename(folderId, UpdateFolderRequest(name = "new-name"), "testuser")
 
         assertEquals("new-name", result.name)
     }
@@ -196,7 +217,7 @@ class FolderServiceTest {
         whenever(folderRepository.findById(targetId)).thenReturn(Optional.of(target))
         whenever(folderRepository.save(any<Folder>())).thenAnswer { it.arguments[0] }
 
-        val result = folderService.move(folderId, MoveFolderRequest(parentId = targetId))
+        val result = folderService.move(folderId, MoveFolderRequest(parentId = targetId), "testuser")
 
         assertEquals(targetId, result.parentId)
     }
@@ -212,7 +233,7 @@ class FolderServiceTest {
         whenever(folderRepository.findById(childId)).thenReturn(Optional.of(child))
 
         assertThrows<IllegalArgumentException> {
-            folderService.move(parentId, MoveFolderRequest(parentId = childId))
+            folderService.move(parentId, MoveFolderRequest(parentId = childId), "testuser")
         }
     }
 
@@ -224,7 +245,7 @@ class FolderServiceTest {
         whenever(folderRepository.findById(folderId)).thenReturn(Optional.of(folder))
 
         assertThrows<IllegalArgumentException> {
-            folderService.move(folderId, MoveFolderRequest(parentId = folderId))
+            folderService.move(folderId, MoveFolderRequest(parentId = folderId), "testuser")
         }
     }
 
@@ -241,7 +262,7 @@ class FolderServiceTest {
         whenever(folderRepository.findAll()).thenReturn(listOf(parent, child, grandchild))
         whenever(pageRepository.findByFolderId(any())).thenReturn(emptyList())
 
-        folderService.delete(parentId)
+        folderService.delete(parentId, "testuser")
 
         verify(folderRepository).delete(parent)
     }
@@ -256,9 +277,9 @@ class FolderServiceTest {
         whenever(folderRepository.findAll()).thenReturn(listOf(folder))
         whenever(pageRepository.findByFolderId(folderId)).thenReturn(listOf(page))
 
-        folderService.delete(folderId, FolderDeletePageAction.DELETE)
+        folderService.delete(folderId, "testuser", FolderDeletePageAction.DELETE)
 
-        verify(deletePageUseCase).execute(
+        verify(deletePageUseCase).executePreAuthorized(
             "orphan",
             DeletePageUseCase.DeleteMode.HARD,
             scheduleReconcile = false,
@@ -285,9 +306,9 @@ class FolderServiceTest {
         whenever(folderRepository.findAll()).thenReturn(listOf(folder))
         whenever(pageRepository.findByFolderId(folderId)).thenReturn(listOf(trashed))
 
-        folderService.delete(folderId, FolderDeletePageAction.DELETE)
+        folderService.delete(folderId, "testuser", FolderDeletePageAction.DELETE)
 
-        verify(deletePageUseCase).execute(
+        verify(deletePageUseCase).executePreAuthorized(
             "trashed",
             DeletePageUseCase.DeleteMode.HARD,
             scheduleReconcile = false,
@@ -306,12 +327,12 @@ class FolderServiceTest {
         whenever(folderRepository.findAll()).thenReturn(listOf(folder))
         whenever(pageRepository.findByFolderId(folderId)).thenReturn(listOf(page))
 
-        folderService.delete(folderId, FolderDeletePageAction.MOVE_TO_ROOT)
+        folderService.delete(folderId, "testuser", FolderDeletePageAction.MOVE_TO_ROOT)
 
         assertNull(page.folder)
         verify(wikiFileService).relocatePageFile(page, null)
         verify(pageRepository).saveAll(listOf(page))
-        verify(deletePageUseCase, never()).execute(any(), any(), any(), any())
+        verify(deletePageUseCase, never()).executePreAuthorized(any(), any(), any(), any())
         verify(folderRepository).delete(folder)
     }
 }

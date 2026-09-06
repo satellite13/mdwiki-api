@@ -1,6 +1,7 @@
 package com.mdwiki.mcp
 
 import com.mdwiki.mcp.McpSupport.parseUuid
+import com.mdwiki.mcp.McpSupport.currentUsername
 import com.mdwiki.service.AnnotationService
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
@@ -15,7 +16,7 @@ class WikiAnnotationDeleteTool(private val annotationService: AnnotationService)
     )
     fun delete(@McpToolParam(description = "Annotation UUID") id: String): Map<String, String> {
         val parsedId = parseUuid(id)
-        annotationService.delete(parsedId)
+        annotationService.delete(parsedId, currentUsername())
         return mapOf("status" to "deleted", "id" to parsedId.toString())
     }
 }

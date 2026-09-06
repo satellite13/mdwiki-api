@@ -29,11 +29,34 @@ interface PageChunkRepository : JpaRepository<PageChunk, UUID> {
             SELECT pc.id, pc.page_id, pc.chunk_index, pc.chunk_text, pc.section_heading,
                    1 - (pc.embedding <=> cast(:queryEmbedding AS vector)) AS score
             FROM page_chunks pc
-            WHERE pc.embedding IS NOT NULL
+            JOIN pages p ON p.id = pc.page_id
+            WHERE pc.embedding IS NOT NULL AND p.deleted_at IS NULL
             ORDER BY pc.embedding <=> cast(:queryEmbedding AS vector)
             LIMIT :limit
         """,
         nativeQuery = true
     )
     fun findByVectorSimilarity(queryEmbedding: String, limit: Int): List<Array<Any>>
+
+    @Query(
+        value = """
+            SELECT pc.id, pc.page_id, pc.chunk_index, pc.chunk_text, pc.section_heading,
+                   1 - (pc.embedding <=> cast(:queryEmbedding AS vector)) AS score
+            FROM page_chunks pc
+            JOIN pages p ON p.id = pc.page_id
+            WHERE pc.embedding IS NOT NULL AND p.deleted_at IS NULL
+              AND (SELECT count(DISTINCT lower(t.name)) FROM page_tags pt
+                   JOIN tags t ON t.id = pt.tag_id
+                   WHERE pt.page_id = p.id AND lower(t.name) IN (:tags)) = :tagCount
+            ORDER BY pc.embedding <=> cast(:queryEmbedding AS vector)
+            LIMIT :limit
+        """,
+        nativeQuery = true
+    )
+    fun findByVectorSimilarityWithTags(
+        queryEmbedding: String,
+        tags: Collection<String>,
+        tagCount: Int,
+        limit: Int
+    ): List<Array<Any>>
 }

@@ -78,6 +78,7 @@ class SyncService(
 
     @Transactional
     fun fullSync(): SyncResult = synchronized(wikiSyncLock) {
+        MultiPageMutationLock.acquire(pageRepository)
         val result = wikiSyncEngine.fullSync()
         val attachmentsAdded = attachmentService.syncFromDisk().added
         val merged = SyncResult(result.added, result.updated, result.removed, attachmentsAdded)
@@ -131,6 +132,7 @@ class SyncService(
     }
 
     private fun reconcileFromDiskBody(): SyncResult {
+        MultiPageMutationLock.acquire(pageRepository)
         val result = wikiSyncEngine.fullSync()
         val attachmentsAdded = attachmentService.syncFromDisk().added
         val merged = SyncResult(result.added, result.updated, result.removed, attachmentsAdded)

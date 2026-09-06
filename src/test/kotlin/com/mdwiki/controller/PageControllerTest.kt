@@ -3,8 +3,11 @@ package com.mdwiki.controller
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.mdwiki.dto.*
 import com.mdwiki.error.NotFoundException
+import com.mdwiki.error.ConflictException
+import com.mdwiki.error.ForbiddenException
 import com.mdwiki.service.GraphService
 import com.mdwiki.service.PageService
+import com.mdwiki.service.usecase.DeletePageUseCase
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -68,6 +71,37 @@ class PageControllerTest {
 
     @Test
     @WithMockUser(roles = ["READER"])
+    fun `GET page sections returns stable section map`() {
+        val updatedAt = Instant.parse("2026-09-05T10:00:00Z")
+        whenever(pageService.mapSections("test-page")).thenReturn(
+            PageSectionMapResponse(
+                slug = "test-page",
+                updatedAt = updatedAt,
+                sections = listOf(
+                    PageSectionMapItem(
+                        key = "overview-a1b2c3d4",
+                        heading = "Overview",
+                        headingPath = "Overview",
+                        level = 1,
+                        length = 42,
+                        hash = "abc123",
+                        includesChildren = false
+                    )
+                )
+            )
+        )
+
+        mockMvc.get("/api/pages/test-page/sections").andExpect {
+            status { isOk() }
+            jsonPath("$.slug") { value("test-page") }
+            jsonPath("$.sections[0].key") { value("overview-a1b2c3d4") }
+            jsonPath("$.sections[0].heading") { value("Overview") }
+        }
+        verify(pageService).mapSections("test-page")
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
     fun `GET pages by slug returns structured not found error`() {
         whenever(pageService.findBySlug("missing")).thenThrow(NotFoundException("Page not found: missing"))
 
@@ -90,6 +124,77 @@ class PageControllerTest {
         }.andExpect {
             status { isOk() }
             jsonPath("$.slug") { value("test-page") }
+        }
+    }
+
+    @Test
+    @WithMockUser(username = "owner", roles = ["EDITOR"])
+    fun `DELETE page propagates actor and soft mode`() {
+        mockMvc.delete("/api/pages/test-page").andExpect {
+            status { isOk() }
+        }
+
+        verify(pageService).delete("test-page", DeletePageUseCase.DeleteMode.SOFT, "owner")
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = ["ADMIN"])
+    fun `DELETE page propagates actor and hard mode for admin`() {
+        mockMvc.delete("/api/pages/test-page") {
+            param("mode", "HARD")
+        }.andExpect {
+            status { isOk() }
+        }
+
+        verify(pageService).delete("test-page", DeletePageUseCase.DeleteMode.HARD, "admin")
+    }
+
+    @Test
+    @WithMockUser(username = "bob", roles = ["EDITOR"])
+    fun `DELETE owned page returns forbidden for foreign editor`() {
+        whenever(pageService.delete("test-page", DeletePageUseCase.DeleteMode.SOFT, "bob"))
+            .thenThrow(ForbiddenException("Folder belongs to another user"))
+
+        mockMvc.delete("/api/pages/test-page").andExpect {
+            status { isForbidden() }
+            jsonPath("$.error") { value("FORBIDDEN") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["READER"])
+    fun `DELETE page is forbidden for reader`() {
+        mockMvc.delete("/api/pages/test-page").andExpect {
+            status { isForbidden() }
+        }
+
+        verify(pageService, org.mockito.kotlin.never()).delete(any(), any(), any())
+    }
+
+    @Test
+    @WithMockUser(username = "editor", roles = ["EDITOR"])
+    fun `PUT page rejects invalid explicit slug`() {
+        mockMvc.put("/api/pages/test-page") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"slug":"Invalid slug"}"""
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.error") { value("VALIDATION_ERROR") }
+        }
+    }
+
+    @Test
+    @WithMockUser(username = "editor", roles = ["EDITOR"])
+    fun `PUT page returns conflict for an occupied explicit slug`() {
+        whenever(pageService.update(eq("test-page"), any(), eq("editor")))
+            .thenThrow(ConflictException("Page slug 'taken' already exists"))
+
+        mockMvc.put("/api/pages/test-page") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"slug":"taken"}"""
+        }.andExpect {
+            status { isConflict() }
+            jsonPath("$.error") { value("CONFLICT") }
         }
     }
 
@@ -217,12 +322,12 @@ class PageControllerTest {
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `POST restore allowed for ADMIN`() {
-        whenever(pageService.restore("gone")).thenReturn(samplePage)
+        whenever(pageService.restore("gone", "user")).thenReturn(samplePage)
 
         mockMvc.post("/api/pages/gone/restore").andExpect {
             status { isOk() }
             jsonPath("$.slug") { value("test-page") }
         }
-        verify(pageService).restore("gone")
+        verify(pageService).restore("gone", "user")
     }
 }

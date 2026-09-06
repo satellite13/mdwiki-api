@@ -1,0 +1,32 @@
+databaseChangeLog:
+  - changeSet:
+      id: 010-page-index-queue
+      author: mdwiki
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE page_index_queue (
+                page_id uuid PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+                requested_at timestamptz NOT NULL DEFAULT now(),
+                attempts integer NOT NULL DEFAULT 0,
+                last_error text,
+                next_attempt_at timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE INDEX idx_page_index_queue_due
+                ON page_index_queue(next_attempt_at, requested_at);
+      rollback:
+        - sql:
+            sql: DROP TABLE IF EXISTS page_index_queue;
+  - changeSet:
+      id: 010-page-index-queue-version
+      author: mdwiki
+      changes:
+        - addColumn:
+            tableName: page_index_queue
+            columns:
+              - column:
+                  name: request_version
+                  type: bigint
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false

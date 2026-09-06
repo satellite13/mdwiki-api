@@ -6,6 +6,7 @@ import java.util.UUID
 
 interface PageSectionRepository : JpaRepository<PageSection, UUID> {
     fun findByPageIdOrderBySortOrder(pageId: UUID): List<PageSection>
+    fun findByPageIdInOrderByPageIdAscSortOrderAsc(pageIds: Collection<UUID>): List<PageSection>
     fun findByPageIdAndStableKey(pageId: UUID, stableKey: String): PageSection?
     fun countByPageId(pageId: UUID): Long
 }

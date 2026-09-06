@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-wave2-revision-trash
+      author: mdwiki
+      changes:
+        - addColumn:
+            tableName: page_revisions
+            columns:
+              - column:
+                  name: deleted_at_snapshot
+                  type: timestamptz
+        - sql:
+            sql: |
+              ALTER TABLE page_revisions DROP CONSTRAINT page_revisions_operation_check;
+              ALTER TABLE page_revisions ADD CONSTRAINT page_revisions_operation_check
+                CHECK (operation IN (
+                  'CREATE','EDIT','PATCH','RESTORE','IMPORT','FILESYSTEM','RENAME',
+                  'DELETE','RESTORE_TRASH'
+                ));
+        - sql:
+            sql: |
+              UPDATE page_revisions r
+              SET deleted_at_snapshot = p.deleted_at
+              FROM pages p
+              WHERE r.page_id = p.id
+                AND r.revision_no = (
+                  SELECT max(r2.revision_no) FROM page_revisions r2 WHERE r2.page_id = r.page_id
+                )
+                AND p.deleted_at IS NOT NULL;
+      rollback:
+        - sql:
+            sql: |
+              ALTER TABLE page_revisions DROP CONSTRAINT page_revisions_operation_check;
+              ALTER TABLE page_revisions ADD CONSTRAINT page_revisions_operation_check
+                CHECK (operation IN ('CREATE','EDIT','PATCH','RESTORE','IMPORT','FILESYSTEM','RENAME'));
+              ALTER TABLE page_revisions DROP COLUMN deleted_at_snapshot;

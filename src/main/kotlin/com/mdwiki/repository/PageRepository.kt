@@ -11,12 +11,36 @@ import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 interface PageRepository : JpaRepository<Page, UUID> {
+    @Query(
+        value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(:lockKey)) AS acquired",
+        nativeQuery = true
+    )
+    fun acquireTransactionAdvisoryLock(@Param("lockKey") lockKey: Long): Int
+
     fun findBySlug(slug: String): Page?
     fun findBySlugAndDeletedAtIsNull(slug: String): Page?
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Page p where p.id = :id and p.deletedAt is null")
     fun findActiveByIdForUpdate(@Param("id") id: UUID): Page?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Page p where p.slug = :slug and p.deletedAt is null")
+    fun findActiveBySlugForUpdate(@Param("slug") slug: String): Page?
+
+    @Query("select p.id from Page p where p.slug = :slug and p.deletedAt is null")
+    fun findActiveIdBySlug(@Param("slug") slug: String): UUID?
+
+    @Query("select p.id from Page p where p.deletedAt is null")
+    fun findAllActiveIds(): List<UUID>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Page p where p.slug = :slug")
+    fun findBySlugForUpdate(@Param("slug") slug: String): Page?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Page p where p.id in :ids and p.deletedAt is null order by p.id")
+    fun findAllActiveByIdInForUpdate(@Param("ids") ids: Collection<UUID>): List<Page>
 
     @EntityGraph(attributePaths = ["tags"])
     fun findByDeletedAtIsNotNullOrderByDeletedAtDesc(): List<Page>
@@ -42,7 +66,8 @@ interface PageRepository : JpaRepository<Page, UUID> {
     @Query(
         value = """
             SELECT p.* FROM pages p
-            WHERE p.content_tsv @@ plainto_tsquery('russian', :query)
+            WHERE p.deleted_at IS NULL
+              AND p.content_tsv @@ plainto_tsquery('russian', :query)
             ORDER BY ts_rank(p.content_tsv, plainto_tsquery('russian', :query)) DESC
             LIMIT :limit
         """,
@@ -52,10 +77,26 @@ interface PageRepository : JpaRepository<Page, UUID> {
 
     @Query(
         value = """
+            SELECT p.* FROM pages p
+            WHERE p.deleted_at IS NULL
+              AND p.content_tsv @@ plainto_tsquery('russian', :query)
+              AND (SELECT count(DISTINCT lower(t.name)) FROM page_tags pt
+                   JOIN tags t ON t.id = pt.tag_id
+                   WHERE pt.page_id = p.id AND lower(t.name) IN (:tags)) = :tagCount
+            ORDER BY ts_rank(p.content_tsv, plainto_tsquery('russian', :query)) DESC
+            LIMIT :limit
+        """,
+        nativeQuery = true
+    )
+    fun fullTextSearchWithTags(query: String, tags: Collection<String>, tagCount: Int, limit: Int): List<Page>
+
+    @Query(
+        value = """
             SELECT
                 p.id AS id,
                 p.slug AS slug,
                 p.title AS title,
+                p.updated_at AS "updatedAt",
                 ts_headline(
                     'russian',
                     coalesce(p.title, '') || E'\n\n' || coalesce(p.content_md, ''),
@@ -63,11 +104,36 @@ interface PageRepository : JpaRepository<Page, UUID> {
                     'StartSel=【, StopSel=】, MaxWords=55, MinWords=18, MaxFragments=2, ShortWord=3, FragmentDelimiter= … '
                 ) AS headline
             FROM pages p
-            WHERE p.content_tsv @@ plainto_tsquery('russian', :query)
+            WHERE p.deleted_at IS NULL
+              AND p.content_tsv @@ plainto_tsquery('russian', :query)
             ORDER BY ts_rank(p.content_tsv, plainto_tsquery('russian', :query)) DESC
             LIMIT :limit
         """,
         nativeQuery = true
     )
     fun searchWithHeadline(@Param("query") query: String, @Param("limit") limit: Int): List<PageSearchHit>
+
+    @Query(
+        value = """
+            SELECT p.id AS id, p.slug AS slug, p.title AS title, p.updated_at AS "updatedAt",
+              ts_headline('russian', coalesce(p.title, '') || E'\n\n' || coalesce(p.content_md, ''),
+                plainto_tsquery('russian', :query),
+                'StartSel=【, StopSel=】, MaxWords=55, MinWords=18, MaxFragments=2, ShortWord=3, FragmentDelimiter= … ') AS headline
+            FROM pages p
+            WHERE p.deleted_at IS NULL
+              AND p.content_tsv @@ plainto_tsquery('russian', :query)
+              AND (SELECT count(DISTINCT lower(t.name)) FROM page_tags pt
+                   JOIN tags t ON t.id = pt.tag_id
+                   WHERE pt.page_id = p.id AND lower(t.name) IN (:tags)) = :tagCount
+            ORDER BY ts_rank(p.content_tsv, plainto_tsquery('russian', :query)) DESC
+            LIMIT :limit
+        """,
+        nativeQuery = true
+    )
+    fun searchWithHeadlineAndTags(
+        @Param("query") query: String,
+        @Param("tags") tags: Collection<String>,
+        @Param("tagCount") tagCount: Int,
+        @Param("limit") limit: Int
+    ): List<PageSearchHit>
 }

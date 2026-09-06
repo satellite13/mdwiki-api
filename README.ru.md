@@ -19,11 +19,47 @@ export JWT_SECRET='local-dev-secret-change-me'
 ./gradlew test             # unit/integration tests
 ```
 
+## API PKM Wave 2
+
+- История: `GET /api/pages/{slug}/revisions`, `GET /api/pages/{slug}/revisions/{revisionNo}` и построчный bounded diff `GET /api/pages/{slug}/diff?from=&to=`.
+- Недеструктивное восстановление: `POST /api/pages/{slug}/restore` с `revisionNo`, `expectedUpdatedAt` и необязательным `restoreTitle`; slug и папка не откатываются.
+- Приватные сохранённые поиски: CRUD в `/api/me/saved-searches`, уникальные без учёта регистра имена пользователя и обновление с `expectedVersion`.
+- Стабильные заголовки: `POST /api/pages/{slug}/sections/stable-link` материализует явный ID в Markdown; `GET /api/section-links/{stableId}` разрешает его после смены slug.
+- `POST /api/search/answer` возвращает синхронный **экстрактивный**, а не генеративный ответ. Каждый абзац ссылается на точную цитату; ответы не сохраняются.
+
 Фронтенд в dev-режиме проксирует `/api` на `:8080` (см.
 [mdwiki-frontend](../mdwiki-frontend)).
 
+## API PKM Wave 3
+
+- Типизированные определения свойств читаются через `GET /api/property-definitions`;
+  администратор управляет ими и синхронно перепроецирует старые страницы через
+  `POST /api/admin/properties/reproject`.
+- Свойства страницы доступны через `GET`/`PATCH /api/pages/{slug}/properties`.
+  PATCH требует `expectedUpdatedAt`, сохраняет прочий YAML и тело Markdown, а также
+  использует обычный путь ревизий и индексации.
+- Приватные представления пользователя — CRUD в `/api/me/views`; запуск:
+  `POST /api/me/views/{id}/run?cursor=0&limit=50`.
+
 Локальный Postgres: `docker-compose up -d` (порт `54328`, БД/user/password
 `mdwiki`).
+
+## PKM-возможности REST API
+
+- `GET /api/search` выполняет ранжированный полнотекстовый поиск,
+  `GET /api/search/rag` возвращает семантические совпадения по разделам.
+- `GET /api/pages/{slug}/sections` возвращает стабильные ключи разделов из
+  `PageService.mapSections` для deep links в preview.
+- При обновлении страницы можно явно изменить `slug`; существующий update-flow
+  переписывает ссылки.
+- Аннотации доступны на чтение ролям READER/EDITOR/ADMIN. Создание,
+  редактирование и удаление требуют EDITOR или ADMIN.
+- `POST /api/sync` синхронизирует wiki-content с БД, а
+  `POST /api/sync/reindex` синхронно перестраивает эмбеддинги и возвращает
+  счётчики `total`, `reindexed`, `failed`. Оба endpoint требуют ADMIN.
+- ADMIN может просматривать и восстанавливать мягко удалённые страницы или
+  окончательно удалять их через `DELETE /api/pages/{slug}?mode=HARD`;
+  также доступны импорт/экспорт бандлов, вложения и MCP-инструменты импорта.
 
 ## Версия API
 

@@ -3,10 +3,13 @@ package com.mdwiki.service
 import com.mdwiki.config.WikiProperties
 import com.mdwiki.model.Folder
 import com.mdwiki.model.Page
+import com.mdwiki.model.User
+import com.mdwiki.model.UserRole
 import com.mdwiki.repository.FolderRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -18,6 +21,8 @@ import org.mockito.kotlin.verifyNoInteractions
 import java.io.File
 import java.nio.file.Path
 import java.util.UUID
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /**
  * Регрессия: при переименовании по slug нельзя вызывать [resolvePageFile] с ленивым [Page.folder],
@@ -91,5 +96,64 @@ class WikiFileServiceRenameSlugTest {
         assertEquals(file.absolutePath, page.filePath)
         verifyNoInteractions(folder)
         verifyNoInteractions(folderRepository)
+    }
+
+    @Test
+    fun `owned PKM folders use owner scoped filesystem path`() {
+        val ownerId = UUID.randomUUID()
+        val owner = User(ownerId, "alice", "alice@example.test", "hash", UserRole.EDITOR)
+        val folder = Folder(id = UUID.randomUUID(), name = "Inbox", owner = owner)
+
+        val path = wikiFileService.resolveFolderDirectory(folder).toPath().normalize()
+
+        assertEquals(tempDir.resolve(".pkm").resolve(ownerId.toString()).resolve("Inbox"), path)
+    }
+
+    @Test
+    fun `global slug fallback does not discover owned PKM files`() {
+        val privateFile = tempDir.resolve(".pkm").resolve(UUID.randomUUID().toString())
+            .resolve("Inbox").also { it.toFile().mkdirs() }.resolve("private.md")
+        privateFile.toFile().writeText("private")
+
+        assertEquals(null, wikiFileService.findMarkdownFileForSlug("private"))
+    }
+
+    @Test
+    fun `transaction rollback leaves source file unchanged and creates no target`() {
+        val source = tempDir.resolve("old.md").toFile().apply { writeText("original") }
+        val page = Page(id = UUID.randomUUID(), slug = "old", title = "Old", contentMd = "original")
+            .apply { filePath = source.absolutePath }
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            wikiFileService.renamePageFileToSlug(page, "new")
+
+            assertTrue(source.exists())
+            assertFalse(tempDir.resolve("new.md").toFile().exists())
+            TransactionSynchronizationManager.getSynchronizations().forEach {
+                it.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+            }
+            assertTrue(source.exists())
+            assertEquals("original", source.readText())
+            assertFalse(tempDir.resolve("new.md").toFile().exists())
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+    }
+
+    @Test
+    fun `rename never overwrites an existing target file`() {
+        val source = tempDir.resolve("old.md").toFile().apply { writeText("source") }
+        val target = tempDir.resolve("new.md").toFile().apply { writeText("target") }
+        val page = Page(id = UUID.randomUUID(), slug = "old", title = "Old", contentMd = "source")
+            .apply { filePath = source.absolutePath }
+
+        assertThrows<IllegalStateException> {
+            wikiFileService.renamePageFileToSlug(page, "new")
+        }
+
+        assertEquals("old", page.slug)
+        assertEquals(source.absolutePath, page.filePath)
+        assertEquals("source", source.readText())
+        assertEquals("target", target.readText())
     }
 }

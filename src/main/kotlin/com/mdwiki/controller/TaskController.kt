@@ -20,7 +20,8 @@ class TaskController(
 ) {
 
     @GetMapping("/open")
-    fun listOpenTasks(): List<OpenTaskResponse> = openTaskService.listOpenTasks()
+    fun listOpenTasks(auth: Authentication): List<OpenTaskResponse> =
+        openTaskService.listOpenTasks(auth.name)
 
     @PostMapping("/complete")
     fun completeTask(@Valid @RequestBody request: CompleteOpenTaskRequest, auth: Authentication) {

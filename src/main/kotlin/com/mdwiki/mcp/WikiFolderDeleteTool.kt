@@ -3,6 +3,7 @@ package com.mdwiki.mcp
 import com.mdwiki.service.FolderService
 import com.mdwiki.dto.FolderDeletePageAction
 import com.mdwiki.mcp.McpSupport.parseUuid
+import com.mdwiki.mcp.McpSupport.currentUsername
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
 import org.springframework.stereotype.Component
@@ -23,7 +24,7 @@ class WikiFolderDeleteTool(private val folderService: FolderService) {
     ): Map<String, String> {
         val parsedFolderId = parseUuid(folderId)
         val parsedPageAction = parsePageAction(pageAction)
-        folderService.delete(parsedFolderId, parsedPageAction)
+        folderService.delete(parsedFolderId, currentUsername(), parsedPageAction)
         return mapOf(
             "status" to "deleted",
             "folderId" to parsedFolderId.toString(),

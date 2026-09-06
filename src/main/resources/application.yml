@@ -33,6 +33,8 @@ spring:
           mcp-endpoint: /mcp/sse
 
 mdwiki:
+  indexing:
+    startup-enabled: ${MDWIKI_INDEXING_STARTUP_ENABLED:true}
   # Сколько строк стека писать в лог на одно исключение (logback LOG_EXCEPTION_CONVERSION_WORD)
   logging:
     stacktrace-max-lines: ${MDWIKI_LOG_STACKTRACE_LINES:16}

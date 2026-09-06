@@ -2,6 +2,7 @@ package com.mdwiki.mcp
 
 import com.mdwiki.service.PageService
 import com.mdwiki.service.usecase.DeletePageUseCase
+import com.mdwiki.mcp.McpSupport.currentUsername
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
 import org.springframework.stereotype.Component
@@ -17,7 +18,7 @@ class WikiDeleteTool(private val pageService: PageService) {
         val deleteMode = runCatching {
             DeletePageUseCase.DeleteMode.valueOf((mode ?: "SOFT").uppercase())
         }.getOrDefault(DeletePageUseCase.DeleteMode.SOFT)
-        pageService.delete(slug, deleteMode)
+        pageService.delete(slug, deleteMode, currentUsername())
         return mapOf("status" to "deleted", "slug" to slug)
     }
 }

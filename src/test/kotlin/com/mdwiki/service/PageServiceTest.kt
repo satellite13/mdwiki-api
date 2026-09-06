@@ -4,6 +4,7 @@ import com.mdwiki.config.WikiProperties
 import com.mdwiki.dto.CreatePageRequest
 import com.mdwiki.dto.UpdatePageRequest
 import com.mdwiki.error.ConflictException
+import com.mdwiki.error.AppException
 import com.mdwiki.error.NotFoundException
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.mdwiki.model.Page
@@ -33,7 +34,11 @@ import org.mockito.kotlin.*
 import java.io.File
 import java.nio.file.Path
 import java.time.Instant
+import java.util.Optional
 import java.util.UUID
+import org.springframework.http.HttpStatus
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @ExtendWith(MockitoExtension::class)
 class PageServiceTest {
@@ -52,6 +57,7 @@ class PageServiceTest {
     @Mock private lateinit var folderService: FolderService
     @Mock private lateinit var syncService: SyncService
     @Mock private lateinit var sectionIndexService: SectionIndexService
+    @Mock private lateinit var attachmentService: AttachmentService
 
     private lateinit var pageService: PageService
     private lateinit var wikiFileService: WikiFileService
@@ -64,18 +70,20 @@ class PageServiceTest {
         val props = WikiProperties(contentDir = tempDir.toString())
         wikiFileService = WikiFileService(props, fileWatcherService, folderRepository)
         val wikilinkService = WikilinkService()
+        val folderAccessPolicy = FolderAccessPolicy(userRepository)
         val createPageUseCase = CreatePageUseCase(
             pageRepository, userRepository, folderRepository,
             pageMetadataService, pageIndexer, wikiFileService, frontmatterMetaService, wikilinkService,
-            sectionIndexService
+            sectionIndexService, folderAccessPolicy
         )
         val updatePageUseCase = UpdatePageUseCase(
             pageRepository, userRepository, folderRepository,
             pageMetadataService, pageIndexer, wikiFileService, frontmatterMetaService,
-            wikilinkService, linkRepository, syncService, sectionIndexService
+            wikilinkService, linkRepository, syncService, sectionIndexService, folderAccessPolicy
         )
         val deletePageUseCase = DeletePageUseCase(
-            pageRepository, pageMetadataService, ragService, wikiFileService, syncService, frontmatterMetaService
+            pageRepository, pageMetadataService, ragService, wikiFileService, syncService,
+            frontmatterMetaService, folderAccessPolicy, attachmentService
         )
         val importMdPagesUseCase = ImportMdPagesUseCase(
             pageRepository, createPageUseCase, updatePageUseCase, wikilinkService
@@ -178,7 +186,7 @@ class PageServiceTest {
         tempDir.resolve("my-page.md").toFile().writeText("old content")
 
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
+        whenever(pageRepository.findActiveBySlugForUpdate("my-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
@@ -188,6 +196,7 @@ class PageServiceTest {
         verify(pageRepository).save(argThat<Page> {
             slug == "my-page" && title == "New" && contentMd == "new content"
         })
+        verify(pageRepository).findActiveBySlugForUpdate("my-page")
         assertTrue(tempDir.resolve("my-page.md").toFile().exists())
         assertEquals("new content", tempDir.resolve("my-page.md").toFile().readText())
         verify(sectionIndexService).rebuild(argThat { slug == "my-page" }, eq("new content"))
@@ -281,7 +290,7 @@ class PageServiceTest {
             contentMd = "old content",
             updatedAt = updatedAt
         )
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
+        whenever(pageRepository.findActiveBySlugForUpdate("my-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(
             User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
         )
@@ -312,7 +321,7 @@ class PageServiceTest {
         page.filePath = tempDir.resolve("my-page.md").toString()
         tempDir.resolve("my-page.md").toFile().writeText("old content")
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
+        whenever(pageRepository.findActiveBySlugForUpdate("my-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
@@ -339,7 +348,7 @@ class PageServiceTest {
         page.filePath = tempDir.resolve("my-page.md").toString()
         tempDir.resolve("my-page.md").toFile().writeText("old content")
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("my-page")).thenReturn(page)
+        whenever(pageRepository.findActiveBySlugForUpdate("my-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
@@ -468,7 +477,7 @@ class PageServiceTest {
 
     @Test
     fun `update throws for nonexistent page`() {
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("nonexistent")).thenReturn(null)
+        whenever(pageRepository.findActiveBySlugForUpdate("nonexistent")).thenReturn(null)
         assertThrows<NotFoundException> {
             pageService.update("nonexistent", UpdatePageRequest(title = "New"), "testuser")
         }
@@ -483,7 +492,7 @@ class PageServiceTest {
         frontmatterMetaService.refreshFromContent(page, lockedMd)
 
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("locked-page")).thenReturn(page)
+        whenever(pageRepository.findActiveBySlugForUpdate("locked-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
 
         assertThrows<com.mdwiki.error.ForbiddenException> {
@@ -505,7 +514,7 @@ class PageServiceTest {
         frontmatterMetaService.refreshFromContent(page, lockedMd)
 
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("locked-page")).thenReturn(page)
+        whenever(pageRepository.findActiveBySlugForUpdate("locked-page")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
@@ -528,7 +537,7 @@ class PageServiceTest {
         tempDir.resolve("schema.md").toFile().writeText("content")
 
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("schema")).thenReturn(page)
+        whenever(pageRepository.findActiveBySlugForUpdate("schema")).thenReturn(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
@@ -548,9 +557,8 @@ class PageServiceTest {
         tempDir.resolve("old-slug.md").toFile().writeText("content")
 
         val user = User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
-        whenever(pageRepository.findBySlugAndDeletedAtIsNull("old-slug")).thenReturn(page)
+        stubRenameLocks(page)
         whenever(userRepository.findByUsername("editor")).thenReturn(user)
-        whenever(pageRepository.findAllByDeletedAtIsNull()).thenReturn(emptyList())
         whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
         whenever(linkRepository.updateAllTargetSlugs(any(), any())).thenReturn(0)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
@@ -566,10 +574,239 @@ class PageServiceTest {
     }
 
     @Test
+    fun `slug rename locks incoming candidates in UUID order and rewrites fresh state`() {
+        val page = renameablePage()
+        val lowId = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        val highId = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
+        val freshLow = Page(id = lowId, slug = "low", title = "Low", contentMd = "fresh low [[old-slug]]")
+        val freshHigh = Page(id = highId, slug = "high", title = "High", contentMd = "fresh high [[old-slug]]")
+        val lockIds = listOf(page.id!!, lowId, highId).sortedBy(UUID::toString)
+        stubRenameLocks(page, listOf(freshHigh, freshLow))
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+        whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
+        whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageService.update("old-slug", UpdatePageRequest(slug = "new-slug"), "editor")
+
+        verify(pageRepository).findAllActiveByIdInForUpdate(lockIds)
+        verify(pageRepository).save(argThat<Page> {
+            id == lowId && contentMd == "fresh low [[new-slug]]"
+        })
+        verify(pageRepository).save(argThat<Page> {
+            id == highId && contentMd == "fresh high [[new-slug]]"
+        })
+        verify(pageRepository, never()).save(argThat<Page> {
+            contentMd?.startsWith("stale") == true
+        })
+        inOrder(pageRepository) {
+            verify(pageRepository).acquireTransactionAdvisoryLock(MultiPageMutationLock.KEY)
+            verify(pageRepository).findActiveIdBySlug("old-slug")
+            verify(pageRepository).findAllActiveByIdInForUpdate(lockIds)
+        }
+    }
+
+    @Test
+    fun `combined title and slug rewrite uses the old title identity`() {
+        val page = renameablePage().apply { title = "Old Title" }
+        val incoming = Page(
+            id = UUID.randomUUID(),
+            slug = "incoming",
+            title = "Incoming",
+            contentMd = "[[old-title]] and [[old-slug]]"
+        )
+        stubRenameLocks(page, listOf(incoming))
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+        whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
+        whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
+        whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+
+        pageService.update(
+            "old-slug",
+            UpdatePageRequest(title = "New Title", slug = "new-slug"),
+            "editor"
+        )
+
+        verify(pageRepository).save(argThat<Page> {
+            id == incoming.id && contentMd == "[[new-slug]] and [[new-slug]]"
+        })
+        verify(linkRepository, times(1)).updateAllTargetSlugs("old-slug", "new-slug")
+    }
+
+    @Test
+    fun `combined slug and folder update publishes exactly one final file after commit`() {
+        val folderId = UUID.randomUUID()
+        val folder = com.mdwiki.model.Folder(id = folderId, name = "Archive")
+        val page = renameablePage().apply {
+            contentMd = "old"
+        }
+        val source = tempDir.resolve("old-slug.md").toFile().apply { writeText("old") }
+        page.filePath = source.absolutePath
+        stubCombinedFileUpdate(page, folder)
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            pageService.update(
+                "old-slug",
+                UpdatePageRequest(slug = "new-slug", folderId = folderId, contentMd = "new"),
+                "editor"
+            )
+
+            val target = tempDir.resolve("Archive/new-slug.md").toFile()
+            assertTrue(source.exists())
+            assertFalse(target.exists())
+            val synchronizations = TransactionSynchronizationManager.getSynchronizations()
+            assertEquals(1, synchronizations.size)
+            synchronizations.forEach { it.afterCommit() }
+            synchronizations.forEach { it.afterCompletion(TransactionSynchronization.STATUS_COMMITTED) }
+
+            assertFalse(source.exists())
+            assertTrue(target.exists())
+            assertEquals("new", target.readText())
+            assertFalse(tempDir.resolve("new-slug.md").toFile().exists())
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+    }
+
+    @Test
+    fun `combined slug and folder rollback leaves filesystem untouched`() {
+        val folderId = UUID.randomUUID()
+        val folder = com.mdwiki.model.Folder(id = folderId, name = "Archive")
+        val page = renameablePage()
+        val source = tempDir.resolve("old-slug.md").toFile().apply { writeText("old") }
+        page.filePath = source.absolutePath
+        stubCombinedFileUpdate(page, folder)
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            pageService.update(
+                "old-slug",
+                UpdatePageRequest(slug = "new-slug", folderId = folderId, contentMd = "new"),
+                "editor"
+            )
+            TransactionSynchronizationManager.getSynchronizations().forEach {
+                it.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+            }
+
+            assertTrue(source.exists())
+            assertEquals("old", source.readText())
+            assertFalse(tempDir.resolve("Archive").toFile().exists())
+            assertFalse(tempDir.resolve("new-slug.md").toFile().exists())
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+    }
+
+    @Test
+    fun `combined slug and folder update never overwrites final destination`() {
+        val folderId = UUID.randomUUID()
+        val folder = com.mdwiki.model.Folder(id = folderId, name = "Archive")
+        val page = renameablePage()
+        val source = tempDir.resolve("old-slug.md").toFile().apply { writeText("old") }
+        val target = tempDir.resolve("Archive/new-slug.md").toFile().apply {
+            parentFile.mkdirs()
+            writeText("occupied")
+        }
+        page.filePath = source.absolutePath
+        stubCombinedFileUpdate(page, folder, persist = false)
+
+        assertThrows<IllegalStateException> {
+            pageService.update(
+                "old-slug",
+                UpdatePageRequest(slug = "new-slug", folderId = folderId, contentMd = "new"),
+                "editor"
+            )
+        }
+
+        assertEquals("old", source.readText())
+        assertEquals("occupied", target.readText())
+        verify(pageRepository, never()).saveAndFlush(any<Page>())
+    }
+
+    private fun stubRenameLocks(page: Page, others: List<Page> = emptyList()) {
+        val sourceId = page.id!!
+        val allPages = others + page
+        val lockIds = allPages.mapNotNull { it.id }.distinct().sortedBy(UUID::toString)
+        whenever(pageRepository.findActiveIdBySlug(page.slug)).thenReturn(sourceId)
+        whenever(pageRepository.findAllActiveIds()).thenReturn(lockIds)
+        whenever(pageRepository.findAllActiveByIdInForUpdate(lockIds))
+            .thenReturn(allPages.sortedBy { it.id.toString() })
+    }
+
+    private fun stubCombinedFileUpdate(
+        page: Page,
+        folder: com.mdwiki.model.Folder,
+        persist: Boolean = true
+    ) {
+        stubRenameLocks(page)
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+        whenever(folderRepository.findById(folder.id!!)).thenReturn(Optional.of(folder))
+        whenever(pageRepository.findBySlug("new-slug")).thenReturn(null)
+        if (persist) {
+            whenever(pageRepository.saveAndFlush(any<Page>())).thenAnswer { it.arguments[0] }
+            whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
+        }
+    }
+
+    @Test
+    fun `explicit slug rename rejects blank or invalid slug`() {
+        val page = renameablePage()
+
+        for (invalidSlug in listOf("", "   ", "Invalid Slug", "bad_slug", "-bad")) {
+            val error = assertThrows<AppException> {
+                pageService.update(page.slug, UpdatePageRequest(slug = invalidSlug), "editor")
+            }
+            assertEquals(HttpStatus.BAD_REQUEST, error.status)
+        }
+        verify(pageRepository, never()).saveAndFlush(any<Page>())
+    }
+
+    @Test
+    fun `explicit slug rename conflicts with active or soft-deleted page without suffixing`() {
+        whenever(userRepository.findByUsername("editor")).thenReturn(
+            User(id = UUID.randomUUID(), username = "editor", email = "e@t.com", passwordHash = "h")
+        )
+        for (deletedAt in listOf<Instant?>(null, Instant.parse("2026-09-05T10:00:00Z"))) {
+            reset(pageRepository)
+            val page = renameablePage()
+            val collision = Page(
+                id = UUID.randomUUID(),
+                slug = "taken",
+                title = "Taken",
+                contentMd = ""
+            ).apply { this.deletedAt = deletedAt }
+            stubRenameLocks(page)
+            whenever(pageRepository.findBySlug("taken")).thenReturn(collision)
+
+            assertThrows<ConflictException> {
+                pageService.update("old-slug", UpdatePageRequest(slug = "taken"), "editor")
+            }
+        }
+        verify(pageRepository, never()).findBySlug("taken-2")
+    }
+
+    private fun renameablePage(): Page {
+        val page = Page(
+            id = UUID.randomUUID(),
+            slug = "old-slug",
+            title = "Old",
+            contentMd = "content"
+        )
+        page.filePath = tempDir.resolve("old-slug.md").toString()
+        tempDir.resolve("old-slug.md").toFile().writeText("content")
+        return page
+    }
+
+    @Test
     fun `delete throws when page and markdown file both missing`() {
-        whenever(pageRepository.findBySlug("nonexistent")).thenReturn(null)
+        whenever(pageRepository.findBySlugForUpdate("nonexistent")).thenReturn(null)
         assertThrows<NotFoundException> {
-            pageService.delete("nonexistent")
+            pageService.delete("nonexistent", DeletePageUseCase.DeleteMode.SOFT, "testuser")
         }
     }
 
@@ -577,9 +814,9 @@ class PageServiceTest {
     fun `delete removes orphan markdown file when no database row`() {
         val slug = "only-on-disk"
         tempDir.resolve("$slug.md").toFile().writeText("# x")
-        whenever(pageRepository.findBySlug(slug)).thenReturn(null)
+        whenever(pageRepository.findBySlugForUpdate(slug)).thenReturn(null)
 
-        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD)
+        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD, "testuser")
 
         assertFalse(tempDir.resolve("$slug.md").toFile().exists())
         verify(pageRepository, never()).delete(any())
@@ -594,16 +831,17 @@ class PageServiceTest {
             filePath = file.absolutePath
             deletedAt = Instant.now()
         }
-        whenever(pageRepository.findBySlug(slug)).thenReturn(page)
+        whenever(pageRepository.findBySlugForUpdate(slug)).thenReturn(page)
         doNothing().whenever(pageMetadataService).deleteSourceLinks(any())
         doNothing().whenever(pageMetadataService).detachIncomingLinks(any())
         doNothing().whenever(ragService).deletePageChunks(any())
         doNothing().whenever(pageMetadataService).cleanupOrphanedTags()
 
-        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD)
+        pageService.delete(slug, DeletePageUseCase.DeleteMode.HARD, "testuser")
 
         verify(pageMetadataService).deleteSourceLinks(page)
         verify(pageMetadataService).detachIncomingLinks(page)
+        verify(attachmentService).deleteAllForPage(id)
         verify(pageRepository).delete(page)
         assertFalse(file.exists())
     }
@@ -614,10 +852,10 @@ class PageServiceTest {
         val page = Page(id = UUID.randomUUID(), slug = "doomed", title = "Doomed")
         page.filePath = file.absolutePath
 
-        whenever(pageRepository.findBySlug("doomed")).thenReturn(page)
+        whenever(pageRepository.findBySlugForUpdate("doomed")).thenReturn(page)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
-        pageService.delete("doomed")
+        pageService.delete("doomed", DeletePageUseCase.DeleteMode.SOFT, "testuser")
 
         assertNotNull(page.deletedAt)
         val trashFile = tempDir.resolve(".trash/doomed.md").toFile()
@@ -625,6 +863,7 @@ class PageServiceTest {
         assertFalse(file.exists())
         assertEquals(trashFile.absolutePath, page.filePath)
         verify(pageRepository).save(page)
+        verify(pageRepository).findBySlugForUpdate("doomed")
         verify(pageRepository, never()).delete(any<Page>())
     }
 
@@ -638,7 +877,7 @@ class PageServiceTest {
         page.filePath = trashFile.absolutePath
         page.deletedAt = Instant.now()
 
-        whenever(pageRepository.findBySlug("doomed")).thenReturn(page)
+        whenever(pageRepository.findBySlugForUpdate("doomed")).thenReturn(page)
         whenever(pageRepository.save(any<Page>())).thenAnswer { it.arguments[0] }
 
         pageService.restore("doomed")

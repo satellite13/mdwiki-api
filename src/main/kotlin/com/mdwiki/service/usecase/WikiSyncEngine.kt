@@ -6,12 +6,16 @@ import com.mdwiki.model.Page
 import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.rag.RagService
+import com.mdwiki.service.AttachmentService
 import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.service.PageMetadataService
 import com.mdwiki.service.SyncService
 import com.mdwiki.service.SectionIndexService
 import com.mdwiki.service.WikiFileService
+import com.mdwiki.service.PageRevisionService
+import com.mdwiki.service.PropertyService
+import com.mdwiki.model.RevisionOperation
 import com.mdwiki.util.PathSanitizer
 import com.mdwiki.util.PersistentInstant
 import org.slf4j.LoggerFactory
@@ -31,7 +35,10 @@ class WikiSyncEngine(
     private val folderRepository: FolderRepository,
     private val wikiFileService: WikiFileService,
     private val pageIndexer: DeferredPageIndexer,
-    private val sectionIndexService: SectionIndexService
+    private val sectionIndexService: SectionIndexService,
+    private val attachmentService: AttachmentService,
+    private val pageRevisionService: PageRevisionService? = null,
+    private val propertyService: PropertyService? = null
 ) {
     private val log = LoggerFactory.getLogger(WikiSyncEngine::class.java)
     private companion object {
@@ -93,6 +100,7 @@ class WikiSyncEngine(
                 pageMetadataService.deleteSourceLinks(page)
                 // Без detach входящих ссылок FK fk_links_target блокирует удаление.
                 pageMetadataService.detachIncomingLinks(page)
+                attachmentService.deleteAllForPage(page.id!!)
                 ragService.deletePageChunks(page.id!!)
                 pageRepository.delete(page)
                 removed++
@@ -147,8 +155,10 @@ class WikiSyncEngine(
             val saved = pageRepository.save(page)
             pageMetadataService.syncLinksAndTags(saved, content)
             pageMetadataService.resolveIncomingLinks(saved)
+            propertyService?.project(saved)
             pageIndexer.indexAfterCommit(saved)
             sectionIndexService.rebuild(saved, content)
+            pageRevisionService?.record(saved, null, RevisionOperation.FILESYSTEM)
             log.info("{}: added page '{}'", logPrefix, slug)
             return UpsertOutcome.ADDED
         }
@@ -169,8 +179,10 @@ class WikiSyncEngine(
             if (wasDeleted) {
                 pageMetadataService.resolveIncomingLinks(saved)
             }
+            propertyService?.project(saved)
             pageIndexer.indexAfterCommit(saved)
             sectionIndexService.rebuild(saved, content)
+            pageRevisionService?.record(saved, null, RevisionOperation.FILESYSTEM)
             log.info(
                 if (wasDeleted) "{}: restored soft-deleted page '{}' from disk" else "{}: updated page '{}'",
                 logPrefix, slug
@@ -195,6 +207,7 @@ class WikiSyncEngine(
         pageMetadataService.deleteSourceLinks(page)
         // Без detach входящих ссылок FK fk_links_target блокирует удаление.
         pageMetadataService.detachIncomingLinks(page)
+        attachmentService.deleteAllForPage(page.id!!)
         ragService.deletePageChunks(page.id!!)
         pageRepository.delete(page)
         runCatching { pageMetadataService.cleanupOrphanedTags() }
@@ -280,6 +293,7 @@ class WikiSyncEngine(
                     try {
                         // Корзина (.trash) — не контент: soft-deleted страницы не воскрешаем.
                         if (path.toAbsolutePath().normalize().startsWith(trashRoot)) return@forEach
+                        if (wikiFileService.isPkmPath(path.toFile())) return@forEach
                         if (Files.isRegularFile(path) && path.fileName?.toString()?.endsWith(".md") == true) {
                             result.add(path.toFile())
                         }

@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-folder-ownership
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              ALTER TABLE folders ADD COLUMN owner_id uuid REFERENCES users(id) ON DELETE CASCADE;
+              UPDATE folders f SET owner_id = s.user_id
+                FROM user_pkm_settings s
+                WHERE f.id = s.inbox_folder_id OR f.id = s.daily_folder_id;
+              CREATE INDEX idx_folders_owner ON folders(owner_id);
+              CREATE UNIQUE INDEX uq_owned_folder_location_name
+                ON folders(owner_id, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), name)
+                WHERE owner_id IS NOT NULL;
+      rollback:
+        - sql:
+            sql: |
+              DROP INDEX IF EXISTS uq_owned_folder_location_name;
+              DROP INDEX IF EXISTS idx_folders_owner;
+              ALTER TABLE folders DROP COLUMN IF EXISTS owner_id;

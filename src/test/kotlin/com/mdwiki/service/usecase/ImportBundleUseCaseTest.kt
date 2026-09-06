@@ -15,6 +15,7 @@ import com.mdwiki.repository.FolderRepository
 import com.mdwiki.repository.PageRepository
 import com.mdwiki.service.AttachmentService
 import com.mdwiki.service.FolderService
+import com.mdwiki.service.MultiPageMutationLock
 import com.mdwiki.service.WikilinkService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -27,6 +28,8 @@ import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -131,6 +134,10 @@ class ImportBundleUseCaseTest {
 
         val result = useCase.execute(ByteArrayInputStream(zip), targetId, "editor", zip.size.toLong())
 
+        inOrder(pageRepository, folderRepository) {
+            verify(pageRepository).acquireTransactionAdvisoryLock(MultiPageMutationLock.KEY)
+            verify(folderRepository).findById(targetId)
+        }
         assertEquals(2, result.createdPages)
         assertEquals(1, result.createdFolders)
         assertEquals(listOf(com.mdwiki.dto.BundleSlugRemap("intro", "intro-2")), result.remappedSlugs)

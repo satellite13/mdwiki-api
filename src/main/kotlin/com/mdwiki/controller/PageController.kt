@@ -4,6 +4,7 @@ import com.mdwiki.dto.*
 import com.mdwiki.service.GraphService
 import com.mdwiki.service.PageService
 import com.mdwiki.service.usecase.DeletePageUseCase
+import com.mdwiki.error.ForbiddenException
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.springframework.security.core.Authentication
@@ -32,6 +33,27 @@ class PageController(
 
     @GetMapping("/{slug}")
     fun getBySlug(@PathVariable slug: String): PageResponse = pageService.findBySlug(slug)
+
+    @GetMapping("/{slug}/sections")
+    fun getSections(@PathVariable slug: String): PageSectionMapResponse = pageService.mapSections(slug)
+
+    @GetMapping("/{slug}/revisions")
+    fun revisions(
+        @PathVariable slug: String,
+        @RequestParam(defaultValue = "20") limit: Int,
+        @RequestParam(required = false) before: Long?
+    ) = pageService.listRevisions(slug, limit, before)
+
+    @GetMapping("/{slug}/revisions/{revisionNo}")
+    fun revision(@PathVariable slug: String, @PathVariable revisionNo: Long) =
+        pageService.getRevision(slug, revisionNo)
+
+    @GetMapping("/{slug}/diff")
+    fun diff(
+        @PathVariable slug: String,
+        @RequestParam from: Long,
+        @RequestParam to: Long
+    ) = pageService.diffRevisions(slug, from, to)
 
     @GetMapping("/{slug}/graph")
     fun getGraph(
@@ -77,11 +99,21 @@ class PageController(
     @DeleteMapping("/{slug}")
     fun delete(
         @PathVariable slug: String,
-        @RequestParam(defaultValue = "SOFT") mode: DeletePageUseCase.DeleteMode
-    ) = pageService.delete(slug, mode)
+        @RequestParam(defaultValue = "SOFT") mode: DeletePageUseCase.DeleteMode,
+        auth: Authentication
+    ) = pageService.delete(slug, mode, auth.name)
 
     @PostMapping("/{slug}/restore")
-    fun restore(@PathVariable slug: String): PageResponse = pageService.restore(slug)
+    fun restore(
+        @PathVariable slug: String,
+        @RequestBody(required = false) request: RestoreRevisionRequest?,
+        auth: Authentication
+    ): PageResponse = if (request == null) {
+        if (auth.authorities.none { it.authority == "ROLE_ADMIN" }) {
+            throw ForbiddenException("Only administrators can restore deleted pages")
+        }
+        pageService.restore(slug, auth.name)
+    } else pageService.restoreRevision(slug, request, auth.name)
 
     @GetMapping("/deleted")
     fun listDeleted(): List<PageListItem> = pageService.findDeleted()

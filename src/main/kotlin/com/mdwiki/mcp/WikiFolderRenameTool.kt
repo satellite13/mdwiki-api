@@ -2,6 +2,7 @@ package com.mdwiki.mcp
 
 import com.mdwiki.dto.UpdateFolderRequest
 import com.mdwiki.mcp.McpSupport.parseUuid
+import com.mdwiki.mcp.McpSupport.currentUsername
 import com.mdwiki.service.FolderService
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
@@ -19,7 +20,7 @@ class WikiFolderRenameTool(private val folderService: FolderService) {
         @McpToolParam(description = "New directory name") name: String
     ): Map<String, Any?> {
         val parsedFolderId = parseUuid(folderId)
-        val renamed = folderService.rename(parsedFolderId, UpdateFolderRequest(name = name))
+        val renamed = folderService.rename(parsedFolderId, UpdateFolderRequest(name = name), currentUsername())
         return mapOf(
             "id" to renamed.id.toString(),
             "name" to renamed.name,

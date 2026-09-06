@@ -7,6 +7,9 @@ import com.mdwiki.error.ConflictException
 import com.mdwiki.error.ForbiddenException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.model.RevisionOperation
+import com.mdwiki.service.RevisionMutation
+import com.mdwiki.service.RevisionMutationContext
 import com.mdwiki.service.FrontmatterMetaService
 import com.mdwiki.util.MarkdownContentOps
 import com.mdwiki.util.MarkdownSectionParser
@@ -39,14 +42,12 @@ class PatchPageUseCase(
             newText = request.newText,
             replaceAll = request.replaceAll
         )
-        val saved = updatePageUseCase.execute(
-            slug,
-            UpdatePageRequest(
+        val saved = RevisionMutationContext.with(RevisionMutation(RevisionOperation.PATCH)) {
+            updatePageUseCase.execute(slug, UpdatePageRequest(
                 contentMd = prefix + replaced.content + suffix,
                 expectedUpdatedAt = request.expectedUpdatedAt
-            ),
-            username
-        )
+            ), username)
+        }
         return PatchPageResponse(
             slug = saved.slug,
             title = saved.title,

@@ -5,6 +5,7 @@ import com.mdwiki.dto.UpdateFolderRequest
 import com.mdwiki.service.FolderService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import org.mockito.Mock
@@ -15,16 +16,22 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
 import java.util.UUID
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.context.SecurityContextHolder
 
 @ExtendWith(MockitoExtension::class)
 class WikiFolderRenameToolTest {
+    @AfterEach
+    fun clearSecurity() = SecurityContextHolder.clearContext()
+
     @Mock private lateinit var folderService: FolderService
 
     @Test
     fun `renames folder and returns payload`() {
         val id = UUID.randomUUID()
         val parentId = UUID.randomUUID()
-        whenever(folderService.rename(eq(id), any())).thenReturn(
+        SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken("alice", "x")
+        whenever(folderService.rename(eq(id), any(), eq("alice"))).thenReturn(
             FolderResponse(
                 id = id,
                 name = "New",
@@ -40,7 +47,7 @@ class WikiFolderRenameToolTest {
         assertEquals("New", result["name"])
         assertEquals(parentId.toString(), result["parentId"])
         assertEquals("renamed", result["status"])
-        verify(folderService).rename(id, UpdateFolderRequest(name = "New"))
+        verify(folderService).rename(id, UpdateFolderRequest(name = "New"), "alice")
     }
 
     @Test

@@ -20,9 +20,12 @@ import org.mockito.Mock
 import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.doThrow
 import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.mock.web.MockMultipartFile
 import java.nio.file.Files
@@ -30,6 +33,8 @@ import java.nio.file.Path
 import java.util.Base64
 import java.util.Optional
 import java.util.UUID
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 @ExtendWith(MockitoExtension::class)
 class AttachmentServiceTest {
@@ -56,7 +61,8 @@ class AttachmentServiceTest {
             attachmentRepository,
             userRepository,
             pageRepository,
-            WikiProperties(contentDir = contentRoot.toString())
+            WikiProperties(contentDir = contentRoot.toString()),
+            FolderAccessPolicy(userRepository)
         )
     }
 
@@ -64,7 +70,7 @@ class AttachmentServiceTest {
     fun `list without pageId uses findAll`() {
         whenever(attachmentRepository.findAll(any<Pageable>())).thenReturn(PageImpl(emptyList()))
 
-        service.list(0, 50, null)
+        service.list(0, 50, null, null, "reader")
 
         verify(attachmentRepository).findAll(any<Pageable>())
     }
@@ -74,9 +80,37 @@ class AttachmentServiceTest {
         val pid = UUID.randomUUID()
         whenever(attachmentRepository.findByPageId(any<UUID>(), any<Pageable>())).thenReturn(PageImpl(emptyList()))
 
-        service.list(0, 50, pid)
+        service.list(0, 50, pid, null, "reader")
 
         verify(attachmentRepository).findByPageId(any<UUID>(), any<Pageable>())
+    }
+
+    @Test
+    fun `list without q uses findAll`() {
+        whenever(attachmentRepository.findAll(any<Pageable>())).thenReturn(PageImpl(emptyList()))
+        val result = service.list(0, 20, null, null, "reader")
+        assertEquals(0, result.totalElements)
+        verify(attachmentRepository).findAll(any<Pageable>())
+    }
+
+    @Test
+    fun `list with q uses name search`() {
+        whenever(
+            attachmentRepository.findByOriginalNameContainingIgnoreCase(eq("note"), any<Pageable>())
+        ).thenReturn(PageImpl(emptyList(), PageRequest.of(0, 20), 0))
+        service.list(0, 20, null, "note", "reader")
+        verify(attachmentRepository).findByOriginalNameContainingIgnoreCase(eq("note"), any<Pageable>())
+    }
+
+    @Test
+    fun `list with pageId and q uses combined search`() {
+        val pid = UUID.randomUUID()
+        whenever(
+            attachmentRepository.findByPageIdAndOriginalNameContainingIgnoreCase(eq(pid), eq("img"), any<Pageable>())
+        ).thenReturn(PageImpl(emptyList()))
+        service.list(0, 20, pid, "img", "reader")
+        verify(attachmentRepository)
+            .findByPageIdAndOriginalNameContainingIgnoreCase(eq(pid), eq("img"), any<Pageable>())
     }
 
     @Test
@@ -102,6 +136,71 @@ class AttachmentServiceTest {
         assertTrue(Files.exists(uploads.resolve(response.storedName)))
         verify(attachmentRepository).save(any<Attachment>())
         assertEquals("/api/uploads/${response.storedName}", response.url)
+    }
+
+    @Test
+    fun `foreign editor cannot upload attachment to owned page`() {
+        val alice = User(UUID.randomUUID(), "alice-owner", "owner@test", "x", UserRole.EDITOR)
+        val bob = User(UUID.randomUUID(), "bob", "bob@test", "x", UserRole.EDITOR)
+        val page = Page(
+            UUID.randomUUID(), "owned", "Owned",
+            folder = com.mdwiki.model.Folder(UUID.randomUUID(), "Inbox", owner = alice)
+        )
+        whenever(userRepository.findByUsername("bob")).thenReturn(bob)
+        whenever(pageRepository.findById(page.id!!)).thenReturn(Optional.of(page))
+
+        assertThrows<com.mdwiki.error.ForbiddenException> {
+            service.upload(
+                MockMultipartFile("file", "a.png", "image/png", byteArrayOf(1)),
+                "bob",
+                page.id
+            )
+        }
+    }
+
+    @Test
+    fun `upload removes file when repository flush fails`() {
+        whenever(userRepository.findByUsername("alice")).thenReturn(uploader)
+        whenever(attachmentRepository.save(any<Attachment>())).thenAnswer { invocation ->
+            val value = invocation.getArgument<Attachment>(0)
+            Attachment(
+                id = UUID.randomUUID(), originalName = value.originalName, storedName = value.storedName,
+                contentType = value.contentType, sizeBytes = value.sizeBytes, uploadedBy = value.uploadedBy
+            )
+        }
+        doThrow(IllegalStateException("db failed"))
+            .whenever(attachmentRepository).flush()
+        val file = MockMultipartFile("file", "note.txt", "text/plain", "hi".toByteArray())
+
+        assertThrows<IllegalStateException> { service.upload(file, "alice", null) }
+
+        val uploads = contentRoot.resolve("uploads")
+        assertTrue(!Files.exists(uploads) || Files.list(uploads).use { it.findAny().isEmpty })
+    }
+
+    @Test
+    fun `upload removes returned file when transaction rolls back`() {
+        whenever(userRepository.findByUsername("alice")).thenReturn(uploader)
+        whenever(attachmentRepository.save(any<Attachment>())).thenAnswer { invocation ->
+            val value = invocation.getArgument<Attachment>(0)
+            Attachment(id = UUID.randomUUID(), originalName = value.originalName, storedName = value.storedName,
+                contentType = value.contentType, sizeBytes = value.sizeBytes, uploadedBy = value.uploadedBy)
+        }
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            val response = service.upload(
+                MockMultipartFile("file", "note.txt", "text/plain", "hi".toByteArray()),
+                "alice", null
+            )
+            val stored = contentRoot.resolve("uploads").resolve(response.storedName)
+            assertTrue(Files.exists(stored))
+            TransactionSynchronizationManager.getSynchronizations().forEach {
+                it.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+            }
+            assertTrue(Files.notExists(stored))
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
     }
 
     @Test
@@ -195,7 +294,31 @@ class AttachmentServiceTest {
         )
         whenever(attachmentRepository.findById(id)).thenReturn(Optional.of(att))
 
-        service.delete(id)
+        service.delete(id, "alice")
+
+        assertTrue(!Files.exists(path))
+        verify(attachmentRepository).delete(att)
+    }
+
+    @Test
+    fun `deleteAllForPage removes linked attachments and files`() {
+        val pageId = UUID.randomUUID()
+        val stored = "page-pic.bin"
+        Files.createDirectories(contentRoot.resolve("uploads"))
+        val path = contentRoot.resolve("uploads").resolve(stored)
+        Files.writeString(path, "x")
+        val att = Attachment(
+            id = UUID.randomUUID(),
+            originalName = "pic.bin",
+            storedName = stored,
+            contentType = "application/octet-stream",
+            sizeBytes = 1,
+            uploadedBy = null,
+            page = Page(id = pageId, slug = "with-pic", title = "With pic")
+        )
+        whenever(attachmentRepository.findByPageIdIn(listOf(pageId))).thenReturn(listOf(att))
+
+        service.deleteAllForPage(pageId)
 
         assertTrue(!Files.exists(path))
         verify(attachmentRepository).delete(att)
@@ -207,7 +330,7 @@ class AttachmentServiceTest {
         whenever(attachmentRepository.findById(id)).thenReturn(Optional.empty())
 
         assertThrows<NotFoundException> {
-            service.delete(id)
+            service.delete(id, "alice")
         }
     }
 

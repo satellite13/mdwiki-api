@@ -8,9 +8,14 @@ import com.mdwiki.dto.ImportMdPagesResponse
 import com.mdwiki.dto.UpdatePageRequest
 import com.mdwiki.error.AppException
 import com.mdwiki.repository.PageRepository
+import com.mdwiki.service.MultiPageMutationLock
 import com.mdwiki.service.WikilinkService
+import com.mdwiki.model.RevisionOperation
+import com.mdwiki.service.RevisionMutation
+import com.mdwiki.service.RevisionMutationContext
 import com.mdwiki.util.MdImportTitleResolver
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
 @Component
@@ -20,12 +25,14 @@ class ImportMdPagesUseCase(
     private val updatePageUseCase: UpdatePageUseCase,
     private val wikilinkService: WikilinkService
 ) {
+    @Transactional
     fun execute(
         files: List<ImportMdFileInput>,
         folderId: UUID?,
         overwrite: Boolean,
         username: String
     ): ImportMdPagesResponse {
+        MultiPageMutationLock.acquire(pageRepository)
         val results = files.map { file -> importOne(file, folderId, overwrite, username) }
         return ImportMdPagesResponse(
             results = results,
@@ -89,7 +96,9 @@ class ImportMdPagesUseCase(
                         folderId = folderId,
                         clearFolder = if (folderId == null) true else null
                     )
-                    val updated = updatePageUseCase.execute(slug, updateRequest, username)
+                    val updated = RevisionMutationContext.with(RevisionMutation(RevisionOperation.IMPORT)) {
+                        updatePageUseCase.execute(slug, updateRequest, username)
+                    }
                     ImportMdItemResult(
                         filename = filename,
                         slug = updated.slug,
@@ -107,15 +116,14 @@ class ImportMdPagesUseCase(
                 )
 
                 else -> {
-                    val created = createPageUseCase.execute(
-                        CreatePageRequest(
+                    val created = RevisionMutationContext.with(RevisionMutation(RevisionOperation.IMPORT)) {
+                        createPageUseCase.execute(CreatePageRequest(
                             slug = slug,
                             title = title,
                             contentMd = file.contentMd,
                             folderId = folderId
-                        ),
-                        username
-                    )
+                        ), username)
+                    }
                     ImportMdItemResult(
                         filename = filename,
                         slug = created.slug,

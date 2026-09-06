@@ -1,0 +1,44 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-pkm-wave1
+      author: mdwiki
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: false
+            sql: |
+              CREATE TABLE user_pkm_settings (
+                user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                inbox_folder_id uuid REFERENCES folders(id) ON DELETE SET NULL,
+                daily_folder_id uuid REFERENCES folders(id) ON DELETE SET NULL,
+                timezone varchar(64) NOT NULL DEFAULT 'UTC',
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now()
+              );
+              CREATE TABLE user_daily_notes (
+                user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                note_date date NOT NULL,
+                page_id uuid NOT NULL UNIQUE REFERENCES pages(id) ON DELETE CASCADE,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (user_id, note_date)
+              );
+              CREATE TABLE user_recent_pages (
+                user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+                last_opened_at timestamptz NOT NULL DEFAULT now(),
+                open_count bigint NOT NULL DEFAULT 1,
+                PRIMARY KEY (user_id, page_id)
+              );
+              CREATE INDEX idx_recent_user_opened ON user_recent_pages (user_id, last_opened_at DESC);
+              CREATE TABLE user_favorite_pages (
+                user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (user_id, page_id)
+              );
+              CREATE INDEX idx_favorite_user_created ON user_favorite_pages (user_id, created_at DESC);
+      rollback:
+        - sql:
+            sql: >
+              DROP TABLE IF EXISTS user_favorite_pages, user_recent_pages,
+                user_daily_notes, user_pkm_settings;

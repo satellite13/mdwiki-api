@@ -2,6 +2,7 @@ package com.mdwiki.mcp
 
 import com.mdwiki.dto.MoveFolderRequest
 import com.mdwiki.mcp.McpSupport.parseUuid
+import com.mdwiki.mcp.McpSupport.currentUsername
 import com.mdwiki.service.FolderService
 import org.springframework.ai.mcp.annotation.McpTool
 import org.springframework.ai.mcp.annotation.McpToolParam
@@ -33,7 +34,11 @@ class WikiFolderMoveTool(private val folderService: FolderService) {
 
         val parsedFolderId = parseUuid(folderId)
         val targetParentId = destinationParentFolderId?.takeIf { it.isNotBlank() }?.let(::parseUuid)
-        val moved = folderService.move(parsedFolderId, MoveFolderRequest(parentId = if (toRoot) null else targetParentId))
+        val moved = folderService.move(
+            parsedFolderId,
+            MoveFolderRequest(parentId = if (toRoot) null else targetParentId),
+            currentUsername()
+        )
 
         return mapOf(
             "id" to moved.id.toString(),
