@@ -61,19 +61,25 @@ class PageRevisionService(
         restoredFrom: PageRevision? = null
     ): PageRevision {
         val pageId = requireNotNull(page.id)
-        pages.findActiveByIdForUpdate(pageId)
-            ?: pages.findById(pageId).orElseThrow { NotFoundException("Page not found: $pageId") }
+        // Snapshot before FOR UPDATE: pessimistic lock may refresh the managed entity from DB
+        // and would otherwise clobber in-memory edits (and falsely trigger identical-skip).
         val content = page.contentMd ?: ""
         val hash = sha256(content)
+        val title = page.title
+        val slug = page.slug
+        val folderId = page.folder?.id
+        val deletedAt = page.deletedAt
+        pages.findActiveByIdForUpdate(pageId)
+            ?: pages.findById(pageId).orElseThrow { NotFoundException("Page not found: $pageId") }
         // Не пишем «пустые» версии: autosave/повторный save без diff к последнему снимку.
         if (operation != RevisionOperation.CREATE) {
             val latest = revisions.findTopByPageIdOrderByRevisionNoDesc(pageId)
             if (latest != null
                 && latest.contentHash == hash
-                && latest.titleSnapshot == page.title
-                && latest.slugSnapshot == page.slug
-                && latest.folderIdSnapshot == page.folder?.id
-                && latest.deletedAtSnapshot == page.deletedAt
+                && latest.titleSnapshot == title
+                && latest.slugSnapshot == slug
+                && latest.folderIdSnapshot == folderId
+                && latest.deletedAtSnapshot == deletedAt
             ) {
                 return latest
             }
@@ -85,10 +91,10 @@ class PageRevisionService(
                 revisionNo = revisions.maxRevisionNo(pageId) + 1,
                 contentMd = content,
                 contentHash = hash,
-                titleSnapshot = page.title,
-                slugSnapshot = page.slug,
-                folderIdSnapshot = page.folder?.id,
-                deletedAtSnapshot = page.deletedAt,
+                titleSnapshot = title,
+                slugSnapshot = slug,
+                folderIdSnapshot = folderId,
+                deletedAtSnapshot = deletedAt,
                 operation = operation,
                 createdByUserId = actor?.id,
                 createdByName = username,

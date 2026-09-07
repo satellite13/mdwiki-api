@@ -83,6 +83,10 @@ class FileWatcherService(
                                     val fileName = fullPath.name
                                     if (fileName.endsWith(".md")) {
                                         val slug = fileName.removeSuffix(".md")
+                                        // Soft-delete→trash and restore races: skip stale deletes when
+                                        // the file already reappeared or still lives in .trash.
+                                        if (fullPath.exists()) continue
+                                        if (File(trashRoot.toFile(), "$slug.md").isFile) continue
                                         syncService.removePage(slug)
                                     } else {
                                         // Directory (or other non-md) removed from disk — reconcile DB + folders.
