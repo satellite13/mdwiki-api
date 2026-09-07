@@ -204,6 +204,17 @@ class WikiSyncEngine(
             return
         }
         val page = pageRepository.findBySlug(slug) ?: return
+        // Soft-delete moves the file to .trash and emits ENTRY_DELETE on the old path.
+        // That event must not hard-delete the row — restore from trash owns the lifecycle.
+        if (page.deletedAt != null) {
+            log.info("Watcher: skip remove for soft-deleted page '{}'", slug)
+            return
+        }
+        // Delayed DELETE after soft-delete→restore (or recreate): file is already back.
+        if (wikiFileService.findMarkdownFileForSlug(slug) != null) {
+            log.info("Watcher: skip remove for '{}'; markdown file still present on disk", slug)
+            return
+        }
         pageMetadataService.deleteSourceLinks(page)
         // Без detach входящих ссылок FK fk_links_target блокирует удаление.
         pageMetadataService.detachIncomingLinks(page)

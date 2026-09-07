@@ -211,6 +211,45 @@ class SyncServiceTest {
         verify(pageRepository, atLeast(2)).findAll(any<Pageable>())
     }
 
+    @Test
+    fun `removePage skips soft-deleted pages so stale watcher DELETE cannot hard-delete trash`() {
+        val page = Page(id = UUID.randomUUID(), slug = "trashed", title = "Trashed")
+        page.deletedAt = Instant.now()
+        page.filePath = tempDir.resolve(".trash/trashed.md").toString()
+        whenever(pageRepository.findBySlug("trashed")).thenReturn(page)
+
+        syncService.removePage("trashed")
+
+        verify(pageRepository, never()).delete(any<Page>())
+        verify(attachmentService, never()).deleteAllForPage(any())
+    }
+
+    @Test
+    fun `removePage skips when markdown file still exists after delayed DELETE`() {
+        val file = File(tempDir.toFile(), "restored.md").apply { writeText("# Restored\nbody") }
+        val page = Page(id = UUID.randomUUID(), slug = "restored", title = "Restored", contentMd = "body")
+        page.filePath = file.absolutePath
+        whenever(pageRepository.findBySlug("restored")).thenReturn(page)
+
+        syncService.removePage("restored")
+
+        verify(pageRepository, never()).delete(any<Page>())
+    }
+
+    @Test
+    fun `removePage hard-deletes active page when file is gone from disk`() {
+        val page = Page(id = UUID.randomUUID(), slug = "gone", title = "Gone")
+        page.filePath = tempDir.resolve("gone.md").toString()
+        whenever(pageRepository.findBySlug("gone")).thenReturn(page)
+
+        syncService.removePage("gone")
+
+        verify(pageMetadataService).deleteSourceLinks(page)
+        verify(pageMetadataService).detachIncomingLinks(page)
+        verify(attachmentService).deleteAllForPage(page.id!!)
+        verify(pageRepository).delete(page)
+    }
+
     private fun mockPagedFindAll(pages: List<Page>) {
         whenever(pageRepository.findAll(any<Pageable>())).thenReturn(PageImpl(pages))
     }
