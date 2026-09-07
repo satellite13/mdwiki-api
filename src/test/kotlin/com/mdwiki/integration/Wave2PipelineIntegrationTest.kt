@@ -15,6 +15,7 @@ import com.mdwiki.service.PageRevisionService
 import com.mdwiki.service.PageService
 import com.mdwiki.service.StableSectionLinkService
 import com.mdwiki.service.DeferredPageIndexer
+import com.mdwiki.service.FileWatcherService
 import com.mdwiki.service.SearchService
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -56,6 +57,8 @@ class Wave2PipelineIntegrationTest {
     @Autowired lateinit var folders: FolderRepository
     @Autowired lateinit var deferredPageIndexer: DeferredPageIndexer
     @MockitoBean lateinit var embeddingProvider: EmbeddingProvider
+    // Real watcher races with soft-delete/restore and can append FILESYSTEM revisions mid-test.
+    @MockitoBean lateinit var fileWatcherService: FileWatcherService
     @Autowired lateinit var searchService: SearchService
 
     private fun editor(prefix: String): User {
