@@ -132,10 +132,12 @@ class Wave2PipelineIntegrationTest {
         val slug = "concurrent-${UUID.randomUUID()}"
         pageService.create(CreatePageRequest(slug, "Concurrent", "same"), actor.username)
         val executor = Executors.newFixedThreadPool(6)
-        val futures = (1..12).map {
+        // Distinct content per task: identical EDIT snapshots are intentionally skipped.
+        val futures = (1..12).map { n ->
             executor.submit {
                 TransactionTemplate(transactionManager).executeWithoutResult {
                     val page = pages.findBySlugAndDeletedAtIsNull(slug)!!
+                    page.contentMd = "edit-$n"
                     revisions.record(page, actor.username, RevisionOperation.EDIT)
                 }
             }
