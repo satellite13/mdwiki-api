@@ -138,16 +138,20 @@ class Wave2PipelineIntegrationTest {
                 TransactionTemplate(transactionManager).executeWithoutResult {
                     val page = pages.findBySlugAndDeletedAtIsNull(slug)!!
                     page.contentMd = "edit-$n"
+                    pages.saveAndFlush(page)
                     revisions.record(page, actor.username, RevisionOperation.EDIT)
                 }
             }
         }
         futures.forEach { it.get(30, TimeUnit.SECONDS) }
         executor.shutdown()
+        assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue()
 
         val numbers = revisions.list(pages.findBySlugAndDeletedAtIsNull(slug)!!, 100, null)
             .map { it.revisionNo }.sorted()
-        assertThat(numbers).containsExactlyElementsOf((1L..13L).toList())
+        assertThat(numbers)
+            .`as`("revision numbers after concurrent edits: %s", numbers)
+            .containsExactlyElementsOf((1L..13L).toList())
     }
 
     @Test

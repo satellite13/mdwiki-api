@@ -108,6 +108,11 @@ tasks.withType<Test> {
     environment("MDWIKI_INDEXING_STARTUP_ENABLED", "false")
     // mdwiki.jwt.secret обязателен (дефолта больше нет); тестовый, не для prod.
     environment("JWT_SECRET", "integration-test-jwt-secret-do-not-use-in-production")
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStackTraces = true
+    }
     finalizedBy(tasks.jacocoTestReport)
 }
 

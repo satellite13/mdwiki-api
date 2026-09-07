@@ -78,4 +78,25 @@ class PageRevisionIntegrationTest {
         assertThat(changed.revisionNo).isEqualTo(2)
         assertThat(revisions.list(page, 20, null)).hasSize(2)
     }
+
+    @Test
+    fun `record preserves in-memory content across pessimistic lock refresh`() {
+        val suffix = UUID.randomUUID().toString()
+        val user = users.saveAndFlush(User(
+            username = "revision-lock-$suffix",
+            email = "$suffix@lock",
+            passwordHash = "x",
+            role = UserRole.EDITOR
+        ))
+        val page = pages.saveAndFlush(Page(slug = "revision-lock-$suffix", title = "Lock", contentMd = "original\n"))
+
+        revisions.record(page, user.username, RevisionOperation.CREATE)
+        page.contentMd = "mutated-in-memory\n"
+        // Intentionally no saveAndFlush: FOR UPDATE must not lose the caller's snapshot.
+        val edit = revisions.record(page, user.username, RevisionOperation.EDIT)
+
+        assertThat(edit.revisionNo).isEqualTo(2)
+        assertThat(edit.contentMd).isEqualTo("mutated-in-memory\n")
+        assertThat(revisions.list(page, 20, null)).hasSize(2)
+    }
 }
