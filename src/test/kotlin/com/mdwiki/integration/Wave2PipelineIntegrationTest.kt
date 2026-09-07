@@ -18,6 +18,7 @@ import com.mdwiki.service.StableSectionLinkService
 import com.mdwiki.service.DeferredPageIndexer
 import com.mdwiki.service.FileWatcherService
 import com.mdwiki.service.SearchService
+import com.mdwiki.service.SyncService
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -57,6 +58,7 @@ class Wave2PipelineIntegrationTest {
     @Autowired lateinit var transactionManager: PlatformTransactionManager
     @Autowired lateinit var folders: FolderRepository
     @Autowired lateinit var deferredPageIndexer: DeferredPageIndexer
+    @Autowired lateinit var syncService: SyncService
     @MockitoBean lateinit var embeddingProvider: EmbeddingProvider
     // Real watcher races with soft-delete/restore and can append FILESYSTEM revisions mid-test.
     @MockitoBean lateinit var fileWatcherService: FileWatcherService
@@ -133,10 +135,20 @@ class Wave2PipelineIntegrationTest {
     @Test
     fun `concurrent revision allocation stays unique and gapless`() {
         val actor = editor("concurrent")
-        // Keep the page DB-only: createOrRewritePageFile + delayed reconcile/watcher can append an
-        // extra FILESYSTEM revision and break a brittle 1..13 count.
+        // Do not go through PageService (avoids after-commit FILESYSTEM revisions), but keep a real
+        // .md on disk: delayed reconcileFromDisk from earlier tests hard-deletes DB-only rows and
+        // made this assertion flake on CI with NoSuchElementException at findById.
+        val slug = "concurrent-${UUID.randomUUID()}"
+        val md = contentDir.resolve("$slug.md")
+        val seed = "base"
+        Files.writeString(md, seed)
         val page = pages.saveAndFlush(
-            Page(slug = "concurrent-${UUID.randomUUID()}", title = "Concurrent", contentMd = "base")
+            Page(
+                slug = slug,
+                title = "Concurrent",
+                contentMd = seed,
+                filePath = md.toAbsolutePath().toString()
+            )
         )
         revisions.record(page, actor.username, RevisionOperation.CREATE)
         val pageId = requireNotNull(page.id)
@@ -147,8 +159,13 @@ class Wave2PipelineIntegrationTest {
                 requireNotNull(
                     TransactionTemplate(transactionManager).execute {
                         val current = pages.findById(pageId).orElseThrow()
+                        val persistedContent = current.contentMd
                         current.contentMd = "edit-$n"
-                        revisions.record(current, actor.username, RevisionOperation.EDIT).revisionNo
+                        val revisionNo = revisions.record(current, actor.username, RevisionOperation.EDIT).revisionNo
+                        // record() snapshots in-memory content; keep the managed entity clean so a
+                        // delayed fullSync does not see a DB/disk mismatch and append FILESYSTEM.
+                        current.contentMd = persistedContent
+                        revisionNo
                     }
                 )
             }
@@ -159,7 +176,12 @@ class Wave2PipelineIntegrationTest {
 
         assertThat(allocated).doesNotHaveDuplicates().hasSize(12)
 
-        val summaries = revisions.list(pages.findById(pageId).orElseThrow(), 100, null)
+        // Same reconcile that flakes on CI after rename/delete tests (400ms delayed fullSync).
+        syncService.reconcileFromDisk()
+
+        val persisted = pages.findById(pageId)
+        assertThat(persisted).`as`("page %s must survive delayed fullSync reconcile", pageId).isPresent
+        val summaries = revisions.list(persisted.get(), 100, null)
         val numbers = summaries.map { it.revisionNo }.sorted()
         assertThat(numbers)
             .`as`("%s", summaries.map { "${it.revisionNo}:${it.operation}" })
