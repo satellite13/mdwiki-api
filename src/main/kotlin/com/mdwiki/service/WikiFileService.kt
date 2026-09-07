@@ -12,6 +12,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 class WikiFileService(
@@ -20,6 +21,8 @@ class WikiFileService(
     private val folderRepository: FolderRepository
 ) {
     private val log = LoggerFactory.getLogger(WikiFileService::class.java)
+    /** Absolute paths with an after-commit write that has not finished yet. */
+    private val pendingDiskPaths = ConcurrentHashMap.newKeySet<String>()
 
     companion object {
         const val TRASH_DIR_NAME = ".trash"
@@ -27,6 +30,15 @@ class WikiFileService(
     }
 
     fun contentRoot(): File = File(wikiProperties.contentDir).also { it.mkdirs() }
+
+    /** True while create/update still has a deferred markdown write for this slug. */
+    fun hasPendingDiskWrite(slug: String): Boolean {
+        val suffix = "${File.separator}$slug.md"
+        return pendingDiskPaths.any { it.endsWith(suffix) }
+    }
+
+    fun hasPendingDiskWritePath(path: String?): Boolean =
+        !path.isNullOrBlank() && pendingDiskPaths.contains(path)
 
     fun resolveFolderDirectory(folder: Folder?): File {
         if (folder == null) return contentRoot()
@@ -57,7 +69,7 @@ class WikiFileService(
         val targetFile = resolveTargetMarkdownFile(page)
         targetFile.parentFile?.mkdirs()
         page.filePath = targetFile.absolutePath
-        runAfterCommit {
+        runAfterCommit(pendingPath = targetFile.absolutePath) {
             fileWatcherService.ignoreNextChange(targetFile.absolutePath)
             targetFile.writeText(content)
         }
@@ -84,7 +96,7 @@ class WikiFileService(
             throw IllegalStateException("Cannot update page file: target already exists: ${targetFile.absolutePath}")
         }
         page.filePath = targetFile.absolutePath
-        runAfterCommit {
+        runAfterCommit(pendingPath = targetFile.absolutePath) {
             if (samePath) {
                 targetFile.parentFile?.mkdirs()
                 fileWatcherService.ignoreNextChange(targetFile.absolutePath)
@@ -182,7 +194,7 @@ class WikiFileService(
 
         page.slug = newSlug
         page.filePath = targetFile.absolutePath
-        runAfterCommit(renameOperation)
+        runAfterCommit(pendingPath = targetFile.absolutePath, operation = renameOperation)
     }
 
     fun deletePageFile(page: Page) {
@@ -431,15 +443,42 @@ class WikiFileService(
         }
     }
 
-    private fun runAfterCommit(operation: () -> Unit) {
+    private fun runAfterCommit(pendingPath: String? = null, operation: () -> Unit) {
+        if (pendingPath != null) {
+            pendingDiskPaths.add(pendingPath)
+        }
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            operation()
+            try {
+                operation()
+            } finally {
+                if (pendingPath != null) pendingDiskPaths.remove(pendingPath)
+            }
             return
         }
         TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
             override fun afterCommit() {
-                operation()
+                try {
+                    operation()
+                } finally {
+                    if (pendingPath != null) pendingDiskPaths.remove(pendingPath)
+                }
+            }
+
+            override fun afterCompletion(status: Int) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED && pendingPath != null) {
+                    pendingDiskPaths.remove(pendingPath)
+                }
             }
         })
+    }
+
+    /** Test helper: keep a path marked pending for the duration of [action]. */
+    internal fun <T> withPendingDiskWrite(absolutePath: String, action: () -> T): T {
+        pendingDiskPaths.add(absolutePath)
+        try {
+            return action()
+        } finally {
+            pendingDiskPaths.remove(absolutePath)
+        }
     }
 }

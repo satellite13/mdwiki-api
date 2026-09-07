@@ -215,6 +215,9 @@ class Wave2PipelineIntegrationTest {
         val folder = folders.saveAndFlush(Folder(name = "Trash-${UUID.randomUUID()}", owner = owner, createdBy = owner))
         val slug = "trash-${UUID.randomUUID()}"
         pageService.create(CreatePageRequest(slug, "Trash", "kept", folder.id), owner.username)
+        assertThat(pages.findBySlug(slug))
+            .`as`("page must survive create→reconcile window before soft-delete checks")
+            .isNotNull()
 
         assertThatThrownBy {
             pageService.delete(slug, com.mdwiki.service.usecase.DeletePageUseCase.DeleteMode.SOFT, intruder.username)

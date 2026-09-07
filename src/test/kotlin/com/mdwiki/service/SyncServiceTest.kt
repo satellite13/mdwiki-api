@@ -48,6 +48,7 @@ class SyncServiceTest {
     @Mock private lateinit var sectionIndexService: SectionIndexService
 
     private lateinit var syncService: SyncService
+    private lateinit var wikiFileService: WikiFileService
 
     @TempDir
     lateinit var tempDir: Path
@@ -62,7 +63,7 @@ class SyncServiceTest {
         whenever(platformTransactionManager.getTransaction(any())).thenReturn(mock<TransactionStatus>())
         doNothing().whenever(platformTransactionManager).commit(any())
         doNothing().whenever(platformTransactionManager).rollback(any())
-        val wikiFileService = WikiFileService(props, fileWatcherService, folderRepository)
+        wikiFileService = WikiFileService(props, fileWatcherService, folderRepository)
         val wikiSyncEngine = WikiSyncEngine(
             pageRepository,
             pageMetadataService,
@@ -248,6 +249,20 @@ class SyncServiceTest {
         verify(pageMetadataService).detachIncomingLinks(page)
         verify(attachmentService).deleteAllForPage(page.id!!)
         verify(pageRepository).delete(page)
+    }
+
+    @Test
+    fun `fullSync skips removal while after-commit markdown write is pending`() {
+        val page = Page(id = UUID.randomUUID(), slug = "pending-write", title = "Pending")
+        page.filePath = tempDir.resolve("pending-write.md").toString()
+        mockPagedFindAll(listOf(page))
+
+        val result = wikiFileService.withPendingDiskWrite(page.filePath!!) {
+            syncService.fullSync()
+        }
+
+        assertEquals(0, result.removed)
+        verify(pageRepository, never()).delete(any<Page>())
     }
 
     private fun mockPagedFindAll(pages: List<Page>) {
