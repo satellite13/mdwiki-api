@@ -5,6 +5,7 @@ import com.mdwiki.error.ConflictException
 import com.mdwiki.error.NotFoundException
 import com.mdwiki.error.ForbiddenException
 import com.mdwiki.model.Folder
+import com.mdwiki.model.Page
 import com.mdwiki.model.RevisionOperation
 import com.mdwiki.model.User
 import com.mdwiki.model.UserRole
@@ -132,29 +133,38 @@ class Wave2PipelineIntegrationTest {
     @Test
     fun `concurrent revision allocation stays unique and gapless`() {
         val actor = editor("concurrent")
-        val slug = "concurrent-${UUID.randomUUID()}"
-        pageService.create(CreatePageRequest(slug, "Concurrent", "same"), actor.username)
+        // Keep the page DB-only: createOrRewritePageFile + delayed reconcile/watcher can append an
+        // extra FILESYSTEM revision and break a brittle 1..13 count.
+        val page = pages.saveAndFlush(
+            Page(slug = "concurrent-${UUID.randomUUID()}", title = "Concurrent", contentMd = "base")
+        )
+        revisions.record(page, actor.username, RevisionOperation.CREATE)
+        val pageId = requireNotNull(page.id)
+
         val executor = Executors.newFixedThreadPool(6)
-        // Distinct content per task: identical EDIT snapshots are intentionally skipped.
         val futures = (1..12).map { n ->
-            executor.submit {
-                TransactionTemplate(transactionManager).executeWithoutResult {
-                    val page = pages.findBySlugAndDeletedAtIsNull(slug)!!
-                    page.contentMd = "edit-$n"
-                    pages.saveAndFlush(page)
-                    revisions.record(page, actor.username, RevisionOperation.EDIT)
-                }
+            executor.submit<Long> {
+                requireNotNull(
+                    TransactionTemplate(transactionManager).execute {
+                        val current = pages.findById(pageId).orElseThrow()
+                        current.contentMd = "edit-$n"
+                        revisions.record(current, actor.username, RevisionOperation.EDIT).revisionNo
+                    }
+                )
             }
         }
-        futures.forEach { it.get(30, TimeUnit.SECONDS) }
+        val allocated = futures.map { it.get(30, TimeUnit.SECONDS) }
         executor.shutdown()
         assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue()
 
-        val numbers = revisions.list(pages.findBySlugAndDeletedAtIsNull(slug)!!, 100, null)
-            .map { it.revisionNo }.sorted()
+        assertThat(allocated).doesNotHaveDuplicates().hasSize(12)
+
+        val summaries = revisions.list(pages.findById(pageId).orElseThrow(), 100, null)
+        val numbers = summaries.map { it.revisionNo }.sorted()
         assertThat(numbers)
-            .`as`("revision numbers after concurrent edits: %s", numbers)
-            .containsExactlyElementsOf((1L..13L).toList())
+            .`as`("%s", summaries.map { "${it.revisionNo}:${it.operation}" })
+            .isEqualTo((1L..numbers.size).toList())
+        assertThat(numbers).containsAll(allocated).hasSize(13)
     }
 
     @Test
