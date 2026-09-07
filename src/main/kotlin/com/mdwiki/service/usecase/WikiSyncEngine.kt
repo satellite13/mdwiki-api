@@ -97,6 +97,14 @@ class WikiSyncEngine(
             // Soft-deleted страницы sync не трогает: их файлы в корзине (.trash),
             // а очистка корзины — ручное действие (hard delete через API).
             if (slug !in filesBySlug && page.deletedAt == null) {
+                // create/update schedules the markdown write afterCommit; a concurrent reconcile
+                // must not hard-delete the row in that window (DB row exists, file not yet).
+                if (wikiFileService.hasPendingDiskWrite(slug) ||
+                    wikiFileService.hasPendingDiskWritePath(page.filePath)
+                ) {
+                    log.info("Sync: skip remove for '{}'; markdown write still pending", slug)
+                    continue
+                }
                 pageMetadataService.deleteSourceLinks(page)
                 // Без detach входящих ссылок FK fk_links_target блокирует удаление.
                 pageMetadataService.detachIncomingLinks(page)
